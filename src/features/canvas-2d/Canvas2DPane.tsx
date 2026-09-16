@@ -26,10 +26,9 @@ import {
   type ResizeHandle,
 } from './geometry2d'
 import { createShapeRegions, pointsToSvgPath } from '../../lib/geometry/primitives'
+import { ARTBOARD_WIDTH, ARTBOARD_HEIGHT } from '../../lib/geometry/constants'
 import './Canvas2DPane.css'
 
-const ARTBOARD_WIDTH = 256
-const ARTBOARD_HEIGHT = 256
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 8
 const CLICK_THRESHOLD_PX = 4
@@ -180,12 +179,16 @@ export function Canvas2DPane() {
   }
 
   const handleShapePointerDown = (e: React.PointerEvent<SVGGElement>, id: string) => {
-    e.stopPropagation()
     if (isSpaceDown || tool === 'pan') {
+      e.stopPropagation()
       startPan(e)
       return
     }
+    // A drawing tool is active: don't swallow the event even if it landed on
+    // an existing shape — let it bubble to the background handler so a new
+    // shape can still be drawn on top of one that's already there.
     if (tool !== 'select') return
+    e.stopPropagation()
     const layer = layers[id]
     if (!layer) return
     const local = getLocalPoint(e)
@@ -344,7 +347,7 @@ export function Canvas2DPane() {
           <SelectionOverlay
             bounds={selectionBounds}
             docToScreen={docToScreen}
-            resizable={!!singleSelected && !singleSelected.locked}
+            resizable={tool === 'select' && !!singleSelected && !singleSelected.locked}
             onResizeStart={singleSelected ? (e, handle) => handleResizePointerDown(e, singleSelected.id, handle) : undefined}
           />
         )}

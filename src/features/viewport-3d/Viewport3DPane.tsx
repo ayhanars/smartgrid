@@ -1,37 +1,74 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { GizmoHelper, GizmoViewport, Grid, OrbitControls, RoundedBox } from '@react-three/drei'
+import { GizmoHelper, GizmoViewport, Grid, OrbitControls } from '@react-three/drei'
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Maximize, Scan, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
+import { useDocumentStore } from '../../state/documentStore'
+import { ARTBOARD_WIDTH, ARTBOARD_HEIGHT } from '../../lib/geometry/constants'
+import { SCENE_SCALE } from './sceneScale'
+import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import './Viewport3DPane.css'
+
+const bedWidth = ARTBOARD_WIDTH * SCENE_SCALE
+const bedDepth = ARTBOARD_HEIGHT * SCENE_SCALE
 
 export function Viewport3DPane() {
   const [wireframe, setWireframe] = useState(false)
+  const controlsRef = useRef<OrbitControlsImpl>(null)
+
+  const layers = useDocumentStore((s) => s.layers)
+  const order = useDocumentStore((s) => s.order)
+  const selection = useDocumentStore((s) => s.selection)
+  const setSelection = useDocumentStore((s) => s.setSelection)
+
+  const handleSelect = (id: string, additive: boolean) => {
+    if (additive) {
+      setSelection(selection.includes(id) ? selection.filter((sid) => sid !== id) : [...selection, id])
+    } else {
+      setSelection([id])
+    }
+  }
 
   return (
     <div className="viewport-3d">
-      <Canvas camera={{ position: [4, 3.5, 5], fov: 40 }}>
+      <Canvas
+        camera={{ position: [bedWidth * 1.4, bedWidth * 1.1, bedWidth * 1.4], fov: 40 }}
+        onPointerMissed={() => setSelection([])}
+      >
         <color attach="background" args={['#0a0a0b']} />
         <ambientLight intensity={0.6} />
-        <directionalLight position={[5, 8, 4]} intensity={1.1} castShadow />
+        <directionalLight position={[bedWidth * 2, bedWidth * 3, bedWidth]} intensity={1.1} castShadow />
 
-        <RoundedBox args={[2.4, 0.5, 1.6]} radius={0.08} smoothness={4} position={[0, 0.25, 0]}>
-          <meshStandardMaterial color="#4d8dff" wireframe={wireframe} />
-        </RoundedBox>
-        <RoundedBox args={[0.5, 0.9, 0.5]} radius={0.06} smoothness={4} position={[0.6, 0.7, 0]}>
-          <meshStandardMaterial color="#7bd88f" wireframe={wireframe} />
-        </RoundedBox>
+        <mesh position={[0, -0.01, 0]}>
+          <boxGeometry args={[bedWidth, 0.02, bedDepth]} />
+          <meshStandardMaterial color="#1b1c22" />
+        </mesh>
+
+        {order.map((id) => {
+          const layer = layers[id]
+          if (!layer) return null
+          return (
+            <ExtrudedShapeMesh
+              key={id}
+              layer={layer}
+              isSelected={selection.includes(id)}
+              wireframe={wireframe}
+              onSelect={handleSelect}
+            />
+          )
+        })}
 
         <Grid
           position={[0, 0, 0]}
-          args={[10, 10]}
+          args={[bedWidth, bedDepth]}
           cellColor="#28282f"
           sectionColor="#35353e"
-          fadeDistance={14}
+          fadeDistance={bedWidth * 6}
           infiniteGrid
         />
 
-        <OrbitControls makeDefault />
+        <OrbitControls ref={controlsRef} makeDefault />
         <GizmoHelper alignment="bottom-right" margin={[56, 56]}>
           <GizmoViewport axisColors={['#ff5c5c', '#7bd88f', '#4d8dff']} labelColor="black" />
         </GizmoHelper>
@@ -41,17 +78,17 @@ export function Viewport3DPane() {
         <IconButton size="sm" active={wireframe} aria-label="Toggle wireframe" onClick={() => setWireframe((v) => !v)}>
           <Scan size={15} />
         </IconButton>
-        <IconButton size="sm" aria-label="Reset view">
+        <IconButton size="sm" aria-label="Reset view" onClick={() => controlsRef.current?.reset()}>
           <Maximize size={15} />
         </IconButton>
       </div>
 
       <div className="viewport-3d__zoom">
-        <IconButton size="sm" aria-label="Zoom out">
+        <IconButton size="sm" aria-label="Zoom out" onClick={() => controlsRef.current?.dollyOut(1.2)}>
           <ZoomOut size={14} />
         </IconButton>
-        <span>100%</span>
-        <IconButton size="sm" aria-label="Zoom in">
+        <span>{order.length} shapes</span>
+        <IconButton size="sm" aria-label="Zoom in" onClick={() => controlsRef.current?.dollyIn(1.2)}>
           <ZoomIn size={14} />
         </IconButton>
       </div>
