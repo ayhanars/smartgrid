@@ -9,7 +9,7 @@
   background: var(--bg-panel);
   border-color: var(--border);
   z-index: 1;
-  pointer-events: none;
+  cursor: crosshair;
 }
 
 .canvas-2d__ruler--top {
@@ -30,13 +30,32 @@
 
 .canvas-2d__svg {
   position: absolute;
-  inset: 20px 0 0 20px;
-  width: calc(100% - 20px);
-  height: calc(100% - 20px);
   background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
   background-size: 16px 16px;
   touch-action: none;
   user-select: none;
+}
+
+.canvas-2d__guide {
+  stroke: #ff4fb8;
+  stroke-width: 1;
+  pointer-events: stroke;
+  cursor: default;
+}
+
+.canvas-2d__guide--horizontal {
+  cursor: ns-resize;
+}
+
+.canvas-2d__guide--vertical {
+  cursor: ew-resize;
+}
+
+.canvas-2d__guide-preview {
+  stroke: #ff4fb8;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
 }
 
 .canvas-2d__artboard {

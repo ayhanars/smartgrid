@@ -14,7 +14,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
-import { useDocumentStore, shapeWorldBounds } from '../../state/documentStore'
+import { useDocumentStore, shapeWorldBounds, type Guide } from '../../state/documentStore'
 import type { Bounds, Point2, ShapeKind } from '../../types/document'
 import { ShapeElement } from './ShapeElement'
 import {
@@ -59,6 +59,8 @@ type Gesture =
       wasAlreadySelected: boolean
     }
   | { type: 'resize'; id: string; handle: ResizeHandle; startBounds: Bounds; startDoc: Point2; preview: Bounds }
+  | { type: 'ruler-drag'; orientation: Guide['orientation']; screen: Point2; overRuler: boolean }
+  | { type: 'guide-drag'; id: string; orientation: Guide['orientation']; screen: Point2; overRuler: boolean }
 
 export function Canvas2DPane() {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -79,6 +81,13 @@ export function Canvas2DPane() {
   const bed = getBedPreset(bedPresetId)
   const ARTBOARD_WIDTH = bed.width
   const ARTBOARD_HEIGHT = bed.height
+  const guides = useDocumentStore((s) => s.guides)
+  const rulersVisible = useDocumentStore((s) => s.rulersVisible)
+  const addGuide = useDocumentStore((s) => s.addGuide)
+  const updateGuidePosition = useDocumentStore((s) => s.updateGuidePosition)
+  const removeGuide = useDocumentStore((s) => s.removeGuide)
+  const toggleRulersVisible = useDocumentStore((s) => s.toggleRulersVisible)
+  const rulerSize = rulersVisible ? 20 : 0
 
   const docToScreen = useCallback((x: number, y: number) => ({ x: x * zoom + pan.x, y: y * zoom + pan.y }), [zoom, pan])
   const screenToDoc = useCallback((x: number, y: number) => ({ x: (x - pan.x) / zoom, y: (y - pan.y) / zoom }), [zoom, pan])
@@ -137,6 +146,9 @@ export function Canvas2DPane() {
       } else if (mod && e.key === '-') {
         e.preventDefault()
         zoomAtCenter(1 / 1.2)
+      } else if (mod && e.key.toLowerCase() === 'r' && !typing) {
+        e.preventDefault()
+        toggleRulersVisible()
       }
     }
     function onKeyUp(e: KeyboardEvent) {
@@ -148,7 +160,7 @@ export function Canvas2DPane() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [zoom, pan, fitToView])
+  }, [zoom, pan, fitToView, toggleRulersVisible])
 
   const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
     e.preventDefault()
@@ -216,6 +228,20 @@ export function Canvas2DPane() {
     setGesture({ type: 'move', startDoc: doc, originals, dx: 0, dy: 0, moved: false, clickedId: id, wasAlreadySelected })
   }
 
+  const handleRulerPointerDown = (e: React.PointerEvent, orientation: Guide['orientation']) => {
+    e.preventDefault()
+    svgRef.current?.setPointerCapture(e.pointerId)
+    const local = getLocalPoint(e)
+    setGesture({ type: 'ruler-drag', orientation, screen: local, overRuler: true })
+  }
+
+  const handleGuidePointerDown = (e: React.PointerEvent, id: string, orientation: Guide['orientation']) => {
+    e.stopPropagation()
+    svgRef.current?.setPointerCapture(e.pointerId)
+    const local = getLocalPoint(e)
+    setGesture({ type: 'guide-drag', id, orientation, screen: local, overRuler: false })
+  }
+
   const handleResizePointerDown = (e: React.PointerEvent, id: string, handle: ResizeHandle) => {
     e.stopPropagation()
     const layer = layers[id]
@@ -257,6 +283,16 @@ export function Canvas2DPane() {
       const doc = screenToDoc(local.x, local.y)
       const preview = computeResizedBounds(gesture.startBounds, gesture.handle, doc.x - gesture.startDoc.x, doc.y - gesture.startDoc.y)
       setGesture({ ...gesture, preview })
+    } else if (gesture.type === 'ruler-drag') {
+      const overRuler = gesture.orientation === 'horizontal' ? local.y < 0 : local.x < 0
+      setGesture({ ...gesture, screen: local, overRuler })
+    } else if (gesture.type === 'guide-drag') {
+      const overRuler = gesture.orientation === 'horizontal' ? local.y < 0 : local.x < 0
+      if (!overRuler) {
+        const doc = screenToDoc(local.x, local.y)
+        updateGuidePosition(gesture.id, gesture.orientation === 'horizontal' ? doc.y : doc.x)
+      }
+      setGesture({ ...gesture, screen: local, overRuler })
     }
   }
 
@@ -279,6 +315,13 @@ export function Canvas2DPane() {
       }
     } else if (gesture.type === 'resize') {
       resizeShape(gesture.id, gesture.preview)
+    } else if (gesture.type === 'ruler-drag') {
+      if (!gesture.overRuler) {
+        const doc = screenToDoc(gesture.screen.x, gesture.screen.y)
+        addGuide(gesture.orientation, gesture.orientation === 'horizontal' ? doc.y : doc.x)
+      }
+    } else if (gesture.type === 'guide-drag') {
+      if (gesture.overRuler) removeGuide(gesture.id)
     }
     setGesture(null)
   }
@@ -299,13 +342,23 @@ export function Canvas2DPane() {
 
   return (
     <div className="canvas-2d">
-      <div className="canvas-2d__ruler canvas-2d__ruler--top" />
-      <div className="canvas-2d__ruler canvas-2d__ruler--left" />
+      {rulersVisible && (
+        <>
+          <div className="canvas-2d__ruler canvas-2d__ruler--top" onPointerDown={(e) => handleRulerPointerDown(e, 'horizontal')} />
+          <div className="canvas-2d__ruler canvas-2d__ruler--left" onPointerDown={(e) => handleRulerPointerDown(e, 'vertical')} />
+        </>
+      )}
 
       <svg
         ref={svgRef}
         className="canvas-2d__svg"
-        style={{ cursor }}
+        style={{
+          cursor,
+          top: rulerSize,
+          left: rulerSize,
+          width: `calc(100% - ${rulerSize}px)`,
+          height: `calc(100% - ${rulerSize}px)`,
+        }}
         onPointerDown={handleBackgroundPointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -336,6 +389,41 @@ export function Canvas2DPane() {
             />
           )}
         </g>
+
+        {rulersVisible &&
+          guides.map((guide) => {
+            const isHorizontal = guide.orientation === 'horizontal'
+            const screenPos = isHorizontal ? docToScreen(0, guide.position).y : docToScreen(guide.position, 0).x
+            const x1 = isHorizontal ? 0 : screenPos
+            const y1 = isHorizontal ? screenPos : 0
+            const x2 = isHorizontal ? '100%' : screenPos
+            const y2 = isHorizontal ? screenPos : '100%'
+            return (
+              <g key={guide.id}>
+                <line className={`canvas-2d__guide canvas-2d__guide--${guide.orientation}`} x1={x1} y1={y1} x2={x2} y2={y2} />
+                <line
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke="transparent"
+                  strokeWidth={8}
+                  className={`canvas-2d__guide--${guide.orientation}`}
+                  onPointerDown={(e) => handleGuidePointerDown(e, guide.id, guide.orientation)}
+                />
+              </g>
+            )
+          })}
+
+        {gesture?.type === 'ruler-drag' && !gesture.overRuler && (
+          <line
+            className="canvas-2d__guide-preview"
+            x1={gesture.orientation === 'horizontal' ? 0 : gesture.screen.x}
+            y1={gesture.orientation === 'horizontal' ? gesture.screen.y : 0}
+            x2={gesture.orientation === 'horizontal' ? '100%' : gesture.screen.x}
+            y2={gesture.orientation === 'horizontal' ? gesture.screen.y : '100%'}
+          />
+        )}
 
         {gesture?.type === 'marquee' && (
           <rect

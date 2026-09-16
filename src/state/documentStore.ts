@@ -10,6 +10,13 @@ function generateId() {
   return `shape-${idCounter}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+export interface Guide {
+  id: string
+  orientation: 'horizontal' | 'vertical'
+  /** Document mm position: Y for a horizontal guide, X for a vertical one. */
+  position: number
+}
+
 interface DocumentState {
   layers: Record<string, ShapeLayer>
   /** Back-to-front draw order (also top-to-bottom in the Layers panel, reversed for display). */
@@ -18,6 +25,8 @@ interface DocumentState {
   /** Document-level, not per-shape — applies regardless of what's selected. */
   bedPresetId: string
   pinnedBedPresetId: string | null
+  guides: Guide[]
+  rulersVisible: boolean
 }
 
 interface DocumentActions {
@@ -37,6 +46,10 @@ interface DocumentActions {
   setBevelTop: (id: string, amount: number) => void
   setBedPreset: (id: string) => void
   togglePinnedBedPreset: (id: string) => void
+  addGuide: (orientation: Guide['orientation'], position: number) => string
+  updateGuidePosition: (id: string, position: number) => void
+  removeGuide: (id: string) => void
+  toggleRulersVisible: () => void
 }
 
 export type DocumentStore = DocumentState & DocumentActions
@@ -49,6 +62,8 @@ export const useDocumentStore = create<DocumentStore>()(
       selection: [],
       bedPresetId: DEFAULT_BED_ID,
       pinnedBedPresetId: DEFAULT_BED_ID,
+      guides: [],
+      rulersVisible: true,
 
       addShape: (kind, bounds) => {
         const id = generateId()
@@ -218,6 +233,19 @@ export const useDocumentStore = create<DocumentStore>()(
 
       togglePinnedBedPreset: (id) =>
         set((state) => ({ pinnedBedPresetId: state.pinnedBedPresetId === id ? null : id })),
+
+      addGuide: (orientation, position) => {
+        const id = generateId()
+        set((state) => ({ guides: [...state.guides, { id, orientation, position }] }))
+        return id
+      },
+
+      updateGuidePosition: (id, position) =>
+        set((state) => ({ guides: state.guides.map((g) => (g.id === id ? { ...g, position } : g)) })),
+
+      removeGuide: (id) => set((state) => ({ guides: state.guides.filter((g) => g.id !== id) })),
+
+      toggleRulersVisible: () => set((state) => ({ rulersVisible: !state.rulersVisible })),
     }),
     {
       // Selection is transient UI state, not something Cmd+Z should walk
