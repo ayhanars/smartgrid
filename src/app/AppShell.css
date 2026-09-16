@@ -17,6 +17,7 @@
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .app-shell__right {
@@ -25,6 +26,7 @@
   border-left: 1px solid var(--border);
   background: var(--bg-panel);
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .app-shell__center {

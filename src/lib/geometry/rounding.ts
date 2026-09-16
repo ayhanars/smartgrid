@@ -12,7 +12,7 @@ function quadraticBezier(p0: Point2, p1: Point2, p2: Point2, t: number): Point2 
   return { x: lerp(ax, bx, t), y: lerp(ay, by, t) }
 }
 
-const CORNER_SEGMENTS = 6
+const CORNER_SEGMENTS = 16
 
 /** Replaces one vertex with a bezier-approximated round corner of the given
  * radius (clamped to half of whichever adjacent edge is shorter, so it can

@@ -26,7 +26,7 @@ import {
   type ResizeHandle,
 } from './geometry2d'
 import { createShapeRegions, pointsToSvgPath } from '../../lib/geometry/primitives'
-import { ARTBOARD_WIDTH, ARTBOARD_HEIGHT } from '../../lib/geometry/constants'
+import { getBedPreset } from '../../lib/geometry/bedPresets'
 import './Canvas2DPane.css'
 
 const MIN_ZOOM = 0.05
@@ -75,6 +75,10 @@ export function Canvas2DPane() {
   const addShape = useDocumentStore((s) => s.addShape)
   const moveShapesBy = useDocumentStore((s) => s.moveShapesBy)
   const resizeShape = useDocumentStore((s) => s.resizeShape)
+  const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const bed = getBedPreset(bedPresetId)
+  const ARTBOARD_WIDTH = bed.width
+  const ARTBOARD_HEIGHT = bed.height
 
   const docToScreen = useCallback((x: number, y: number) => ({ x: x * zoom + pan.x, y: y * zoom + pan.y }), [zoom, pan])
   const screenToDoc = useCallback((x: number, y: number) => ({ x: (x - pan.x) / zoom, y: (y - pan.y) / zoom }), [zoom, pan])
@@ -97,7 +101,7 @@ export function Canvas2DPane() {
       x: (rect.width - ARTBOARD_WIDTH * nextZoom) / 2,
       y: (rect.height - ARTBOARD_HEIGHT * nextZoom) / 2,
     })
-  }, [])
+  }, [ARTBOARD_WIDTH, ARTBOARD_HEIGHT])
 
   useLayoutEffect(() => {
     fitToView()

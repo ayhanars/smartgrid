@@ -4,16 +4,10 @@ import { shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
 import type { ShapeLayer } from '../../types/document'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
 import { computeSafeBevel } from '../../lib/geometry/offset'
+import { bedPresets } from '../../lib/geometry/bedPresets'
 import './InspectorPanel.css'
 
 type Tab = 'design' | '3d' | 'export'
-
-const bedPresets = [
-  { id: 'a1', label: 'Bambu Lab A1', size: '256 × 256 mm' },
-  { id: 'a1-mini', label: 'Bambu Lab A1 Mini', size: '180 × 180 mm' },
-  { id: 'p1s', label: 'Bambu Lab P1S', size: '256 × 256 mm' },
-  { id: 'x1c', label: 'Bambu Lab X1 Carbon', size: '256 × 256 mm' },
-]
 
 const usedColors = ['#4d8dff', '#ff5c5c', '#ffb648', '#7bd88f', '#e7e7ea']
 
@@ -142,7 +136,12 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
   const setColor = useDocumentStore((s) => s.setColor)
 
   if (!layer) {
-    return <EmptyState text={multiCount > 1 ? 'Position & size editing needs a single shape selected.' : 'Select a shape to edit its properties.'} />
+    return (
+      <>
+        <BedPresetsSection />
+        {multiCount > 1 && <EmptyState text={`${multiCount} shapes selected — position & size editing needs just one.`} />}
+      </>
+    )
   }
 
   const bounds = shapeWorldBounds(layer)
@@ -158,23 +157,6 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
         </div>
       </Section>
 
-      <Section title="Bed Presets" action={<span className="inspector-section__hint">4</span>}>
-        <div className="inspector-preset-list">
-          {bedPresets.map((preset) => (
-            <div key={preset.id} className="inspector-preset-row">
-              <input type="checkbox" defaultChecked={preset.id === 'a1'} disabled />
-              <div className="inspector-preset-row__text">
-                <span>{preset.label}</span>
-                <span className="inspector-preset-row__size">{preset.size}</span>
-              </div>
-              <button type="button" className="inspector-preset-row__pin" aria-label="Pin as default" disabled>
-                <Pin size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-      </Section>
-
       <Section title="Appearance">
         <div className="inspector-color-row">
           <span className="inspector-color-swatch" style={{ background: layer.color }} />
@@ -187,6 +169,49 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
         </div>
       </Section>
     </>
+  )
+}
+
+function BedPresetsSection() {
+  const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const pinnedBedPresetId = useDocumentStore((s) => s.pinnedBedPresetId)
+  const setBedPreset = useDocumentStore((s) => s.setBedPreset)
+  const togglePinnedBedPreset = useDocumentStore((s) => s.togglePinnedBedPreset)
+
+  return (
+    <Section title="Bed Presets" action={<span className="inspector-section__hint">{bedPresets.length}</span>}>
+      <div className="inspector-preset-list">
+        {bedPresets.map((preset) => (
+          <div
+            key={preset.id}
+            className="inspector-preset-row"
+            role="button"
+            tabIndex={0}
+            onClick={() => setBedPreset(preset.id)}
+          >
+            <input type="radio" checked={bedPresetId === preset.id} readOnly />
+            <div className="inspector-preset-row__text">
+              <span>{preset.label}</span>
+              <span className="inspector-preset-row__size">
+                {preset.width} × {preset.height} mm
+              </span>
+            </div>
+            <button
+              type="button"
+              className="inspector-preset-row__pin"
+              aria-label="Pin as default"
+              aria-pressed={pinnedBedPresetId === preset.id}
+              onClick={(e) => {
+                e.stopPropagation()
+                togglePinnedBedPreset(preset.id)
+              }}
+            >
+              <Pin size={12} fill={pinnedBedPresetId === preset.id ? 'currentColor' : 'none'} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </Section>
   )
 }
 

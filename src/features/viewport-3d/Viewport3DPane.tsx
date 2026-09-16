@@ -5,13 +5,10 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Maximize, Scan, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
 import { useDocumentStore } from '../../state/documentStore'
-import { ARTBOARD_WIDTH, ARTBOARD_HEIGHT } from '../../lib/geometry/constants'
+import { getBedPreset } from '../../lib/geometry/bedPresets'
 import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import './Viewport3DPane.css'
-
-const bedWidth = ARTBOARD_WIDTH * SCENE_SCALE
-const bedDepth = ARTBOARD_HEIGHT * SCENE_SCALE
 
 export function Viewport3DPane() {
   const [wireframe, setWireframe] = useState(false)
@@ -21,6 +18,12 @@ export function Viewport3DPane() {
   const order = useDocumentStore((s) => s.order)
   const selection = useDocumentStore((s) => s.selection)
   const setSelection = useDocumentStore((s) => s.setSelection)
+  const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const bed = getBedPreset(bedPresetId)
+  const bedWidth = bed.width * SCENE_SCALE
+  const bedDepth = bed.height * SCENE_SCALE
+  const artboardWidth = bed.width
+  const artboardHeight = bed.height
 
   const handleSelect = (id: string, additive: boolean) => {
     if (additive) {
@@ -55,6 +58,8 @@ export function Viewport3DPane() {
               isSelected={selection.includes(id)}
               wireframe={wireframe}
               onSelect={handleSelect}
+              artboardWidth={artboardWidth}
+              artboardHeight={artboardHeight}
             />
           )
         })}

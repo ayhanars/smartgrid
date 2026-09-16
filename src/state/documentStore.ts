@@ -2,6 +2,7 @@ import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
 import type { Bounds, ShapeKind, ShapeLayer } from '../types/document'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
+import { DEFAULT_BED_ID } from '../lib/geometry/bedPresets'
 
 let idCounter = 0
 function generateId() {
@@ -14,6 +15,9 @@ interface DocumentState {
   /** Back-to-front draw order (also top-to-bottom in the Layers panel, reversed for display). */
   order: string[]
   selection: string[]
+  /** Document-level, not per-shape — applies regardless of what's selected. */
+  bedPresetId: string
+  pinnedBedPresetId: string | null
 }
 
 interface DocumentActions {
@@ -31,6 +35,8 @@ interface DocumentActions {
   setSmartPolish: (id: string, intensity: number) => void
   setBevelBottom: (id: string, amount: number) => void
   setBevelTop: (id: string, amount: number) => void
+  setBedPreset: (id: string) => void
+  togglePinnedBedPreset: (id: string) => void
 }
 
 export type DocumentStore = DocumentState & DocumentActions
@@ -41,6 +47,8 @@ export const useDocumentStore = create<DocumentStore>()(
       layers: {},
       order: [],
       selection: [],
+      bedPresetId: DEFAULT_BED_ID,
+      pinnedBedPresetId: DEFAULT_BED_ID,
 
       addShape: (kind, bounds) => {
         const id = generateId()
@@ -205,6 +213,11 @@ export const useDocumentStore = create<DocumentStore>()(
           if (!layer) return {}
           return { layers: { ...state.layers, [id]: { ...layer, bevelTop: Math.max(0, amount) } } }
         }),
+
+      setBedPreset: (id) => set({ bedPresetId: id }),
+
+      togglePinnedBedPreset: (id) =>
+        set((state) => ({ pinnedBedPresetId: state.pinnedBedPresetId === id ? null : id })),
     }),
     {
       // Selection is transient UI state, not something Cmd+Z should walk

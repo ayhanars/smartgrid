@@ -4,7 +4,6 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { ShapeLayer } from '../../types/document'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
 import { buildBeveledGeometry } from '../../lib/geometry/bevelExtrude'
-import { ARTBOARD_WIDTH, ARTBOARD_HEIGHT } from '../../lib/geometry/constants'
 import { SCENE_SCALE } from './sceneScale'
 
 interface ExtrudedShapeMeshProps {
@@ -12,9 +11,11 @@ interface ExtrudedShapeMeshProps {
   isSelected: boolean
   wireframe: boolean
   onSelect: (id: string, additive: boolean) => void
+  artboardWidth: number
+  artboardHeight: number
 }
 
-export function ExtrudedShapeMesh({ layer, isSelected, wireframe, onSelect }: ExtrudedShapeMeshProps) {
+export function ExtrudedShapeMesh({ layer, isSelected, wireframe, onSelect, artboardWidth, artboardHeight }: ExtrudedShapeMeshProps) {
   const geometry = useMemo(() => {
     const rounded = roundPolygonCorners(layer.regions[0].outer.points, layer.cornerRadius)
     const contour = smartPolishCorners(rounded, layer.smartPolish)
@@ -27,9 +28,9 @@ export function ExtrudedShapeMesh({ layer, isSelected, wireframe, onSelect }: Ex
   if (!layer.visible) return null
 
   const position: [number, number, number] = [
-    (layer.transform.x - ARTBOARD_WIDTH / 2) * SCENE_SCALE,
+    (layer.transform.x - artboardWidth / 2) * SCENE_SCALE,
     0,
-    (layer.transform.y - ARTBOARD_HEIGHT / 2) * SCENE_SCALE,
+    (layer.transform.y - artboardHeight / 2) * SCENE_SCALE,
   ]
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
