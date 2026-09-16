@@ -85,7 +85,7 @@ export const useDocumentStore = create<DocumentStore>()(
       resizeShape: (id, bounds) => {
         set((state) => {
           const layer = state.layers[id]
-          if (!layer) return {}
+          if (!layer || layer.locked) return {}
           const current = contourBounds(layer.regions[0].outer.points)
           const scaleX = current.width > 0 ? Math.max(1, bounds.width) / current.width : 1
           const scaleY = current.height > 0 ? Math.max(1, bounds.height) / current.height : 1
@@ -129,9 +129,11 @@ export const useDocumentStore = create<DocumentStore>()(
 
       removeShapes: (ids) => {
         set((state) => {
-          const idSet = new Set(ids)
+          // Locked shapes are protected from deletion, same as move/resize —
+          // only unlocking one first allows it to be removed.
+          const idSet = new Set(ids.filter((id) => !state.layers[id]?.locked))
           const layers = { ...state.layers }
-          for (const id of ids) delete layers[id]
+          for (const id of idSet) delete layers[id]
           return {
             layers,
             order: state.order.filter((id) => !idSet.has(id)),
