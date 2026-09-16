@@ -10,6 +10,7 @@ import {
   Box,
 } from 'lucide-react'
 import { IconButton } from '../components/IconButton'
+import { useTemporalStore } from '../state/documentStore'
 import type { ViewMode } from './AppShell'
 import './TopBar.css'
 
@@ -30,6 +31,8 @@ export function TopBar({
   rightPanelOpen,
   onToggleRightPanel,
 }: TopBarProps) {
+  const { undo, redo, pastStates, futureStates } = useTemporalStore()
+
   return (
     <header className="top-bar">
       <div className="top-bar__section">
@@ -39,10 +42,10 @@ export function TopBar({
           <ChevronDown size={14} />
         </button>
         <div className="top-bar__divider" />
-        <IconButton size="sm" aria-label="Undo" disabled>
+        <IconButton size="sm" aria-label="Undo" disabled={!pastStates.length} onClick={() => undo()}>
           <Undo2 size={15} />
         </IconButton>
-        <IconButton size="sm" aria-label="Redo" disabled>
+        <IconButton size="sm" aria-label="Redo" disabled={!futureStates.length} onClick={() => redo()}>
           <Redo2 size={15} />
         </IconButton>
       </div>

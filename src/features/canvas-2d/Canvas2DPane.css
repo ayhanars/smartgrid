@@ -9,6 +9,7 @@
   background: var(--bg-panel);
   border-color: var(--border);
   z-index: 1;
+  pointer-events: none;
 }
 
 .canvas-2d__ruler--top {
@@ -27,57 +28,50 @@
   border-right: 1px solid var(--border);
 }
 
-.canvas-2d__viewport {
+.canvas-2d__svg {
   position: absolute;
   inset: 20px 0 0 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: calc(100% - 20px);
+  height: calc(100% - 20px);
   background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
   background-size: 16px 16px;
+  touch-action: none;
+  user-select: none;
 }
 
 .canvas-2d__artboard {
-  position: relative;
-  width: 60%;
-  aspect-ratio: 1200 / 800;
-  background: #ffffff;
-  box-shadow: 0 0 0 1px var(--border-strong);
+  fill: #ffffff;
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
 
-.canvas-2d__artboard-label {
-  position: absolute;
-  top: -22px;
-  left: 0;
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--accent);
-  color: white;
-  padding: 2px 6px;
-  border-radius: 4px 4px 4px 0;
+.canvas-2d__draft {
+  fill: rgba(77, 141, 255, 0.25);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
 }
 
-.canvas-2d__shape {
-  position: absolute;
+.canvas-2d__marquee {
+  fill: rgba(77, 141, 255, 0.12);
+  stroke: var(--accent);
+  stroke-width: 1;
+  pointer-events: none;
 }
 
-.canvas-2d__shape--rect {
-  left: 15%;
-  top: 25%;
-  width: 30%;
-  height: 40%;
-  background: var(--accent);
-  opacity: 0.85;
+.canvas-2d__selection-outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  pointer-events: none;
 }
 
-.canvas-2d__shape--circle {
-  right: 18%;
-  bottom: 15%;
-  width: 22%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: var(--danger);
-  opacity: 0.8;
+.canvas-2d__selection-handle {
+  fill: white;
+  stroke: var(--accent);
+  stroke-width: 1.5;
 }
 
 .canvas-2d__toolbar {

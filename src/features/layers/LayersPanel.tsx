@@ -1,120 +1,97 @@
-import { useState, type ReactNode } from 'react'
-import {
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  Eye,
-  EyeOff,
-  FolderClosed,
-  Image,
-  Lock,
-  Pentagon,
-  Plus,
-  Square,
-  Unlock,
-} from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Circle, Eye, EyeOff, Lock, Minus, Pentagon, Plus, Square, Star, Unlock } from 'lucide-react'
+import { useDocumentStore } from '../../state/documentStore'
+import type { ShapeKind } from '../../types/document'
 import './LayersPanel.css'
 
-type LayerKind = 'group' | 'rect' | 'circle' | 'polygon' | 'hole' | 'image'
-
-interface LayerNode {
-  id: string
-  name: string
-  kind: LayerKind
-  visible: boolean
-  locked: boolean
-  children?: LayerNode[]
-}
-
-const mockLayers: LayerNode[] = [
-  {
-    id: 'bracket',
-    name: 'Bracket',
-    kind: 'group',
-    visible: true,
-    locked: false,
-    children: [
-      { id: 'base', name: 'Base Plate', kind: 'rect', visible: true, locked: false },
-      { id: 'fillet', name: 'Fillet Corner', kind: 'polygon', visible: true, locked: false },
-      { id: 'mount-hole', name: 'Mounting Hole', kind: 'hole', visible: true, locked: false },
-    ],
-  },
-  { id: 'boss', name: 'Center Boss', kind: 'circle', visible: true, locked: false },
-  { id: 'sketch', name: 'reference-sketch.png', kind: 'image', visible: false, locked: true },
-]
-
-const kindIcon: Record<LayerKind, ReactNode> = {
-  group: <FolderClosed size={13} />,
+const kindIcon: Record<ShapeKind, ReactNode> = {
   rect: <Square size={13} />,
   circle: <Circle size={13} />,
   polygon: <Pentagon size={13} />,
-  hole: <Circle size={13} />,
-  image: <Image size={13} />,
-}
-
-function LayerRow({ node, depth }: { node: LayerNode; depth: number }) {
-  const [expanded, setExpanded] = useState(true)
-  const [visible, setVisible] = useState(node.visible)
-  const [locked, setLocked] = useState(node.locked)
-  const hasChildren = !!node.children?.length
-
-  return (
-    <>
-      <div className="layer-row" style={{ paddingLeft: 8 + depth * 16 }}>
-        {hasChildren ? (
-          <button type="button" className="layer-row__chevron" onClick={() => setExpanded((v) => !v)}>
-            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          </button>
-        ) : (
-          <span className="layer-row__chevron-spacer" />
-        )}
-        <span className={`layer-row__icon layer-row__icon--${node.kind}`}>{kindIcon[node.kind]}</span>
-        <span className="layer-row__name">{node.name}</span>
-        <div className="layer-row__actions">
-          <button type="button" className="layer-row__toggle" onClick={() => setLocked((v) => !v)}>
-            {locked ? <Lock size={12} /> : <Unlock size={12} />}
-          </button>
-          <button type="button" className="layer-row__toggle" onClick={() => setVisible((v) => !v)}>
-            {visible ? <Eye size={12} /> : <EyeOff size={12} />}
-          </button>
-        </div>
-      </div>
-      {hasChildren &&
-        expanded &&
-        node.children!.map((child) => <LayerRow key={child.id} node={child} depth={depth + 1} />)}
-    </>
-  )
+  star: <Star size={13} />,
+  hole: <Minus size={13} />,
 }
 
 export function LayersPanel() {
+  const layers = useDocumentStore((s) => s.layers)
+  const order = useDocumentStore((s) => s.order)
+  const selection = useDocumentStore((s) => s.selection)
+  const setSelection = useDocumentStore((s) => s.setSelection)
+  const toggleVisibility = useDocumentStore((s) => s.toggleVisibility)
+  const toggleLocked = useDocumentStore((s) => s.toggleLocked)
+
+  // Layers panel lists back-to-front draw order top-to-bottom in reverse,
+  // so the most recently drawn (frontmost) shape appears at the top.
+  const rows = [...order].reverse()
+
   return (
     <div className="layers-panel">
       <div className="layers-panel__header">
         <span className="layers-panel__title">Layers</span>
-        <span className="layers-panel__count">{mockLayers.length}</span>
+        <span className="layers-panel__count">{order.length}</span>
         <div className="layers-panel__header-actions">
-          <button type="button" className="layers-panel__icon-btn" aria-label="Add layer">
+          <button type="button" className="layers-panel__icon-btn" aria-label="Add layer" disabled>
             <Plus size={14} />
           </button>
         </div>
       </div>
 
       <div className="layers-panel__blend-row">
-        <select className="layers-panel__select" defaultValue="normal">
+        <select className="layers-panel__select" defaultValue="normal" disabled>
           <option value="normal">Normal</option>
-          <option value="multiply">Multiply</option>
         </select>
         <div className="layers-panel__opacity">
           <span>Opac</span>
-          <input type="text" defaultValue="100" />
+          <input type="text" defaultValue="100" disabled />
           <span>%</span>
         </div>
       </div>
 
       <div className="layers-panel__tree">
-        {mockLayers.map((node) => (
-          <LayerRow key={node.id} node={node} depth={0} />
-        ))}
+        {rows.length === 0 && <p className="layers-panel__empty">Draw a shape to get started.</p>}
+        {rows.map((id) => {
+          const layer = layers[id]
+          if (!layer) return null
+          const isSelected = selection.includes(id)
+          return (
+            <div
+              key={id}
+              className={`layer-row ${isSelected ? 'layer-row--selected' : ''}`}
+              onClick={(e) => {
+                if (e.shiftKey) {
+                  setSelection(isSelected ? selection.filter((sid) => sid !== id) : [...selection, id])
+                } else {
+                  setSelection([id])
+                }
+              }}
+            >
+              <span className={`layer-row__icon ${layer.isHole ? 'layer-row__icon--hole' : ''}`}>{kindIcon[layer.kind]}</span>
+              <span className="layer-row__name">{layer.name}</span>
+              <div className="layer-row__actions">
+                <button
+                  type="button"
+                  className="layer-row__toggle"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleLocked(id)
+                  }}
+                >
+                  {layer.locked ? <Lock size={12} /> : <Unlock size={12} />}
+                </button>
+                <button
+                  type="button"
+                  className="layer-row__toggle"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleVisibility(id)
+                  }}
+                >
+                  {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
+                </button>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

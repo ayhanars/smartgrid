@@ -93,13 +93,20 @@
   padding-bottom: 8px;
 }
 
+.layers-panel__empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
 .layer-row {
   display: flex;
   align-items: center;
   height: 30px;
-  padding-right: 8px;
+  padding: 0 8px 0 12px;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
+  cursor: default;
 }
 
 .layer-row:hover {
@@ -107,15 +114,9 @@
   color: var(--text);
 }
 
-.layer-row__chevron,
-.layer-row__chevron-spacer {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--text-faint);
+.layer-row--selected {
+  background: var(--accent-bg);
+  color: var(--text);
 }
 
 .layer-row__icon {
