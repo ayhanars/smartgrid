@@ -28,6 +28,9 @@ interface DocumentActions {
   setColor: (id: string, color: string) => void
   setExtrusionDepth: (id: string, depth: number) => void
   setCornerRadius: (id: string, radius: number) => void
+  setSmartPolish: (id: string, intensity: number) => void
+  setBevelBottom: (id: string, amount: number) => void
+  setBevelTop: (id: string, amount: number) => void
 }
 
 export type DocumentStore = DocumentState & DocumentActions
@@ -54,6 +57,9 @@ export const useDocumentStore = create<DocumentStore>()(
           regions: createShapeRegions(kind, width, height),
           extrusionDepth: 3,
           cornerRadius: 0,
+          smartPolish: 0,
+          bevelBottom: 0,
+          bevelTop: 0,
           isHole: kind === 'hole',
           ...(kind === 'polygon' ? { polygonSides: 6 } : {}),
           ...(kind === 'star' ? { starPoints: 5, starInnerRatio: 0.45 } : {}),
@@ -177,6 +183,27 @@ export const useDocumentStore = create<DocumentStore>()(
           const layer = state.layers[id]
           if (!layer) return {}
           return { layers: { ...state.layers, [id]: { ...layer, cornerRadius: Math.max(0, radius) } } }
+        }),
+
+      setSmartPolish: (id, intensity) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          return { layers: { ...state.layers, [id]: { ...layer, smartPolish: Math.max(0, intensity) } } }
+        }),
+
+      setBevelBottom: (id, amount) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          return { layers: { ...state.layers, [id]: { ...layer, bevelBottom: Math.max(0, amount) } } }
+        }),
+
+      setBevelTop: (id, amount) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          return { layers: { ...state.layers, [id]: { ...layer, bevelTop: Math.max(0, amount) } } }
         }),
     }),
     {

@@ -253,6 +253,10 @@
   line-height: 1.5;
 }
 
+.inspector-note--warning {
+  color: var(--warning);
+}
+
 .inspector-export-buttons {
   display: flex;
   flex-direction: column;

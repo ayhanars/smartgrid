@@ -41,6 +41,16 @@ export interface ShapeLayer {
   regions: ShapeRegion[]
   extrusionDepth: number
   cornerRadius: number
+  /** Sharpness-adaptive corner softening intensity, in mm — unlike
+   * `cornerRadius`, this only softens vertices whose interior angle is
+   * already sharp, leaving gentle curves untouched. 0 = off. */
+  smartPolish: number
+  /** Requested straight chamfer into the bottom/top rim, in mm — the
+   * geometry builder clamps each independently to whatever that shape's
+   * outline can support without self-intersecting, so this is what the
+   * user asked for, not necessarily what gets built. 0 = sharp edge. */
+  bevelBottom: number
+  bevelTop: number
   /** True for a shape drawn with the Hole tool: never rendered as its own
    * solid, instead subtracted from whatever it overlaps in the 3D scene. */
   isHole: boolean

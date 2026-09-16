@@ -1,7 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Copy, Pin, Trash2 } from 'lucide-react'
 import { shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
 import type { ShapeLayer } from '../../types/document'
+import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
+import { computeSafeBevel } from '../../lib/geometry/offset'
 import './InspectorPanel.css'
 
 type Tab = 'design' | '3d' | 'export'
@@ -191,10 +193,25 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
 function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount: number }) {
   const setExtrusionDepth = useDocumentStore((s) => s.setExtrusionDepth)
   const setCornerRadius = useDocumentStore((s) => s.setCornerRadius)
+  const setSmartPolish = useDocumentStore((s) => s.setSmartPolish)
+  const setBevelBottom = useDocumentStore((s) => s.setBevelBottom)
+  const setBevelTop = useDocumentStore((s) => s.setBevelTop)
 
-  if (!layer) {
+  // The same contour the 3D mesh is actually built from, so the "clamped
+  // to" hint below reflects the real geometry-safety limit for this shape,
+  // not just the raw un-rounded outline.
+  const effectiveContour = useMemo(() => {
+    if (!layer) return null
+    const rounded = roundPolygonCorners(layer.regions[0].outer.points, layer.cornerRadius)
+    return smartPolishCorners(rounded, layer.smartPolish)
+  }, [layer])
+
+  if (!layer || !effectiveContour) {
     return <EmptyState text={multiCount > 1 ? 'Select a single shape to edit its 3D properties.' : 'Select a shape to edit its 3D properties.'} />
   }
+
+  const safeBottom = computeSafeBevel(effectiveContour, layer.bevelBottom)
+  const safeTop = computeSafeBevel(effectiveContour, layer.bevelTop)
 
   return (
     <>
@@ -206,20 +223,20 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
       </Section>
 
       <Section title="Smart Polish">
-        <div className="inspector-toggle-row">
-          <span>Adaptive corner softening</span>
-          <input type="checkbox" disabled />
-        </div>
-        <Field label="Sharpness threshold" value={35} suffix="°" />
-        <p className="inspector-note">Not wired yet — needs the 3D extrusion engine.</p>
+        <Field label="Intensity" value={layer.smartPolish} suffix="mm" onChange={(v) => setSmartPolish(layer.id, v)} />
+        <p className="inspector-note">Softens sharp corners only — gentle curves are left alone.</p>
       </Section>
 
       <Section title="Edge Bevel">
         <div className="inspector-grid-2">
-          <Field label="Top" value={0} suffix="mm" />
-          <Field label="Bottom" value={0} suffix="mm" />
+          <Field label="Top" value={layer.bevelTop} suffix="mm" onChange={(v) => setBevelTop(layer.id, v)} />
+          <Field label="Bottom" value={layer.bevelBottom} suffix="mm" onChange={(v) => setBevelBottom(layer.id, v)} />
         </div>
-        <p className="inspector-note">Not wired yet — needs the 3D extrusion engine.</p>
+        {(safeTop < layer.bevelTop - 0.05 || safeBottom < layer.bevelBottom - 0.05) && (
+          <p className="inspector-note inspector-note--warning">
+            Clamped to what this shape can safely support: top {round(safeTop)}mm, bottom {round(safeBottom)}mm.
+          </p>
+        )}
       </Section>
     </>
   )
