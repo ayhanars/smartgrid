@@ -3,6 +3,7 @@ import { temporal } from 'zundo'
 import type { Bounds, ShapeKind, ShapeLayer } from '../types/document'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { DEFAULT_BED_ID } from '../lib/geometry/bedPresets'
+import { applyBooleanOp, type BooleanOp } from '../lib/geometry/boolean'
 
 let idCounter = 0
 function generateId() {
@@ -46,6 +47,7 @@ interface DocumentActions {
   setBevelTop: (id: string, amount: number) => void
   setBedPreset: (id: string) => void
   togglePinnedBedPreset: (id: string) => void
+  applyBoolean: (op: BooleanOp) => void
   addGuide: (orientation: Guide['orientation'], position: number) => string
   updateGuidePosition: (id: string, position: number) => void
   removeGuide: (id: string) => void
@@ -115,7 +117,8 @@ export const useDocumentStore = create<DocumentStore>()(
         set((state) => {
           const layer = state.layers[id]
           if (!layer || layer.locked) return {}
-          const current = contourBounds(layer.regions[0].outer.points)
+          const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+          const current = contourBounds(allPoints)
           const scaleX = current.width > 0 ? Math.max(1, bounds.width) / current.width : 1
           const scaleY = current.height > 0 ? Math.max(1, bounds.height) / current.height : 1
           const scalePoints = (points: { x: number; y: number }[]) =>
@@ -130,6 +133,45 @@ export const useDocumentStore = create<DocumentStore>()(
               [id]: { ...layer, regions, transform: { ...layer.transform, x: bounds.x, y: bounds.y } },
             },
           }
+        })
+      },
+
+      applyBoolean: (op) => {
+        set((state) => {
+          const orderedIds = state.order.filter((id) => state.selection.includes(id))
+          if (orderedIds.length < 2) return {}
+          const orderedLayers = orderedIds.map((id) => state.layers[id])
+          const result = applyBooleanOp(op, orderedLayers)
+          if (!result) return {}
+
+          const opNames: Record<BooleanOp, string> = {
+            union: 'Union',
+            subtract: 'Subtract',
+            intersect: 'Intersect',
+            exclude: 'Exclude',
+          }
+          const base = orderedLayers[0]
+          const { polygonSides: _polygonSides, starPoints: _starPoints, starInnerRatio: _starInnerRatio, ...baseRest } = base
+          const id = generateId()
+          const newLayer: ShapeLayer = {
+            ...baseRest,
+            id,
+            kind: 'polygon',
+            name: opNames[op],
+            transform: { ...base.transform, x: result.origin.x, y: result.origin.y },
+            regions: result.regions,
+          }
+
+          const firstIndex = state.order.indexOf(orderedIds[0])
+          const insertIndex = state.order.slice(0, firstIndex).filter((oid) => !orderedIds.includes(oid)).length
+          const order = state.order.filter((oid) => !orderedIds.includes(oid))
+          order.splice(insertIndex, 0, id)
+
+          const layers = { ...state.layers }
+          for (const rid of orderedIds) delete layers[rid]
+          layers[id] = newLayer
+
+          return { layers, order, selection: [id] }
         })
       },
 
@@ -261,7 +303,8 @@ export function useTemporalStore() {
 }
 
 export function shapeWorldBounds(layer: ShapeLayer): Bounds {
-  const local = contourBounds(layer.regions[0].outer.points)
+  const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+  const local = contourBounds(allPoints)
   return {
     x: layer.transform.x + local.x,
     y: layer.transform.y + local.y,

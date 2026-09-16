@@ -107,6 +107,28 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
+.canvas-2d__boolean-toolbar {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.canvas-2d__boolean-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
 .canvas-2d__zoom {
   position: absolute;
   bottom: 12px;

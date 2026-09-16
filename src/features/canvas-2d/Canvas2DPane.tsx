@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Circle,
+  Combine,
   Hand,
   Minus,
   MousePointer2,
@@ -9,6 +10,10 @@ import {
   Scissors,
   Square,
   SquareDashed,
+  SquaresExclude,
+  SquaresIntersect,
+  SquaresSubtract,
+  SquaresUnite,
   Star,
   ZoomIn,
   ZoomOut,
@@ -16,6 +21,7 @@ import {
 import { IconButton } from '../../components/IconButton'
 import { useDocumentStore, shapeWorldBounds, type Guide } from '../../state/documentStore'
 import type { Bounds, Point2, ShapeKind } from '../../types/document'
+import type { BooleanOp } from '../../lib/geometry/boolean'
 import { ShapeElement } from './ShapeElement'
 import {
   clamp,
@@ -42,6 +48,13 @@ const drawTools: { id: DrawableTool; label: string; icon: typeof Square }[] = [
   { id: 'polygon', label: 'Polygon', icon: Pentagon },
   { id: 'star', label: 'Star', icon: Star },
   { id: 'hole', label: 'Hole', icon: Minus },
+]
+
+const booleanOps: { id: BooleanOp; label: string; icon: typeof Square }[] = [
+  { id: 'union', label: 'Union', icon: SquaresUnite },
+  { id: 'subtract', label: 'Subtract', icon: SquaresSubtract },
+  { id: 'intersect', label: 'Intersect', icon: SquaresIntersect },
+  { id: 'exclude', label: 'Exclude', icon: SquaresExclude },
 ]
 
 type Gesture =
@@ -77,6 +90,7 @@ export function Canvas2DPane() {
   const addShape = useDocumentStore((s) => s.addShape)
   const moveShapesBy = useDocumentStore((s) => s.moveShapesBy)
   const resizeShape = useDocumentStore((s) => s.resizeShape)
+  const applyBoolean = useDocumentStore((s) => s.applyBoolean)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
   const bed = getBedPreset(bedPresetId)
   const ARTBOARD_WIDTH = bed.width
@@ -444,6 +458,20 @@ export function Canvas2DPane() {
           />
         )}
       </svg>
+
+      {selection.length >= 2 && (
+        <div className="canvas-2d__boolean-toolbar">
+          {booleanOps.map(({ id, label, icon: Icon }) => (
+            <IconButton key={id} size="md" aria-label={label} onClick={() => applyBoolean(id)}>
+              <Icon size={16} />
+            </IconButton>
+          ))}
+          <div className="canvas-2d__boolean-toolbar-divider" />
+          <IconButton size="md" aria-label="Flatten" onClick={() => applyBoolean('union')}>
+            <Combine size={16} />
+          </IconButton>
+        </div>
+      )}
 
       <div className="canvas-2d__toolbar">
         <IconButton size="md" active={tool === 'select'} aria-label="Select" onClick={() => setTool('select')}>

@@ -83,6 +83,20 @@ export function pointsToSvgPath(points: Point2[]): string {
   return `M ${first.x} ${first.y} ` + rest.map((p) => `L ${p.x} ${p.y}`).join(' ') + ' Z'
 }
 
+/** Combines every region's outer contour and holes into one path, meant to
+ * be rendered with fill-rule="evenodd" so holes punch through regardless of
+ * winding direction — the result of a boolean op can have several
+ * disjoint outer contours, each with its own holes. */
+export function regionsToSvgPath(regions: ShapeRegion[]): string {
+  return regions
+    .map((region) => {
+      const outer = pointsToSvgPath(region.outer.points)
+      const holes = region.holes.map((h) => pointsToSvgPath(h.points)).join(' ')
+      return holes ? `${outer} ${holes}` : outer
+    })
+    .join(' ')
+}
+
 export function defaultShapeName(kind: ShapeKind): string {
   switch (kind) {
     case 'rect':

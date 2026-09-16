@@ -1,5 +1,5 @@
 import type { ShapeLayer } from '../../types/document'
-import { pointsToSvgPath } from '../../lib/geometry/primitives'
+import { regionsToSvgPath } from '../../lib/geometry/primitives'
 
 interface ShapeElementProps {
   layer: ShapeLayer
@@ -13,7 +13,7 @@ export function ShapeElement({ layer, isSelected, previewOffset, onPointerDown }
 
   const dx = previewOffset?.dx ?? 0
   const dy = previewOffset?.dy ?? 0
-  const path = pointsToSvgPath(layer.regions[0].outer.points)
+  const path = regionsToSvgPath(layer.regions)
 
   return (
     <g
@@ -24,6 +24,7 @@ export function ShapeElement({ layer, isSelected, previewOffset, onPointerDown }
     >
       <path
         d={path}
+        fillRule="evenodd"
         fill={layer.isHole ? 'rgba(255, 92, 92, 0.22)' : layer.color}
         stroke={layer.isHole ? '#ff5c5c' : isSelected ? '#4d8dff' : 'transparent'}
         strokeDasharray={layer.isHole ? '4 3' : undefined}
