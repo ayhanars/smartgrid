@@ -1,0 +1,120 @@
+.canvas-2d {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.canvas-2d__ruler {
+  position: absolute;
+  background: var(--bg-panel);
+  border-color: var(--border);
+  z-index: 1;
+}
+
+.canvas-2d__ruler--top {
+  top: 0;
+  left: 20px;
+  right: 0;
+  height: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.canvas-2d__ruler--left {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 20px;
+  border-right: 1px solid var(--border);
+}
+
+.canvas-2d__viewport {
+  position: absolute;
+  inset: 20px 0 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.canvas-2d__artboard {
+  position: relative;
+  width: 60%;
+  aspect-ratio: 1200 / 800;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+
+.canvas-2d__artboard-label {
+  position: absolute;
+  top: -22px;
+  left: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--accent);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px 4px 4px 0;
+}
+
+.canvas-2d__shape {
+  position: absolute;
+}
+
+.canvas-2d__shape--rect {
+  left: 15%;
+  top: 25%;
+  width: 30%;
+  height: 40%;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.canvas-2d__shape--circle {
+  right: 18%;
+  bottom: 15%;
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--danger);
+  opacity: 0.8;
+}
+
+.canvas-2d__toolbar {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.canvas-2d__zoom {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.canvas-2d__status {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+}

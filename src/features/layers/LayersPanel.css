@@ -1,0 +1,164 @@
+.layers-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.layers-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 12px 8px;
+}
+
+.layers-panel__title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.layers-panel__count {
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--bg-field);
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+}
+
+.layers-panel__header-actions {
+  margin-left: auto;
+  display: flex;
+}
+
+.layers-panel__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.layers-panel__icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.layers-panel__blend-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.layers-panel__select {
+  flex: 1;
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 5px 6px;
+  font-size: 12px;
+}
+
+.layers-panel__opacity {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  width: 90px;
+}
+
+.layers-panel__opacity input {
+  width: 28px;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: right;
+}
+
+.layers-panel__opacity input:focus {
+  outline: none;
+}
+
+.layers-panel__tree {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding-right: 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.layer-row:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.layer-row__chevron,
+.layer-row__chevron-spacer {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.layer-row__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+
+.layer-row__icon--hole {
+  color: var(--danger);
+}
+
+.layer-row__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.layer-row__actions {
+  display: none;
+  gap: 2px;
+}
+
+.layer-row:hover .layer-row__actions {
+  display: flex;
+}
+
+.layer-row__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-faint);
+  border-radius: 4px;
+}
+
+.layer-row__toggle:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}

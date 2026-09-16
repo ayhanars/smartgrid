@@ -1,0 +1,36 @@
+.viewport-3d {
+  position: absolute;
+  inset: 0;
+}
+
+.viewport-3d canvas {
+  display: block;
+}
+
+.viewport-3d__controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.viewport-3d__zoom {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
