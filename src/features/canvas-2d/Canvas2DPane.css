@@ -93,6 +93,37 @@
   stroke-width: 1.5;
 }
 
+.canvas-2d__pen-draft path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.canvas-2d__pen-handle-line {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.canvas-2d__pen-handle-dot {
+  fill: var(--bg-panel-raised);
+  stroke: var(--accent);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.canvas-2d__pen-anchor {
+  fill: var(--bg-panel-raised);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.canvas-2d__pen-anchor--close {
+  fill: var(--accent);
+}
+
 .canvas-2d__toolbar {
   position: absolute;
   bottom: 44px;

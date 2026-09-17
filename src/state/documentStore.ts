@@ -1,6 +1,6 @@
 import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
-import type { Bounds, ShapeKind, ShapeLayer } from '../types/document'
+import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../types/document'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { DEFAULT_BED_ID } from '../lib/geometry/bedPresets'
 import { applyBooleanOp, type BooleanOp } from '../lib/geometry/boolean'
@@ -32,6 +32,7 @@ interface DocumentState {
 
 interface DocumentActions {
   addShape: (kind: ShapeKind, bounds: Bounds) => string
+  addPenShape: (documentSpacePoints: Point2[]) => string
   moveShapesBy: (ids: string[], dx: number, dy: number) => void
   resizeShape: (id: string, bounds: Bounds) => void
   duplicateShapes: (ids: string[]) => string[]
@@ -134,6 +135,34 @@ export const useDocumentStore = create<DocumentStore>()(
             },
           }
         })
+      },
+
+      addPenShape: (documentSpacePoints) => {
+        const id = generateId()
+        const bounds = contourBounds(documentSpacePoints)
+        const localPoints = documentSpacePoints.map((p) => ({ x: p.x - bounds.x, y: p.y - bounds.y }))
+        const layer: ShapeLayer = {
+          id,
+          kind: 'polygon',
+          name: 'Path',
+          visible: true,
+          locked: false,
+          color: '#4d8dff',
+          transform: { x: bounds.x, y: bounds.y, rotation: 0 },
+          regions: [{ outer: { points: localPoints }, holes: [] }],
+          extrusionDepth: 3,
+          cornerRadius: 0,
+          smartPolish: 0,
+          bevelBottom: 0,
+          bevelTop: 0,
+          isHole: false,
+        }
+        set((state) => ({
+          layers: { ...state.layers, [id]: layer },
+          order: [...state.order, id],
+          selection: [id],
+        }))
+        return id
       },
 
       applyBoolean: (op) => {

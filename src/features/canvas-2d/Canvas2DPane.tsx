@@ -33,14 +33,16 @@ import {
 } from './geometry2d'
 import { createShapeRegions, pointsToSvgPath } from '../../lib/geometry/primitives'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
+import { flattenPenAnchors, type PenAnchor } from '../../lib/geometry/pen'
 import './Canvas2DPane.css'
 
 const MIN_ZOOM = 0.05
 const MAX_ZOOM = 8
 const CLICK_THRESHOLD_PX = 4
+const PEN_CLOSE_THRESHOLD_PX = 10
 
 type DrawableTool = ShapeKind
-type Tool = 'select' | 'pan' | DrawableTool
+type Tool = 'select' | 'pan' | 'pen' | DrawableTool
 
 const drawTools: { id: DrawableTool; label: string; icon: typeof Square }[] = [
   { id: 'rect', label: 'Rectangle', icon: Square },
@@ -82,6 +84,14 @@ export function Canvas2DPane() {
   const [tool, setTool] = useState<Tool>('select')
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const [isSpaceDown, setIsSpaceDown] = useState(false)
+  const [penAnchors, setPenAnchors] = useState<PenAnchor[]>([])
+  const [penCursor, setPenCursor] = useState<Point2 | null>(null)
+  const [penDraftHandle, setPenDraftHandle] = useState<{
+    anchorIndex: number
+    startDoc: Point2
+    mode: 'handle' | 'move'
+    original?: PenAnchor
+  } | null>(null)
 
   const layers = useDocumentStore((s) => s.layers)
   const order = useDocumentStore((s) => s.order)
@@ -91,6 +101,7 @@ export function Canvas2DPane() {
   const moveShapesBy = useDocumentStore((s) => s.moveShapesBy)
   const resizeShape = useDocumentStore((s) => s.resizeShape)
   const applyBoolean = useDocumentStore((s) => s.applyBoolean)
+  const addPenShape = useDocumentStore((s) => s.addPenShape)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
   const bed = getBedPreset(bedPresetId)
   const ARTBOARD_WIDTH = bed.width
@@ -142,6 +153,26 @@ export function Canvas2DPane() {
     setPan({ x: cx - docPoint.x * nextZoom, y: cy - docPoint.y * nextZoom })
   }
 
+  const cancelPenPath = () => {
+    setPenAnchors([])
+    setPenDraftHandle(null)
+  }
+
+  const finalizePenPath = () => {
+    if (penAnchors.length >= 3) {
+      const flattened = flattenPenAnchors(penAnchors, true)
+      const id = addPenShape(flattened)
+      setSelection([id])
+    }
+    setPenAnchors([])
+    setPenDraftHandle(null)
+    setTool('select')
+  }
+
+  useEffect(() => {
+    if (tool !== 'pen') cancelPenPath()
+  }, [tool])
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement
@@ -163,6 +194,8 @@ export function Canvas2DPane() {
       } else if (mod && e.key.toLowerCase() === 'r' && !typing) {
         e.preventDefault()
         toggleRulersVisible()
+      } else if (e.key === 'Escape' && tool === 'pen') {
+        cancelPenPath()
       }
     }
     function onKeyUp(e: KeyboardEvent) {
@@ -174,7 +207,7 @@ export function Canvas2DPane() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [zoom, pan, fitToView, toggleRulersVisible])
+  }, [zoom, pan, fitToView, toggleRulersVisible, tool])
 
   const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
     e.preventDefault()
@@ -202,6 +235,10 @@ export function Canvas2DPane() {
     if (tool === 'select') {
       if (!e.shiftKey) setSelection([])
       setGesture({ type: 'marquee', startScreen: local, currentScreen: local, additive: e.shiftKey, baseSelection: selection })
+      return
+    }
+    if (tool === 'pen') {
+      handlePenPointerDown(e)
       return
     }
     const doc = screenToDoc(local.x, local.y)
@@ -256,6 +293,94 @@ export function Canvas2DPane() {
     setGesture({ type: 'guide-drag', id, orientation, screen: local, overRuler: false })
   }
 
+  const handlePenPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    const local = getLocalPoint(e)
+    const doc = screenToDoc(local.x, local.y)
+    svgRef.current?.setPointerCapture(e.pointerId)
+
+    // Cmd/Ctrl passthrough: grab an existing draft anchor to reposition it
+    // instead of adding a new one.
+    if (e.metaKey || e.ctrlKey) {
+      const hitIndex = penAnchors.findIndex((a) => {
+        const s = docToScreen(a.point.x, a.point.y)
+        return Math.hypot(local.x - s.x, local.y - s.y) < PEN_CLOSE_THRESHOLD_PX
+      })
+      if (hitIndex >= 0) {
+        setPenDraftHandle({ anchorIndex: hitIndex, startDoc: doc, mode: 'move', original: penAnchors[hitIndex] })
+        return
+      }
+    }
+
+    // Click back on the first anchor closes the path.
+    if (penAnchors.length >= 2) {
+      const firstScreen = docToScreen(penAnchors[0].point.x, penAnchors[0].point.y)
+      if (Math.hypot(local.x - firstScreen.x, local.y - firstScreen.y) < PEN_CLOSE_THRESHOLD_PX) {
+        finalizePenPath()
+        return
+      }
+    }
+
+    const anchorIndex = penAnchors.length
+    setPenAnchors((prev) => [...prev, { point: doc, type: 'corner' }])
+    setPenDraftHandle({ anchorIndex, startDoc: doc, mode: 'handle' })
+  }
+
+  const handlePenPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const local = getLocalPoint(e)
+    const doc = screenToDoc(local.x, local.y)
+    setPenCursor(doc)
+    if (!penDraftHandle) return
+
+    const dxRaw = doc.x - penDraftHandle.startDoc.x
+    const dyRaw = doc.y - penDraftHandle.startDoc.y
+
+    if (penDraftHandle.mode === 'move' && penDraftHandle.original) {
+      const original = penDraftHandle.original
+      const idx = penDraftHandle.anchorIndex
+      setPenAnchors((prev) =>
+        prev.map((a, i) =>
+          i === idx
+            ? {
+                ...a,
+                point: { x: original.point.x + dxRaw, y: original.point.y + dyRaw },
+                handleIn: original.handleIn ? { x: original.handleIn.x + dxRaw, y: original.handleIn.y + dyRaw } : undefined,
+                handleOut: original.handleOut ? { x: original.handleOut.x + dxRaw, y: original.handleOut.y + dyRaw } : undefined,
+              }
+            : a,
+        ),
+      )
+      return
+    }
+
+    let dx = dxRaw
+    let dy = dyRaw
+    if (e.shiftKey) {
+      const angle = Math.atan2(dy, dx)
+      const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4)
+      const dist = Math.hypot(dx, dy)
+      dx = Math.cos(snapped) * dist
+      dy = Math.sin(snapped) * dist
+    }
+    if (Math.hypot(dx * zoom, dy * zoom) <= CLICK_THRESHOLD_PX) return
+
+    const idx = penDraftHandle.anchorIndex
+    const handleOut = { x: penDraftHandle.startDoc.x + dx, y: penDraftHandle.startDoc.y + dy }
+    const handleIn = { x: penDraftHandle.startDoc.x - dx, y: penDraftHandle.startDoc.y - dy }
+    setPenAnchors((prev) =>
+      prev.map((a, i) =>
+        i === idx
+          ? e.altKey
+            ? { ...a, handleOut, type: 'corner' as const }
+            : { ...a, handleOut, handleIn, type: 'symmetric' as const }
+          : a,
+      ),
+    )
+  }
+
+  const handlePenPointerUp = () => {
+    setPenDraftHandle(null)
+  }
+
   const handleResizePointerDown = (e: React.PointerEvent, id: string, handle: ResizeHandle) => {
     e.stopPropagation()
     const layer = layers[id]
@@ -267,7 +392,10 @@ export function Canvas2DPane() {
   }
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!gesture) return
+    if (!gesture) {
+      if (tool === 'pen') handlePenPointerMove(e)
+      return
+    }
     const local = getLocalPoint(e)
 
     if (gesture.type === 'pan') {
@@ -311,7 +439,10 @@ export function Canvas2DPane() {
   }
 
   const handlePointerUp = () => {
-    if (!gesture) return
+    if (!gesture) {
+      if (tool === 'pen') handlePenPointerUp()
+      return
+    }
     if (gesture.type === 'draft') {
       const isClickOnly = Math.abs((gesture.currentDoc.x - gesture.startDoc.x) * zoom) < CLICK_THRESHOLD_PX &&
         Math.abs((gesture.currentDoc.y - gesture.startDoc.y) * zoom) < CLICK_THRESHOLD_PX
@@ -457,6 +588,10 @@ export function Canvas2DPane() {
             onResizeStart={singleSelected ? (e, handle) => handleResizePointerDown(e, singleSelected.id, handle) : undefined}
           />
         )}
+
+        {tool === 'pen' && penAnchors.length > 0 && (
+          <PenDraftOverlay anchors={penAnchors} cursor={penCursor} docToScreen={docToScreen} />
+        )}
       </svg>
 
       {selection.length >= 2 && (
@@ -483,7 +618,7 @@ export function Canvas2DPane() {
         <IconButton size="md" aria-label="Artboard" disabled>
           <SquareDashed size={16} />
         </IconButton>
-        <IconButton size="md" aria-label="Pen" disabled>
+        <IconButton size="md" active={tool === 'pen'} aria-label="Pen" onClick={() => setTool('pen')}>
           <PenTool size={16} />
         </IconButton>
         {drawTools.map(({ id, label, icon: Icon }) => (
@@ -559,6 +694,49 @@ function SelectionOverlay({
             onPointerDown={(e) => onResizeStart?.(e, handle)}
           />
         ))}
+    </g>
+  )
+}
+
+function PenDraftOverlay({
+  anchors,
+  cursor,
+  docToScreen,
+}: {
+  anchors: PenAnchor[]
+  cursor: Point2 | null
+  docToScreen: (x: number, y: number) => Point2
+}) {
+  const previewAnchors = cursor ? [...anchors, { point: cursor, type: 'corner' as const }] : anchors
+  const rawPoints = flattenPenAnchors(previewAnchors, false)
+  const screenPoints = rawPoints.map((p) => docToScreen(p.x, p.y))
+  const d =
+    screenPoints.length > 1
+      ? `M ${screenPoints[0].x} ${screenPoints[0].y} ` + screenPoints.slice(1).map((p) => `L ${p.x} ${p.y}`).join(' ')
+      : ''
+
+  return (
+    <g className="canvas-2d__pen-draft">
+      {d && <path d={d} />}
+      {anchors.map((a, i) => {
+        const pt = docToScreen(a.point.x, a.point.y)
+        const hIn = a.handleIn ? docToScreen(a.handleIn.x, a.handleIn.y) : null
+        const hOut = a.handleOut ? docToScreen(a.handleOut.x, a.handleOut.y) : null
+        return (
+          <g key={i}>
+            {hIn && <line x1={pt.x} y1={pt.y} x2={hIn.x} y2={hIn.y} className="canvas-2d__pen-handle-line" />}
+            {hOut && <line x1={pt.x} y1={pt.y} x2={hOut.x} y2={hOut.y} className="canvas-2d__pen-handle-line" />}
+            {hIn && <circle cx={hIn.x} cy={hIn.y} r={3} className="canvas-2d__pen-handle-dot" />}
+            {hOut && <circle cx={hOut.x} cy={hOut.y} r={3} className="canvas-2d__pen-handle-dot" />}
+            <circle
+              cx={pt.x}
+              cy={pt.y}
+              r={4}
+              className={i === 0 && anchors.length >= 2 ? 'canvas-2d__pen-anchor canvas-2d__pen-anchor--close' : 'canvas-2d__pen-anchor'}
+            />
+          </g>
+        )
+      })}
     </g>
   )
 }
