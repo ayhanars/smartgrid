@@ -43,7 +43,7 @@ const CLICK_THRESHOLD_PX = 4
 const PEN_CLOSE_THRESHOLD_PX = 10
 
 type DrawableTool = ShapeKind
-type Tool = 'select' | 'pan' | 'pen' | DrawableTool
+type Tool = 'select' | 'pan' | 'pen' | 'zoom' | DrawableTool
 
 const drawTools: { id: DrawableTool; label: string; icon: typeof Square }[] = [
   { id: 'rect', label: 'Rectangle', icon: Square },
@@ -64,6 +64,7 @@ type Gesture =
   | { type: 'pan'; startScreen: Point2; startPan: Point2 }
   | { type: 'draft'; kind: DrawableTool; startDoc: Point2; currentDoc: Point2; shift: boolean }
   | { type: 'marquee'; startScreen: Point2; currentScreen: Point2; additive: boolean; baseSelection: string[] }
+  | { type: 'zoom-drag'; startScreen: Point2; currentScreen: Point2; alt: boolean }
   | {
       type: 'move'
       startDoc: Point2
@@ -107,9 +108,11 @@ export function Canvas2DPane() {
   const applyBoolean = useDocumentStore((s) => s.applyBoolean)
   const addPenShape = useDocumentStore((s) => s.addPenShape)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const customBedWidth = useDocumentStore((s) => s.customBedWidth)
+  const customBedHeight = useDocumentStore((s) => s.customBedHeight)
   const bed = getBedPreset(bedPresetId)
-  const ARTBOARD_WIDTH = bed.width
-  const ARTBOARD_HEIGHT = bed.height
+  const ARTBOARD_WIDTH = bed?.width ?? customBedWidth
+  const ARTBOARD_HEIGHT = bed?.height ?? customBedHeight
   const guides = useDocumentStore((s) => s.guides)
   const rulersVisible = useDocumentStore((s) => s.rulersVisible)
   const addGuide = useDocumentStore((s) => s.addGuide)
@@ -198,10 +201,10 @@ export function Canvas2DPane() {
         setIsSpaceDown(true)
       }
       const mod = e.metaKey || e.ctrlKey
-      if (!mod && e.shiftKey && (e.key === '=' || e.key === '+') && !typing) {
+      if (e.shiftKey && (e.key === '=' || e.key === '+') && !typing) {
         e.preventDefault()
         zoomAtCenter(1.2)
-      } else if (!mod && e.shiftKey && (e.key === '-' || e.key === '_') && !typing) {
+      } else if (e.shiftKey && (e.key === '-' || e.key === '_') && !typing) {
         e.preventDefault()
         zoomAtCenter(1 / 1.2)
       } else if (!mod && e.shiftKey && (e.key === '1' || e.key === '!') && !typing) {
@@ -213,6 +216,20 @@ export function Canvas2DPane() {
       } else if (!mod && !e.shiftKey && e.key.toLowerCase() === 'h' && !typing) {
         e.preventDefault()
         setTool('pan')
+      } else if (!mod && !e.shiftKey && e.key.toLowerCase() === 'z' && !typing) {
+        e.preventDefault()
+        setTool('zoom')
+      } else if (mod && (e.key === '=' || e.key === '+') && !typing) {
+        // Cmd/Ctrl+= is the browser's own page-zoom shortcut — capture and
+        // redirect it to the canvas instead of letting it zoom the page.
+        e.preventDefault()
+        zoomAtCenter(1.2)
+      } else if (mod && e.key === '-' && !typing) {
+        e.preventDefault()
+        zoomAtCenter(1 / 1.2)
+      } else if (mod && e.key === '0' && !typing) {
+        e.preventDefault()
+        zoomAtCenter(1 / zoom)
       } else if (mod && e.key.toLowerCase() === 'r' && !typing) {
         e.preventDefault()
         toggleRulersVisible()
@@ -295,6 +312,10 @@ export function Canvas2DPane() {
     }
     if (tool === 'pen') {
       handlePenPointerDown(e)
+      return
+    }
+    if (tool === 'zoom') {
+      setGesture({ type: 'zoom-drag', startScreen: local, currentScreen: local, alt: e.altKey })
       return
     }
     const doc = screenToDoc(local.x, local.y)
@@ -489,6 +510,8 @@ export function Canvas2DPane() {
       const merged = gesture.additive ? Array.from(new Set([...gesture.baseSelection, ...hits])) : hits
       setSelection(merged)
       setGesture({ ...gesture, currentScreen: local })
+    } else if (gesture.type === 'zoom-drag') {
+      setGesture({ ...gesture, currentScreen: local, alt: e.altKey })
     } else if (gesture.type === 'move') {
       const doc = screenToDoc(local.x, local.y)
       const dx = doc.x - gesture.startDoc.x
@@ -532,6 +555,29 @@ export function Canvas2DPane() {
       const id = addShape(gesture.kind, bounds)
       setSelection([id])
       setTool('select')
+    } else if (gesture.type === 'zoom-drag') {
+      const dragPx = Math.hypot(gesture.currentScreen.x - gesture.startScreen.x, gesture.currentScreen.y - gesture.startScreen.y)
+      if (dragPx < CLICK_THRESHOLD_PX) {
+        // A plain click: zoom in centered on it, Alt/Option zooms out instead.
+        const docPoint = screenToDoc(gesture.startScreen.x, gesture.startScreen.y)
+        const factor = gesture.alt ? 0.5 : 2
+        const nextZoom = clamp(zoom * factor, MIN_ZOOM, MAX_ZOOM)
+        setZoom(nextZoom)
+        setPan({ x: gesture.startScreen.x - docPoint.x * nextZoom, y: gesture.startScreen.y - docPoint.y * nextZoom })
+      } else {
+        // A drag: zoom to fit the marquee'd region.
+        const startDoc = screenToDoc(gesture.startScreen.x, gesture.startScreen.y)
+        const currentDoc = screenToDoc(gesture.currentScreen.x, gesture.currentScreen.y)
+        zoomToBounds(
+          {
+            x: Math.min(startDoc.x, currentDoc.x),
+            y: Math.min(startDoc.y, currentDoc.y),
+            width: Math.abs(currentDoc.x - startDoc.x),
+            height: Math.abs(currentDoc.y - startDoc.y),
+          },
+          20,
+        )
+      }
     } else if (gesture.type === 'move') {
       if (gesture.dx || gesture.dy) {
         moveShapesBy(Object.keys(gesture.originals), gesture.dx, gesture.dy)
@@ -563,7 +609,8 @@ export function Canvas2DPane() {
   const draftBounds = gesture?.type === 'draft' ? normalizeDraftBounds(gesture.startDoc, gesture.currentDoc, gesture.shift) : null
   const draftKind = gesture?.type === 'draft' ? gesture.kind : null
 
-  const cursor = isSpaceDown || tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : 'crosshair'
+  const cursor =
+    isSpaceDown || tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair'
   const rulerLengthPx = { width: svgRef.current?.clientWidth ?? 0, height: svgRef.current?.clientHeight ?? 0 }
 
   return (
@@ -607,6 +654,7 @@ export function Canvas2DPane() {
                 layer={layer}
                 isSelected={selection.includes(id)}
                 previewOffset={selection.includes(id) ? moveOffset : undefined}
+                previewResize={isResizing && gesture.id === id ? { startBounds: gesture.startBounds, bounds: gesture.preview } : undefined}
                 onPointerDown={(e) => handleShapePointerDown(e, id)}
               />
             )
@@ -656,7 +704,7 @@ export function Canvas2DPane() {
           />
         )}
 
-        {gesture?.type === 'marquee' && (
+        {(gesture?.type === 'marquee' || gesture?.type === 'zoom-drag') && (
           <rect
             className="canvas-2d__marquee"
             x={Math.min(gesture.startScreen.x, gesture.currentScreen.x)}
@@ -700,6 +748,9 @@ export function Canvas2DPane() {
         </IconButton>
         <IconButton size="md" active={tool === 'pan'} aria-label="Pan" shortcut="H" onClick={() => setTool('pan')}>
           <Hand size={16} />
+        </IconButton>
+        <IconButton size="md" active={tool === 'zoom'} aria-label="Zoom" shortcut="Z" onClick={() => setTool('zoom')}>
+          <ZoomIn size={16} />
         </IconButton>
         <IconButton size="md" aria-label="Artboard" disabled>
           <SquareDashed size={16} />
@@ -758,12 +809,24 @@ function SelectionOverlay({
 }) {
   const topLeft = docToScreen(bounds.x, bounds.y)
   const bottomRight = docToScreen(bounds.x + bounds.width, bounds.y + bounds.height)
+  const midX = (topLeft.x + bottomRight.x) / 2
+  const midY = (topLeft.y + bottomRight.y) / 2
   const corners: { handle: ResizeHandle; point: Point2 }[] = [
     { handle: 'nw', point: topLeft },
     { handle: 'ne', point: { x: bottomRight.x, y: topLeft.y } },
     { handle: 'sw', point: { x: topLeft.x, y: bottomRight.y } },
     { handle: 'se', point: bottomRight },
   ]
+  // Edge midpoint handles resize a single axis, letting a shape be adjusted
+  // from its sides and not just its corners.
+  const edges: { handle: ResizeHandle; point: Point2; horizontal: boolean }[] = [
+    { handle: 'n', point: { x: midX, y: topLeft.y }, horizontal: true },
+    { handle: 's', point: { x: midX, y: bottomRight.y }, horizontal: true },
+    { handle: 'w', point: { x: topLeft.x, y: midY }, horizontal: false },
+    { handle: 'e', point: { x: bottomRight.x, y: midY }, horizontal: false },
+  ]
+  const edgeLength = Math.min(24, Math.max(0, Math.abs(bottomRight.x - topLeft.x) - 16))
+  const edgeLengthV = Math.min(24, Math.max(0, Math.abs(bottomRight.y - topLeft.y) - 16))
 
   return (
     <g className="canvas-2d__selection">
@@ -774,6 +837,23 @@ function SelectionOverlay({
         height={bottomRight.y - topLeft.y}
         className="canvas-2d__selection-outline"
       />
+      {resizable &&
+        edges.map(({ handle, point, horizontal }) => {
+          const len = horizontal ? edgeLength : edgeLengthV
+          if (len <= 0) return null
+          return (
+            <rect
+              key={handle}
+              x={point.x - (horizontal ? len / 2 : 4)}
+              y={point.y - (horizontal ? 4 : len / 2)}
+              width={horizontal ? len : 8}
+              height={horizontal ? 8 : len}
+              className="canvas-2d__selection-edge-handle"
+              style={{ cursor: horizontal ? 'ns-resize' : 'ew-resize' }}
+              onPointerDown={(e) => onResizeStart?.(e, handle)}
+            />
+          )
+        })}
       {resizable &&
         corners.map(({ handle, point }) => (
           <rect

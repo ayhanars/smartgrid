@@ -71,6 +71,16 @@ function lineIntersection(a: OffsetLine, b: OffsetLine): Point2 | null {
   return { x: a.point.x + a.dir.x * t, y: a.point.y + a.dir.y * t }
 }
 
+// A vertex whose two adjacent edges meet at a very shallow angle produces a
+// miter join that shoots arbitrarily far from the original corner as the
+// angle approaches 0 (classic behavior of any mitered offset/stroke) — left
+// unclamped, that spike can warp the ENTIRE eroded contour into something
+// unrecognizable well before it trips the self-intersection checks below.
+// Every stroke/offset implementation (SVG, Cairo, Skia) guards against this
+// with a miter limit; this clamps the same way, pulling an over-long miter
+// back along its own direction instead of letting it distort the shape.
+const MITER_LIMIT = 4
+
 /** Offsets every edge of the polygon by `distance` along one of the two
  * possible perpendiculars (`flip` picks which), then re-intersects
  * consecutive offset edges to find the new vertices — the standard
@@ -87,9 +97,19 @@ function offsetOnce(points: Point2[], distance: number, flip: boolean): Point2[]
     const normal = flip ? { x: dir.y, y: -dir.x } : { x: -dir.y, y: dir.x }
     lines.push({ point: { x: p1.x + normal.x * distance, y: p1.y + normal.y * distance }, dir })
   }
+  const maxMiterDist = distance * MITER_LIMIT
   return lines.map((curr, i) => {
     const prev = lines[(i - 1 + n) % n]
-    return lineIntersection(prev, curr) ?? prev.point
+    const raw = lineIntersection(prev, curr) ?? prev.point
+    const original = points[i]
+    const dx = raw.x - original.x
+    const dy = raw.y - original.y
+    const rawDist = Math.hypot(dx, dy)
+    if (rawDist > maxMiterDist && rawDist > 1e-9) {
+      const scale = maxMiterDist / rawDist
+      return { x: original.x + dx * scale, y: original.y + dy * scale }
+    }
+    return raw
   })
 }
 

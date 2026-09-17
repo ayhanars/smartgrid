@@ -23,14 +23,16 @@ export function normalizeDraftBounds(start: Point2, current: Point2, square: boo
   }
 }
 
-export type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se'
+export type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w'
 
 const MIN_SHAPE_SIZE = 2
 
 /** `uniform` (held with Shift) locks the resize to the shape's original
  * aspect ratio using the larger of the two proposed dimensions, keeping
  * the corner opposite the dragged handle fixed as the anchor — same
- * convention as every design tool's Shift-resize. */
+ * convention as every design tool's Shift-resize. Only meaningful for the
+ * four corner handles; an edge handle only ever moves one axis, so Shift
+ * has nothing to lock there (also standard behavior elsewhere). */
 export function computeResizedBounds(start: Bounds, handle: ResizeHandle, dx: number, dy: number, uniform = false): Bounds {
   let { x, y, width, height } = start
   if (handle === 'se') {
@@ -45,13 +47,24 @@ export function computeResizedBounds(start: Bounds, handle: ResizeHandle, dx: nu
     y = start.y + dy
     width = start.width + dx
     height = start.height - dy
-  } else {
+  } else if (handle === 'sw') {
     x = start.x + dx
     width = start.width - dx
     height = start.height + dy
+  } else if (handle === 'n') {
+    y = start.y + dy
+    height = start.height - dy
+  } else if (handle === 's') {
+    height = start.height + dy
+  } else if (handle === 'e') {
+    width = start.width + dx
+  } else {
+    x = start.x + dx
+    width = start.width - dx
   }
 
-  if (uniform) {
+  const isCorner = handle === 'nw' || handle === 'ne' || handle === 'sw' || handle === 'se'
+  if (uniform && isCorner) {
     const size = Math.max(width, height, MIN_SHAPE_SIZE)
     if (handle === 'nw' || handle === 'sw') x = start.x + start.width - size
     if (handle === 'nw' || handle === 'ne') y = start.y + start.height - size
@@ -59,11 +72,11 @@ export function computeResizedBounds(start: Bounds, handle: ResizeHandle, dx: nu
   }
 
   if (width < MIN_SHAPE_SIZE) {
-    if (handle === 'nw' || handle === 'sw') x = start.x + start.width - MIN_SHAPE_SIZE
+    if (handle === 'nw' || handle === 'sw' || handle === 'w') x = start.x + start.width - MIN_SHAPE_SIZE
     width = MIN_SHAPE_SIZE
   }
   if (height < MIN_SHAPE_SIZE) {
-    if (handle === 'nw' || handle === 'ne') y = start.y + start.height - MIN_SHAPE_SIZE
+    if (handle === 'nw' || handle === 'ne' || handle === 'n') y = start.y + start.height - MIN_SHAPE_SIZE
     height = MIN_SHAPE_SIZE
   }
   return { x, y, width, height }

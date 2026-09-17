@@ -18,7 +18,8 @@ export const bedPresets: BedPreset[] = [
 ]
 
 export const DEFAULT_BED_ID = 'a1'
+export const CUSTOM_BED_ID = 'custom'
 
-export function getBedPreset(id: string): BedPreset {
-  return bedPresets.find((p) => p.id === id) ?? bedPresets[0]
+export function getBedPreset(id: string): BedPreset | null {
+  return bedPresets.find((p) => p.id === id) ?? null
 }

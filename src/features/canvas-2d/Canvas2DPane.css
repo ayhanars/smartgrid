@@ -121,6 +121,12 @@
   stroke-width: 1.5;
 }
 
+.canvas-2d__selection-edge-handle {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
 .canvas-2d__pen-draft path {
   fill: none;
   stroke: var(--accent);

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { Circle, Eye, EyeOff, Lock, Minus, Pentagon, Plus, Square, Star, Unlock } from 'lucide-react'
 import { useDocumentStore } from '../../state/documentStore'
-import type { ShapeKind } from '../../types/document'
+import type { ShapeKind, ShapeLayer } from '../../types/document'
+import { contourBounds, regionsToSvgPath } from '../../lib/geometry/primitives'
 import './LayersPanel.css'
 
 const kindIcon: Record<ShapeKind, ReactNode> = {
@@ -10,6 +11,31 @@ const kindIcon: Record<ShapeKind, ReactNode> = {
   polygon: <Pentagon size={13} />,
   star: <Star size={13} />,
   hole: <Minus size={13} />,
+}
+
+/** A real scaled-to-fit render of the shape's own outline, not just a flat
+ * kind icon — lets a glance at the layer list tell two stars or two pen
+ * paths apart instead of showing the same generic glyph for both. */
+function LayerThumbnail({ layer }: { layer: ShapeLayer }) {
+  const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+  const bounds = contourBounds(allPoints)
+  const pad = Math.max(bounds.width, bounds.height, 1) * 0.15
+  const viewBox = `${bounds.x - pad} ${bounds.y - pad} ${bounds.width + pad * 2} ${bounds.height + pad * 2}`
+  const path = regionsToSvgPath(layer.regions)
+
+  return (
+    <div className="layer-row__thumb">
+      <svg viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
+        <path
+          d={path}
+          fillRule="evenodd"
+          fill={layer.isHole ? 'none' : layer.color}
+          stroke={layer.isHole ? 'var(--danger)' : 'none'}
+          strokeWidth={layer.isHole ? pad * 0.6 : 0}
+        />
+      </svg>
+    </div>
+  )
 }
 
 export function LayersPanel() {
@@ -66,6 +92,7 @@ export function LayersPanel() {
               }}
             >
               <span className={`layer-row__icon ${layer.isHole ? 'layer-row__icon--hole' : ''}`}>{kindIcon[layer.kind]}</span>
+              <LayerThumbnail layer={layer} />
               <span className="layer-row__name">{layer.name}</span>
               <div className="layer-row__actions">
                 <button

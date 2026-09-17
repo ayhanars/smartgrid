@@ -26,8 +26,14 @@ interface DocumentState {
   /** Document-level, not per-shape — applies regardless of what's selected. */
   bedPresetId: string
   pinnedBedPresetId: string | null
+  /** Only meaningful when bedPresetId === CUSTOM_BED_ID. */
+  customBedWidth: number
+  customBedHeight: number
   guides: Guide[]
   rulersVisible: boolean
+  /** Display-only unit for every mm field in the inspector — the store
+   * itself always keeps values in mm regardless of this. */
+  displayUnit: 'mm' | 'cm' | 'in'
 }
 
 interface DocumentActions {
@@ -49,6 +55,8 @@ interface DocumentActions {
   setBevelTop: (id: string, amount: number) => void
   setBedPreset: (id: string) => void
   togglePinnedBedPreset: (id: string) => void
+  setCustomBedSize: (width: number, height: number) => void
+  setDisplayUnit: (unit: DocumentState['displayUnit']) => void
   applyBoolean: (op: BooleanOp) => void
   addGuide: (orientation: Guide['orientation'], position: number) => string
   updateGuidePosition: (id: string, position: number) => void
@@ -66,8 +74,11 @@ export const useDocumentStore = create<DocumentStore>()(
       selection: [],
       bedPresetId: DEFAULT_BED_ID,
       pinnedBedPresetId: DEFAULT_BED_ID,
+      customBedWidth: 256,
+      customBedHeight: 256,
       guides: [],
       rulersVisible: true,
+      displayUnit: 'mm',
 
       addShape: (kind, bounds) => {
         const id = generateId()
@@ -328,6 +339,11 @@ export const useDocumentStore = create<DocumentStore>()(
 
       togglePinnedBedPreset: (id) =>
         set((state) => ({ pinnedBedPresetId: state.pinnedBedPresetId === id ? null : id })),
+
+      setCustomBedSize: (width, height) =>
+        set({ customBedWidth: Math.max(10, width), customBedHeight: Math.max(10, height) }),
+
+      setDisplayUnit: (unit) => set({ displayUnit: unit }),
 
       addGuide: (orientation, position) => {
         const id = generateId()

@@ -19,11 +19,13 @@ export function Viewport3DPane() {
   const selection = useDocumentStore((s) => s.selection)
   const setSelection = useDocumentStore((s) => s.setSelection)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const customBedWidth = useDocumentStore((s) => s.customBedWidth)
+  const customBedHeight = useDocumentStore((s) => s.customBedHeight)
   const bed = getBedPreset(bedPresetId)
-  const bedWidth = bed.width * SCENE_SCALE
-  const bedDepth = bed.height * SCENE_SCALE
-  const artboardWidth = bed.width
-  const artboardHeight = bed.height
+  const artboardWidth = bed?.width ?? customBedWidth
+  const artboardHeight = bed?.height ?? customBedHeight
+  const bedWidth = artboardWidth * SCENE_SCALE
+  const bedDepth = artboardHeight * SCENE_SCALE
 
   const handleSelect = (id: string, additive: boolean) => {
     if (additive) {

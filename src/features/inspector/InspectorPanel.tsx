@@ -4,10 +4,12 @@ import { shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
 import type { ShapeLayer } from '../../types/document'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
 import { computeSafeBevel } from '../../lib/geometry/offset'
-import { bedPresets } from '../../lib/geometry/bedPresets'
+import { bedPresets, CUSTOM_BED_ID } from '../../lib/geometry/bedPresets'
 import './InspectorPanel.css'
 
 const usedColors = ['#4d8dff', '#ff5c5c', '#ffb648', '#7bd88f', '#e7e7ea']
+
+const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
 
 export function InspectorPanel() {
   const layers = useDocumentStore((s) => s.layers)
@@ -39,6 +41,11 @@ export function InspectorPanel() {
         )}
       </div>
 
+      <div className="inspector-panel__units-row">
+        <span>Units</span>
+        <UnitToggle />
+      </div>
+
       <div className="inspector-panel__body">
         <CollapsibleGroup title="Design" defaultOpen>
           <DesignTab layer={selectedLayer} multiCount={selection.length} />
@@ -50,6 +57,25 @@ export function InspectorPanel() {
           <ExportTab />
         </CollapsibleGroup>
       </div>
+    </div>
+  )
+}
+
+function UnitToggle() {
+  const displayUnit = useDocumentStore((s) => s.displayUnit)
+  const setDisplayUnit = useDocumentStore((s) => s.setDisplayUnit)
+  return (
+    <div className="inspector-unit-toggle">
+      {(['mm', 'cm', 'in'] as const).map((u) => (
+        <button
+          key={u}
+          type="button"
+          className={`inspector-unit-toggle__opt ${displayUnit === u ? 'inspector-unit-toggle__opt--active' : ''}`}
+          onClick={() => setDisplayUnit(u)}
+        >
+          {u}
+        </button>
+      ))}
     </div>
   )
 }
@@ -96,16 +122,26 @@ function Field({
   suffix?: string
   disabled?: boolean
 }) {
-  const [text, setText] = useState(String(round(value)))
+  // `value`/`onChange` always deal in mm — the store's one source of truth —
+  // every other unit is purely a display + input conversion at this layer,
+  // keyed off suffix === 'mm' so a field can opt out (nothing else uses 'mm'
+  // as a non-length suffix right now, so this is unambiguous).
+  const displayUnit = useDocumentStore((s) => s.displayUnit)
+  const isLength = suffix === 'mm'
+  const factor = isLength ? UNIT_FACTORS[displayUnit] : 1
+  const displayValue = value / factor
+  const displaySuffix = isLength ? displayUnit : suffix
+
+  const [text, setText] = useState(String(round(displayValue)))
 
   useEffect(() => {
-    setText(String(round(value)))
-  }, [value])
+    setText(String(round(displayValue)))
+  }, [displayValue])
 
   const commit = () => {
     const parsed = parseFloat(text)
-    if (!Number.isNaN(parsed) && onChange) onChange(parsed)
-    else setText(String(round(value)))
+    if (!Number.isNaN(parsed) && onChange) onChange(parsed * factor)
+    else setText(String(round(displayValue)))
   }
 
   return (
@@ -123,7 +159,7 @@ function Field({
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           }}
         />
-        {suffix && <span className="inspector-field__suffix">{suffix}</span>}
+        {displaySuffix && <span className="inspector-field__suffix">{displaySuffix}</span>}
       </span>
     </label>
   )
@@ -179,13 +215,20 @@ function BedPresetsSection() {
   const [expanded, setExpanded] = useState(false)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
   const pinnedBedPresetId = useDocumentStore((s) => s.pinnedBedPresetId)
+  const customBedWidth = useDocumentStore((s) => s.customBedWidth)
+  const customBedHeight = useDocumentStore((s) => s.customBedHeight)
   const setBedPreset = useDocumentStore((s) => s.setBedPreset)
   const togglePinnedBedPreset = useDocumentStore((s) => s.togglePinnedBedPreset)
+  const setCustomBedSize = useDocumentStore((s) => s.setCustomBedSize)
 
-  const selected = bedPresets.find((p) => p.id === bedPresetId) ?? bedPresets[0]
+  const isCustom = bedPresetId === CUSTOM_BED_ID
+  const selectedPreset = bedPresets.find((p) => p.id === bedPresetId)
+  const selectedLabel = isCustom ? 'Custom' : (selectedPreset?.label ?? bedPresets[0].label)
+  const selectedWidth = isCustom ? customBedWidth : (selectedPreset?.width ?? bedPresets[0].width)
+  const selectedHeight = isCustom ? customBedHeight : (selectedPreset?.height ?? bedPresets[0].height)
 
   return (
-    <Section title="Bed Presets" action={<span className="inspector-section__hint">{bedPresets.length}</span>}>
+    <Section title="Bed Presets" action={<span className="inspector-section__hint">{bedPresets.length + 1}</span>}>
       <button
         type="button"
         className="inspector-preset-summary"
@@ -193,9 +236,9 @@ function BedPresetsSection() {
         aria-expanded={expanded}
       >
         <div className="inspector-preset-row__text">
-          <span>{selected.label}</span>
+          <span>{selectedLabel}</span>
           <span className="inspector-preset-row__size">
-            {selected.width} × {selected.height} mm
+            {selectedWidth} × {selectedHeight} mm
           </span>
         </div>
         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -231,6 +274,26 @@ function BedPresetsSection() {
               </button>
             </div>
           ))}
+          <div
+            className="inspector-preset-row"
+            role="button"
+            tabIndex={0}
+            onClick={() => setBedPreset(CUSTOM_BED_ID)}
+          >
+            <input type="radio" checked={isCustom} readOnly />
+            <div className="inspector-preset-row__text">
+              <span>Custom</span>
+              <span className="inspector-preset-row__size">
+                {customBedWidth} × {customBedHeight} mm
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+      {isCustom && (
+        <div className="inspector-grid-2 inspector-custom-bed">
+          <Field label="Width" value={customBedWidth} suffix="mm" onChange={(v) => setCustomBedSize(v, customBedHeight)} />
+          <Field label="Height" value={customBedHeight} suffix="mm" onChange={(v) => setCustomBedSize(customBedWidth, v)} />
         </div>
       )}
     </Section>
@@ -238,6 +301,7 @@ function BedPresetsSection() {
 }
 
 function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount: number }) {
+  const displayUnit = useDocumentStore((s) => s.displayUnit)
   const setExtrusionDepth = useDocumentStore((s) => s.setExtrusionDepth)
   const setCornerRadius = useDocumentStore((s) => s.setCornerRadius)
   const setSmartPolish = useDocumentStore((s) => s.setSmartPolish)
@@ -281,7 +345,9 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
         </div>
         {(safeTop < layer.bevelTop - 0.05 || safeBottom < layer.bevelBottom - 0.05) && (
           <p className="inspector-note inspector-note--warning">
-            Clamped to what this shape can safely support: top {round(safeTop)}mm, bottom {round(safeBottom)}mm.
+            Clamped to what this shape can safely support: top {round(safeTop / UNIT_FACTORS[displayUnit])}
+            {displayUnit}, bottom {round(safeBottom / UNIT_FACTORS[displayUnit])}
+            {displayUnit}.
           </p>
         )}
       </Section>
@@ -302,19 +368,6 @@ function ExportTab() {
           </button>
         </div>
         <p className="inspector-note">Not wired yet — needs the 3D extrusion engine.</p>
-      </Section>
-      <Section title="Units">
-        <div className="inspector-unit-toggle">
-          <button type="button" className="inspector-unit-toggle__opt inspector-unit-toggle__opt--active">
-            mm
-          </button>
-          <button type="button" className="inspector-unit-toggle__opt" disabled>
-            cm
-          </button>
-          <button type="button" className="inspector-unit-toggle__opt" disabled>
-            in
-          </button>
-        </div>
       </Section>
     </>
   )
