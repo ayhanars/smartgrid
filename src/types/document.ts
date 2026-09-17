@@ -39,6 +39,42 @@ export interface Transform2D {
   rotation: number
 }
 
+export type InfillPattern = 'grid' | 'gyroid' | 'honeycomb' | 'lines' | 'triangles' | 'cubic'
+
+/** Slicer-style settings the print preview simulates (mirrors the handful
+ * of Bambu Studio "Quality/Strength" values that change what a printed
+ * layer looks like). Saved with the project. */
+export interface PrintSettings {
+  /** mm per layer — what the preview slider steps through. */
+  layerHeight: number
+  wallLoops: number
+  topLayers: number
+  bottomLayers: number
+  /** Sparse infill density, percent. */
+  infillDensity: number
+  infillPattern: InfillPattern
+}
+
+export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
+  layerHeight: 0.2,
+  wallLoops: 2,
+  topLayers: 5,
+  bottomLayers: 3,
+  infillDensity: 15,
+  infillPattern: 'grid',
+}
+
+export const LAYER_HEIGHT_PRESETS_MM = [0.08, 0.12, 0.16, 0.2, 0.24, 0.28]
+
+export const INFILL_PATTERNS: { id: InfillPattern; label: string }[] = [
+  { id: 'grid', label: 'Grid' },
+  { id: 'gyroid', label: 'Gyroid' },
+  { id: 'honeycomb', label: 'Honeycomb' },
+  { id: 'lines', label: 'Lines' },
+  { id: 'triangles', label: 'Triangles' },
+  { id: 'cubic', label: 'Cubic' },
+]
+
 export interface ShapeLayer {
   id: string
   kind: ShapeKind

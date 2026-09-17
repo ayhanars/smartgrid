@@ -429,6 +429,26 @@
   font-size: 11px;
 }
 
+.inspector-preset-chip--active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.inspector-select {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.inspector-select:focus {
+  outline: none;
+}
+
 .inspector-preset-chip:hover {
   background: var(--bg-hover);
   color: var(--text);

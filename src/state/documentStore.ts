@@ -1,6 +1,7 @@
 import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
-import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../types/document'
+import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type ShapeLayer } from '../types/document'
+import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
 import { applyBooleanOp, type BooleanOp } from '../lib/geometry/boolean'
@@ -47,9 +48,19 @@ interface DocumentState {
   /** Display-only unit for every mm field in the inspector — the store
    * itself always keeps values in mm regardless of this. */
   displayUnit: 'mm' | 'cm' | 'in'
+  /** The local project this document is saved as (null before a project
+   * has been opened, e.g. in tests). */
+  projectId: string | null
+  projectName: string
+  printSettings: PrintSettings
 }
 
 interface DocumentActions {
+  setProjectName: (name: string) => void
+  setPrintSettings: (patch: Partial<PrintSettings>) => void
+  /** Replaces the whole document with a saved snapshot and wipes undo
+   * history, so "undo" can never walk back into a different project. */
+  loadDocument: (projectId: string, snapshot: DocumentSnapshot) => void
   addShape: (kind: ShapeKind, bounds: Bounds) => string
   addPenShape: (documentSpacePoints: Point2[]) => string
   moveShapesBy: (ids: string[], dx: number, dy: number) => void
@@ -125,6 +136,40 @@ export const useDocumentStore = create<DocumentStore>()(
       guides: [],
       rulersVisible: true,
       displayUnit: 'mm',
+      projectId: null,
+      projectName: 'Untitled project',
+      printSettings: DEFAULT_PRINT_SETTINGS,
+
+      setProjectName: (name) => set({ projectName: name.trim() || 'Untitled project' }),
+
+      setPrintSettings: (patch) =>
+        set((state) => {
+          const next = { ...state.printSettings, ...patch }
+          next.layerHeight = Math.min(1, Math.max(0.04, next.layerHeight))
+          next.wallLoops = Math.max(1, Math.round(next.wallLoops))
+          next.topLayers = Math.max(0, Math.round(next.topLayers))
+          next.bottomLayers = Math.max(0, Math.round(next.bottomLayers))
+          next.infillDensity = Math.min(100, Math.max(0, next.infillDensity))
+          return { printSettings: next }
+        }),
+
+      loadDocument: (projectId, snapshot) => {
+        set({
+          projectId,
+          projectName: snapshot.name,
+          layers: snapshot.layers,
+          order: snapshot.order,
+          groups: snapshot.groups ?? {},
+          selection: [],
+          bedPresetId: snapshot.bedPresetId,
+          customBedWidth: snapshot.customBedWidth,
+          customBedHeight: snapshot.customBedHeight,
+          guides: snapshot.guides ?? [],
+          displayUnit: snapshot.displayUnit ?? 'mm',
+          printSettings: { ...DEFAULT_PRINT_SETTINGS, ...snapshot.printSettings },
+        })
+        useDocumentStore.temporal.getState().clear()
+      },
 
       addShape: (kind, bounds) => {
         const id = generateId()
@@ -459,15 +504,16 @@ export const useDocumentStore = create<DocumentStore>()(
         set({ layers, order, groups })
       },
 
-      // Sinks a hole shape so it stops just short of the BOTTOM of whatever
-      // solids it overlaps in XY, leaving a thin floor — enough to hide a
-      // magnet flush without punching all the way through the part. A
-      // hole's z/depth are otherwise independent of anything underneath it
-      // (never touched by any future auto-stack/floating-shape logic,
+      // Sinks a hole (a magnet pocket) down to the BOTTOM of whatever solids
+      // it overlaps in XY, leaving a floor of whole print layers under it.
+      // Its own depth (the magnet's thickness) is kept, so the pocket is a
+      // hidden cavity closed over by the layers above — pause the print at
+      // the layer where the pocket tops out, drop the magnet in, resume.
+      // A hole's z/depth are otherwise independent of anything underneath
+      // it (never touched by any future auto-stack/floating-shape logic,
       // which should treat holes as non-physical) — this is the one place
       // that deliberately moves a hole based on what it overlaps.
       snapHoleToPocket: (id, floorThicknessMM) => {
-        const TOP_OVERSHOOT_MM = 1
         set((state) => {
           const hole = state.layers[id]
           if (!hole || !hole.isHole || hole.locked) return {}
@@ -481,14 +527,17 @@ export const useDocumentStore = create<DocumentStore>()(
           if (overlapping.length === 0) return {}
 
           const bottomZ = Math.min(...overlapping.map((l) => l.transform.z))
-          const topZ = Math.max(...overlapping.map((l) => l.transform.z + l.extrusionDepth))
-          const newZ = Math.max(0, bottomZ + Math.max(0, floorThicknessMM))
-          const newDepth = Math.max(0.05, topZ + TOP_OVERSHOOT_MM - newZ)
+          const layerHeight = state.printSettings.layerHeight
+          // Round the floor UP to whole layers — a floor thinner than a
+          // layer can't be printed, and a partial layer would just shift
+          // every layer boundary above it.
+          const floorLayers = Math.max(1, Math.ceil(Math.max(0, floorThicknessMM) / layerHeight - 1e-6))
+          const newZ = Math.round(Math.max(0, bottomZ + floorLayers * layerHeight) * 1e6) / 1e6
 
           return {
             layers: {
               ...state.layers,
-              [id]: { ...hole, extrusionDepth: newDepth, transform: { ...hole.transform, z: newZ } },
+              [id]: { ...hole, transform: { ...hole.transform, z: newZ } },
             },
           }
         })
@@ -645,6 +694,41 @@ export function shapeWorldBounds(layer: ShapeLayer): Bounds {
     y: layer.transform.y + local.y,
     width: local.width,
     height: local.height,
+  }
+}
+
+/** The saveable part of the document (see localProjects.ts). */
+export function serializeDocument(state: DocumentState): DocumentSnapshot {
+  return {
+    version: 1,
+    name: state.projectName,
+    layers: state.layers,
+    order: state.order,
+    groups: state.groups,
+    bedPresetId: state.bedPresetId,
+    customBedWidth: state.customBedWidth,
+    customBedHeight: state.customBedHeight,
+    guides: state.guides,
+    displayUnit: state.displayUnit,
+    printSettings: state.printSettings,
+  }
+}
+
+/** A fresh, empty document for a new project. */
+export function emptyDocument(name = 'Untitled project'): DocumentSnapshot {
+  const s = useDocumentStore.getState()
+  return {
+    version: 1,
+    name,
+    layers: {},
+    order: [],
+    groups: {},
+    bedPresetId: s.pinnedBedPresetId ?? DEFAULT_BED_ID,
+    customBedWidth: 256,
+    customBedHeight: 256,
+    guides: [],
+    displayUnit: 'mm',
+    printSettings: DEFAULT_PRINT_SETTINGS,
   }
 }
 

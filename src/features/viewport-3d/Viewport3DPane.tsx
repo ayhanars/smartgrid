@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
-import { GizmoHelper, GizmoViewport, Grid, OrbitControls, TransformControls } from '@react-three/drei'
+import { GizmoHelper, GizmoViewcube, Grid, OrbitControls, TransformControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Box, Maximize, Move3d, Rotate3d, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
@@ -20,9 +20,10 @@ import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import { PrinterPlate } from './PrinterPlate'
 import { PrintPreviewSlider } from './PrintPreviewSlider'
+import { PreviewCaps, type PreviewCapItem } from './PreviewCaps'
 import { RotationDial } from '../inspector/RotationDial'
 import { useAnalysisStore } from '../../state/analysisStore'
-import { PREVIEW_LAYER_HEIGHT_MM, useViewStore } from '../../state/viewStore'
+import { useViewStore } from '../../state/viewStore'
 import './Viewport3DPane.css'
 
 function rectsOverlap(a: Bounds, b: Bounds): boolean {
@@ -48,6 +49,7 @@ export function Viewport3DPane() {
   const beginTransientEdit = useDocumentStore((s) => s.beginTransientEdit)
   const commitTransientEdit = useDocumentStore((s) => s.commitTransientEdit)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const printSettings = useDocumentStore((s) => s.printSettings)
   const customBedWidth = useDocumentStore((s) => s.customBedWidth)
   const customBedHeight = useDocumentStore((s) => s.customBedHeight)
   const bed = getBedPreset(bedPresetId)
@@ -84,19 +86,25 @@ export function Viewport3DPane() {
   // follows it by the same delta.
   const primary = selection.map((id) => layers[id]).find((l) => l && l.visible && !l.locked) ?? null
 
-  // Highest point on the plate — the print preview's full-height end.
-  const sceneTopZ = useMemo(() => {
-    let top = 0
+  // Real Z range of every printable shape — the print preview's full
+  // height, and the per-shape shell-layer bands for its cross-sections.
+  const zRanges = useMemo(() => {
+    const result: Record<string, { bottomZ: number; topZ: number }> = {}
     for (const id of order) {
       const layer = layers[id]
       if (!layer || layer.isHole || !layer.visible) continue
-      top = Math.max(top, layerZRange(layer).topZ)
+      result[id] = layerZRange(layer)
     }
-    return Math.max(top, PREVIEW_LAYER_HEIGHT_MM)
+    return result
   }, [layers, order])
+  const sceneTopZ = Math.max(printSettings.layerHeight, ...Object.values(zRanges).map((r) => r.topZ))
   const previewHeight = printPreview ? Math.min(previewHeightState ?? sceneTopZ, sceneTopZ) : null
+  // The plane sits a hair above the cut so a top face lying exactly on a
+  // layer boundary (every shape at full height) isn't half-discarded by
+  // precision noise in the clip test.
+  const CLIP_EPSILON_MM = 0.01
   const clippingPlanes = useMemo(
-    () => (previewHeight == null ? undefined : [new THREE.Plane(new THREE.Vector3(0, -1, 0), previewHeight * SCENE_SCALE)]),
+    () => (previewHeight == null ? undefined : [new THREE.Plane(new THREE.Vector3(0, -1, 0), (previewHeight + CLIP_EPSILON_MM) * SCENE_SCALE)]),
     [previewHeight],
   )
 
@@ -191,13 +199,39 @@ export function Viewport3DPane() {
     return result
   }, [layers, order, artboardWidth, artboardHeight])
 
+  // What the print preview caps: the same geometry each shape renders
+  // with (hole-cut where applicable), so the cross-section matches.
+  const previewItems = useMemo((): PreviewCapItem[] => {
+    if (!printPreview) return []
+    return order.flatMap((id) => {
+      const layer = layers[id]
+      const range = zRanges[id]
+      if (!layer || !range) return []
+      return [
+        {
+          id,
+          geometries: cutGeometriesById[id] ?? buildLayerGeometries(layer, SCENE_SCALE),
+          origin: [
+            (layer.transform.x - artboardWidth / 2) * SCENE_SCALE,
+            layer.transform.z * SCENE_SCALE,
+            (layer.transform.y - artboardHeight / 2) * SCENE_SCALE,
+          ] as [number, number, number],
+          color: layer.color,
+          bottomZ: range.bottomZ,
+          topZ: range.topZ,
+          hasHoles: !!cutGeometriesById[id],
+        },
+      ]
+    })
+  }, [printPreview, order, layers, zRanges, cutGeometriesById, artboardWidth, artboardHeight])
+
   const t = primary?.transform
 
   return (
     <div className="viewport-3d">
       <Canvas
         camera={{ position: [bedWidth * 1.4, bedWidth * 1.1, bedWidth * 1.4], fov: 40 }}
-        gl={{ localClippingEnabled: true }}
+        gl={{ localClippingEnabled: true, stencil: true }}
         onPointerMissed={() => setSelection([])}
       >
         <color attach="background" args={['#0a0a0b']} />
@@ -209,6 +243,8 @@ export function Viewport3DPane() {
         {order.map((id) => {
           const layer = layers[id]
           if (!layer) return null
+          // A print shows the pocket a hole leaves, not the cutter itself.
+          if (layer.isHole && printPreview) return null
           return (
             <ExtrudedShapeMesh
               key={id}
@@ -226,11 +262,21 @@ export function Viewport3DPane() {
           )
         })}
 
-        {previewHeight != null && (
-          <mesh rotation-x={-Math.PI / 2} position-y={previewHeight * SCENE_SCALE + 0.0005}>
-            <planeGeometry args={[bedWidth, bedDepth]} />
-            <meshBasicMaterial color="#4d8dff" transparent opacity={0.12} depthWrite={false} side={THREE.DoubleSide} />
-          </mesh>
+        {previewHeight != null && clippingPlanes && (
+          <>
+            <PreviewCaps
+              items={previewItems}
+              height={previewHeight}
+              settings={printSettings}
+              clippingPlanes={clippingPlanes}
+              bedWidth={bedWidth}
+              bedDepth={bedDepth}
+            />
+            <mesh rotation-x={-Math.PI / 2} position-y={previewHeight * SCENE_SCALE - 0.0005} renderOrder={1}>
+              <planeGeometry args={[bedWidth, bedDepth]} />
+              <meshBasicMaterial color="#4d8dff" transparent opacity={0.07} depthWrite={false} side={THREE.DoubleSide} />
+            </mesh>
+          </>
         )}
 
         {primary && gizmoTarget && !printPreview && (
@@ -255,8 +301,17 @@ export function Viewport3DPane() {
         />
 
         <OrbitControls ref={controlsRef} makeDefault />
-        <GizmoHelper alignment="bottom-right" margin={[56, 56]}>
-          <GizmoViewport axisColors={['#ff5c5c', '#7bd88f', '#4d8dff']} labelColor="black" />
+        <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
+          {/* Face order is +X, −X, +Y, −Y, +Z, −Z in the scene frame: Y is
+              up, and document Y (toward the printer's door) runs along +Z. */}
+          <GizmoViewcube
+            faces={['Right', 'Left', 'Top', 'Bottom', 'Front', 'Back']}
+            color="#2a2a32"
+            hoverColor="#4d8dff"
+            textColor="#e7e7ea"
+            strokeColor="#6a6a76"
+            opacity={1}
+          />
         </GizmoHelper>
       </Canvas>
 
@@ -301,7 +356,13 @@ export function Viewport3DPane() {
       </div>
 
       {printPreview && previewHeight != null && (
-        <PrintPreviewSlider maxHeight={sceneTopZ} value={previewHeight} onChange={setPreviewHeight} onClose={() => setPrintPreview(false)} />
+        <PrintPreviewSlider
+          maxHeight={sceneTopZ}
+          value={previewHeight}
+          layerHeight={printSettings.layerHeight}
+          onChange={setPreviewHeight}
+          onClose={() => setPrintPreview(false)}
+        />
       )}
 
       {primary && t && (

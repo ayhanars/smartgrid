@@ -17,7 +17,7 @@ import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
 import { IconButton } from '../../components/IconButton'
-import type { ShapeLayer } from '../../types/document'
+import { INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, type InfillPattern, type ShapeLayer } from '../../types/document'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
 import { computeSafeBevel } from '../../lib/geometry/offset'
 import { bedPresets, CUSTOM_BED_ID, CUSTOM_BED_MAX_Z, getBedPreset } from '../../lib/geometry/bedPresets'
@@ -123,8 +123,9 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
   )
 }
 
-function round(v: number) {
-  return Math.round(v * 10) / 10
+function round(v: number, decimals = 1) {
+  const f = 10 ** decimals
+  return Math.round(v * f) / f
 }
 
 function Field({
@@ -133,12 +134,16 @@ function Field({
   onChange,
   suffix,
   disabled,
+  decimals = 1,
 }: {
   label: string
   value: number
   onChange?: (v: number) => void
   suffix?: string
   disabled?: boolean
+  /** Display precision — every field is 0.1 except the few that need finer
+   * (layer height at 0.12 mm). */
+  decimals?: number
 }) {
   // `value`/`onChange` always deal in mm — the store's one source of truth —
   // every other unit is purely a display + input conversion at this layer,
@@ -150,16 +155,16 @@ function Field({
   const displayValue = value / factor
   const displaySuffix = isLength ? displayUnit : suffix
 
-  const [text, setText] = useState(String(round(displayValue)))
+  const [text, setText] = useState(String(round(displayValue, decimals)))
 
   useEffect(() => {
-    setText(String(round(displayValue)))
-  }, [displayValue])
+    setText(String(round(displayValue, decimals)))
+  }, [displayValue, decimals])
 
   const commit = () => {
     const parsed = parseFloat(text)
     if (!Number.isNaN(parsed) && onChange) onChange(parsed * factor)
-    else setText(String(round(displayValue)))
+    else setText(String(round(displayValue, decimals)))
   }
 
   return (
@@ -196,6 +201,7 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
     return (
       <>
         <BedPresetsSection />
+        <PrintSettingsSection />
         {multiCount > 1 && <EmptyState text={`${multiCount} shapes selected — position & size editing needs just one.`} />}
       </>
     )
@@ -351,26 +357,75 @@ const DEFAULT_FLOOR_THICKNESS_MM = 0.6
 function RecessedPocketSection({ layer }: { layer: ShapeLayer }) {
   const [floorThickness, setFloorThickness] = useState(DEFAULT_FLOOR_THICKNESS_MM)
   const snapHoleToPocket = useDocumentStore((s) => s.snapHoleToPocket)
+  const layerHeight = useDocumentStore((s) => s.printSettings.layerHeight)
+  const floorLayers = Math.max(1, Math.ceil(floorThickness / layerHeight - 1e-6))
+  const pocketTop = layer.transform.z + layer.extrusionDepth
+  const pauseLayer = Math.ceil(pocketTop / layerHeight - 1e-6)
 
   return (
     <Section title="Recessed Pocket">
-      <Field
-        label="Floor thickness"
-        value={floorThickness}
-        suffix="mm"
-        onChange={(v) => setFloorThickness(Math.max(0, v))}
-      />
+      <Field label="Floor thickness" value={floorThickness} suffix="mm" onChange={(v) => setFloorThickness(Math.max(0, v))} />
       <p className="inspector-note">
-        Sinks this hole so it stops just short of the bottom of whatever it overlaps — enough to hide a magnet
-        flush without cutting all the way through.
+        Sinks this hole to the bottom of whatever it overlaps, leaving {floorLayers} printed layer{floorLayers === 1 ? '' : 's'} (
+        {round(floorLayers * layerHeight)} mm) under it. Its own depth stays the magnet's thickness, so the layers above close over it.
       </p>
-      <button
-        type="button"
-        className="inspector-export-btn"
-        onClick={() => snapHoleToPocket(layer.id, floorThickness)}
-      >
+      <button type="button" className="inspector-export-btn" onClick={() => snapHoleToPocket(layer.id, floorThickness)}>
         Snap to Recessed Pocket
       </button>
+      {layer.transform.z > 0 && (
+        <p className="inspector-note">
+          Pause the print at layer <strong>{pauseLayer}</strong> ({round(pocketTop)} mm) to drop the magnet in, then resume.
+        </p>
+      )}
+    </Section>
+  )
+}
+
+function PrintSettingsSection() {
+  const settings = useDocumentStore((s) => s.printSettings)
+  const setPrintSettings = useDocumentStore((s) => s.setPrintSettings)
+  return (
+    <Section title="Print Settings" action={<span className="inspector-section__hint">preview</span>}>
+      <p className="inspector-field__label">Layer height</p>
+      <div className="inspector-preset-chips">
+        {LAYER_HEIGHT_PRESETS_MM.map((h) => (
+          <button
+            key={h}
+            type="button"
+            className={`inspector-preset-chip ${Math.abs(settings.layerHeight - h) < 1e-6 ? 'inspector-preset-chip--active' : ''}`}
+            onClick={() => setPrintSettings({ layerHeight: h })}
+          >
+            {h.toFixed(2)}
+          </button>
+        ))}
+      </div>
+      <div className="inspector-grid-2">
+        <Field label="Layer height" value={settings.layerHeight} suffix="mm" decimals={2} onChange={(v) => setPrintSettings({ layerHeight: v })} />
+        <Field label="Wall loops" value={settings.wallLoops} onChange={(v) => setPrintSettings({ wallLoops: v })} />
+        <Field label="Top shell layers" value={settings.topLayers} onChange={(v) => setPrintSettings({ topLayers: v })} />
+        <Field label="Bottom shell layers" value={settings.bottomLayers} onChange={(v) => setPrintSettings({ bottomLayers: v })} />
+        <Field label="Infill density" value={settings.infillDensity} suffix="%" onChange={(v) => setPrintSettings({ infillDensity: v })} />
+        <label className="inspector-field">
+          <span className="inspector-field__label">Infill pattern</span>
+          <span className="inspector-field__input-wrap">
+            <select
+              className="inspector-select"
+              value={settings.infillPattern}
+              aria-label="Infill pattern"
+              onChange={(e) => setPrintSettings({ infillPattern: e.target.value as InfillPattern })}
+            >
+              {INFILL_PATTERNS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
+      </div>
+      <p className="inspector-note">
+        What the print preview simulates — match these to your Bambu Studio profile. Pockets snap to whole layers of this height.
+      </p>
     </Section>
   )
 }

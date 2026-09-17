@@ -93,3 +93,56 @@
   border-radius: var(--radius-sm);
   padding: 2px;
 }
+
+.top-bar__workspace--open {
+  background: var(--bg-hover);
+}
+
+.top-bar__menu {
+  min-width: 200px;
+}
+
+.top-bar__title-input {
+  width: 240px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--bg-field);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+
+.top-bar__title-input:focus {
+  outline: none;
+}
+
+.top-bar__save {
+  font-size: 11px;
+  color: var(--text-faint);
+  min-width: 80px;
+}
+
+.top-bar__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-field);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.top-bar__pill:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.top-bar__pill--active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
