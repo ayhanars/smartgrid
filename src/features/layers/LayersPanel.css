@@ -44,49 +44,6 @@
   color: var(--text);
 }
 
-.layers-panel__blend-row {
-  display: flex;
-  gap: 6px;
-  padding: 0 12px 10px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-
-.layers-panel__select {
-  flex: 1;
-  background: var(--bg-field);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  padding: 5px 6px;
-  font-size: 12px;
-}
-
-.layers-panel__opacity {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  background: var(--bg-field);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 5px 8px;
-  font-size: 12px;
-  color: var(--text-muted);
-  width: 90px;
-}
-
-.layers-panel__opacity input {
-  width: 28px;
-  background: none;
-  border: none;
-  color: var(--text);
-  text-align: right;
-}
-
-.layers-panel__opacity input:focus {
-  outline: none;
-}
-
 .layers-panel__tree {
   flex: 1;
   overflow-y: auto;

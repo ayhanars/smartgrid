@@ -82,3 +82,161 @@
 .viewport-3d__alert-dismiss:hover {
   color: var(--text);
 }
+
+.viewport-3d__controls-divider {
+  height: 1px;
+  margin: 3px 2px;
+  background: var(--border);
+}
+
+/* Compact orientation widget: mini dial + readout, bottom center */
+.viewport-3d__orient {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 6px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.viewport-3d__orient-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.viewport-3d__orient-name {
+  color: var(--text);
+  font-weight: 600;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewport-3d__orient-readout button {
+  align-self: flex-start;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.viewport-3d__orient-readout button:hover {
+  text-decoration: underline;
+}
+
+/* Print preview: vertical layer slider on the right edge */
+.print-preview {
+  position: absolute;
+  top: 12px;
+  right: 60px;
+  bottom: 96px;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.print-preview__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  font-weight: 600;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.print-preview__close {
+  color: var(--text-faint);
+  display: inline-flex;
+}
+
+.print-preview__close:hover {
+  color: var(--text);
+}
+
+.print-preview__step {
+  display: inline-flex;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.print-preview__step:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.print-preview__track {
+  position: relative;
+  flex: 1;
+  width: 10px;
+  min-height: 80px;
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.print-preview__track:focus-visible {
+  border-color: var(--accent);
+}
+
+.print-preview__fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--accent);
+  opacity: 0.55;
+  border-radius: 5px;
+}
+
+.print-preview__thumb {
+  position: absolute;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text);
+  border: 2px solid var(--accent);
+  transform: translate(-50%, 50%);
+  pointer-events: none;
+}
+
+.print-preview__readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.print-preview__readout strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.print-preview__hint {
+  color: var(--text-faint);
+  font-size: 10px;
+  line-height: 1.3;
+}

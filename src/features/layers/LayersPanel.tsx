@@ -164,17 +164,6 @@ export function LayersPanel() {
         </div>
       </div>
 
-      <div className="layers-panel__blend-row">
-        <select className="layers-panel__select" defaultValue="normal" disabled>
-          <option value="normal">Normal</option>
-        </select>
-        <div className="layers-panel__opacity">
-          <span>Opac</span>
-          <input type="text" defaultValue="100" disabled />
-          <span>%</span>
-        </div>
-      </div>
-
       <div className="layers-panel__tree">
         {rows.length === 0 && <p className="layers-panel__empty">Draw a shape to get started.</p>}
         {tree}

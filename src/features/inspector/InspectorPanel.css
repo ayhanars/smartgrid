@@ -270,11 +270,42 @@
 }
 
 .inspector-color-swatch {
+  position: relative;
   width: 20px;
   height: 20px;
   border-radius: 5px;
   flex-shrink: 0;
   border: 1px solid var(--border-strong);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.inspector-color-swatch input[type='color'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.inspector-color-palette__dot--active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.inspector-opacity-row {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.inspector-opacity-row input[type='range'] {
+  min-width: 0;
+  margin-bottom: 10px;
+  accent-color: var(--accent);
 }
 
 .inspector-color-hex {

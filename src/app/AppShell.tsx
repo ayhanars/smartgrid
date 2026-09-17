@@ -6,6 +6,7 @@ import { Canvas2DPane } from '../features/canvas-2d/Canvas2DPane'
 import { Viewport3DPane } from '../features/viewport-3d/Viewport3DPane'
 import { useDocumentStore } from '../state/documentStore'
 import { useAnalysisStore } from '../state/analysisStore'
+import { useViewStore } from '../state/viewStore'
 import { analyzeSupport } from '../lib/geometry/support'
 import { isTextEntryTarget } from '../lib/dom/isTextEntryTarget'
 import './AppShell.css'
@@ -55,6 +56,13 @@ export function AppShell() {
     }, 60)
     return () => window.clearTimeout(handle)
   }, [layers, order])
+
+  // The print preview lives in the 3D viewport, so turning it on from a
+  // 2D-only layout brings the 3D pane back into view.
+  const printPreview = useViewStore((s) => s.printPreview)
+  useEffect(() => {
+    if (printPreview) setViewMode((mode) => (mode === '2d' ? 'split' : mode))
+  }, [printPreview])
 
   useEffect(() => {
     // Browsers report a trackpad pinch as a wheel event with ctrlKey set,

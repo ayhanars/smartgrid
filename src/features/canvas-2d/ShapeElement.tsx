@@ -50,6 +50,7 @@ export function ShapeElement({ layer, isSelected, previewOffset, previewResize, 
         d={path}
         fillRule="evenodd"
         fill={layer.isHole ? 'rgba(255, 92, 92, 0.22)' : layer.color}
+        fillOpacity={layer.isHole ? undefined : (layer.opacity ?? 100) / 100}
         stroke={layer.isHole ? '#ff5c5c' : isSelected ? '#4d8dff' : 'transparent'}
         strokeDasharray={layer.isHole ? '4 3' : undefined}
         strokeWidth={1.5}

@@ -26,22 +26,91 @@ function segmentsCross(p1: Point2, p2: Point2, p3: Point2, p4: Point2): boolean 
   return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
 }
 
-/** True if any edge of `offset` points the opposite way from the
- * corresponding edge of `original` — a short segment (like one piece of a
- * finely-subdivided rounded corner) folding back on itself under erosion.
- * This is exactly the kind of local defect `isSimplePolygon`'s crossing
- * check can't see, since it only looks at non-adjacent edge pairs. */
-function hasFoldedEdge(original: Point2[], offset: Point2[]): boolean {
+/** Where open segments p1-p2 and p3-p4 properly cross, or null. */
+function segmentCrossing(p1: Point2, p2: Point2, p3: Point2, p4: Point2): Point2 | null {
+  if (!segmentsCross(p1, p2, p3, p4)) return null
+  const rx = p2.x - p1.x
+  const ry = p2.y - p1.y
+  const sx = p4.x - p3.x
+  const sy = p4.y - p3.y
+  const denom = rx * sy - ry * sx
+  if (Math.abs(denom) < 1e-12) return null
+  const t = ((p3.x - p1.x) * sy - (p3.y - p1.y) * sx) / denom
+  return { x: p1.x + rx * t, y: p1.y + ry * t }
+}
+
+/** True if edge `i` of `offset` points the opposite way from edge `i` of
+ * `original` — a short segment (one piece of a finely-subdivided rounded
+ * corner) folding back on itself under erosion. */
+function isFoldedEdge(original: Point2[], offset: Point2[], i: number): boolean {
   const n = original.length
-  for (let i = 0; i < n; i++) {
-    const o1 = original[i]
-    const o2 = original[(i + 1) % n]
-    const f1 = offset[i]
-    const f2 = offset[(i + 1) % n]
-    const dot = (o2.x - o1.x) * (f2.x - f1.x) + (o2.y - o1.y) * (f2.y - f1.y)
-    if (dot < 0) return true
+  const o1 = original[i]
+  const o2 = original[(i + 1) % n]
+  const f1 = offset[i]
+  const f2 = offset[(i + 1) % n]
+  return (o2.x - o1.x) * (f2.x - f1.x) + (o2.y - o1.y) * (f2.y - f1.y) < 0
+}
+
+// How many edges either side of a fold to look for the crossing that
+// closes its loop. A rounded corner is 17 samples, a polished one the same
+// again, so this comfortably spans one corner without reaching the next.
+const FOLD_SEARCH_EDGES = 40
+
+/**
+ * Cleans up the one legitimate way a mitered inward offset "fails": a
+ * rounded corner whose radius is smaller than the offset distance
+ * geometrically collapses to a sharp point, but the per-edge construction
+ * instead leaves a tiny swallowtail loop of reversed edges there. Every
+ * such loop is closed by the nearest pair of edges that cross around it;
+ * all its vertices get pinned to that crossing. The ring keeps the same
+ * vertex count (walls are stitched between rings by index) but no longer
+ * folds. Returns null only for a fold that no local crossing closes —
+ * that is a real defect (a neck pinching shut), not a collapsed corner.
+ *
+ * Without this, a bevel + smart-polish/corner-radius combination silently
+ * clamps the bevel to below the corner's own radius, which for a modest
+ * polish means "the bevel stops doing anything".
+ */
+function collapseFolds(original: Point2[], offset: Point2[]): Point2[] | null {
+  const n = original.length
+  const out = offset.slice()
+  for (let guard = 0; guard < n; guard++) {
+    let a = -1
+    for (let i = 0; i < n; i++) {
+      if (isFoldedEdge(original, out, i)) {
+        a = i
+        break
+      }
+    }
+    if (a < 0) return out
+
+    // Extend the run of folded edges forward from `a` (backward is covered
+    // by `a` being the first folded edge found, except across the wrap,
+    // which the outward search below still spans).
+    let b = a
+    while (b - a < n - 2 && isFoldedEdge(original, out, (b + 1) % n)) b++
+
+    let crossing: { at: Point2; from: number; to: number } | null = null
+    search: for (let total = 2; total <= FOLD_SEARCH_EDGES * 2; total++) {
+      for (let s = 1; s < total; s++) {
+        const t = total - s
+        if (s > FOLD_SEARCH_EDGES || t > FOLD_SEARCH_EDGES) continue
+        const ia = (((a - s) % n) + n) % n
+        const ib = (b + t) % n
+        // Stop once the two edges would meet around the back of the ring.
+        if ((ib - ia + n) % n >= n - 1 || s + t + (b - a) >= n - 1) break search
+        const at = segmentCrossing(out[ia], out[(ia + 1) % n], out[ib], out[(ib + 1) % n])
+        if (at) {
+          crossing = { at, from: ia + 1, to: ib }
+          break search
+        }
+      }
+    }
+    if (!crossing) return null
+    const span = (((crossing.to - crossing.from) % n) + n) % n
+    for (let m = 0; m <= span; m++) out[(crossing.from + m) % n] = crossing.at
   }
-  return false
+  return out
 }
 
 function isSimplePolygon(points: Point2[]): boolean {
@@ -148,8 +217,9 @@ export function erodePolygon(points: Point2[], distance: number): Point2[] | nul
     return null
   }
 
-  if (!isSimplePolygon(result) || hasFoldedEdge(points, result)) return null
-  return result
+  const collapsed = collapseFolds(points, result)
+  if (!collapsed || !isSimplePolygon(collapsed)) return null
+  return collapsed
 }
 
 /** Binary-searches the largest bevel distance (down from `requested`) at

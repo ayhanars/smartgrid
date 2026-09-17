@@ -61,6 +61,7 @@ interface DocumentActions {
   toggleVisibility: (id: string) => void
   toggleLocked: (id: string) => void
   setColor: (id: string, color: string) => void
+  setOpacity: (id: string, opacity: number) => void
   setExtrusionDepth: (id: string, depth: number) => void
   setCornerRadius: (id: string, radius: number) => void
   setSmartPolish: (id: string, intensity: number) => void
@@ -358,6 +359,13 @@ export const useDocumentStore = create<DocumentStore>()(
           const layer = state.layers[id]
           if (!layer) return {}
           return { layers: { ...state.layers, [id]: { ...layer, color } } }
+        }),
+
+      setOpacity: (id, opacity) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          return { layers: { ...state.layers, [id]: { ...layer, opacity: Math.min(100, Math.max(0, opacity)) } } }
         }),
 
       setExtrusionDepth: (id, depth) =>

@@ -21,6 +21,12 @@ export function layerPrintQuaternion(layer: ShapeLayer): THREE.Quaternion {
   return new THREE.Quaternion().setFromEuler(new THREE.Euler(t.rotationX * DEG, t.rotationY * DEG, t.rotation * DEG, 'XYZ'))
 }
 
+/** Re-expresses a rotation measured in the three.js scene frame (e.g. what
+ * a viewport gizmo reports) in the print frame the stored angles live in. */
+export function sceneRotationToPrint(q: THREE.Quaternion): THREE.Quaternion {
+  return THREE_TO_PRINT.clone().multiply(q).multiply(PRINT_TO_THREE)
+}
+
 /** Back from a print-frame quaternion to the stored Euler angles (degrees,
  * XYZ order). */
 export function printQuaternionToEuler(q: THREE.Quaternion): { x: number; y: number; z: number } {

@@ -63,6 +63,13 @@ export function buildBeveledGeometry(
     return start
   }
 
+  const samePoint = (a: Point2, b: Point2) => Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9
+
+  // An eroded ring can carry runs of identical vertices where a rounded
+  // corner collapsed to a point (see collapseFolds in offset.ts) — the ring
+  // keeps its length so walls still stitch by index, but the triangles
+  // spanning a collapsed run have zero area and are skipped rather than
+  // emitted as slivers into the mesh and the STL.
   const addWall = (ringA: Point2[], zA: number, ringB: Point2[], zB: number) => {
     const startA = addRingPoints(ringA, zA)
     const startB = addRingPoints(ringB, zB)
@@ -72,9 +79,18 @@ export function buildBeveledGeometry(
       const a1 = startA + iNext
       const b0 = startB + i
       const b1 = startB + iNext
-      indices.push(a0, b0, b1, a0, b1, a1)
+      const aCollapsed = samePoint(ringA[i], ringA[iNext])
+      const bCollapsed = samePoint(ringB[i], ringB[iNext])
+      if (aCollapsed && bCollapsed) continue
+      if (!bCollapsed) indices.push(a0, b0, b1)
+      if (!aCollapsed) indices.push(a0, b1, a1)
     }
   }
+
+  // Cap triangulation wants a clean ring: drop repeated vertices left by a
+  // collapsed corner (caps are indexed independently of the walls, so
+  // changing their vertex count is fine).
+  const dedupeRing = (ring: Point2[]) => ring.filter((p, i) => !samePoint(p, ring[(i + 1) % ring.length]))
 
   // Traces a quarter-circle fillet profile instead of a single flat taper,
   // so "bevel" actually reads as a rounded, glossy edge rather than a sharp
@@ -119,12 +135,14 @@ export function buildBeveledGeometry(
   // winding; top faces +Y and needs the reverse — verified by hand via the
   // cross product, not just eyeballed, since getting this backwards is
   // exactly what silently back-face-culls a cap and looks like a hole.
-  const bottomTriangles = THREE.ShapeUtils.triangulateShape(toVector2(bottomCap), [])
-  const bottomStart = addRingPoints(bottomCap, 0)
+  const bottomCapRing = dedupeRing(bottomCap)
+  const bottomTriangles = THREE.ShapeUtils.triangulateShape(toVector2(bottomCapRing), [])
+  const bottomStart = addRingPoints(bottomCapRing, 0)
   for (const [a, b, c] of bottomTriangles) indices.push(bottomStart + a, bottomStart + b, bottomStart + c)
 
-  const topTriangles = THREE.ShapeUtils.triangulateShape(toVector2(topCap), [])
-  const topStart = addRingPoints(topCap, depth)
+  const topCapRing = dedupeRing(topCap)
+  const topTriangles = THREE.ShapeUtils.triangulateShape(toVector2(topCapRing), [])
+  const topStart = addRingPoints(topCapRing, depth)
   for (const [a, b, c] of topTriangles) indices.push(topStart + a, topStart + c, topStart + b)
 
   const geometry = new THREE.BufferGeometry()

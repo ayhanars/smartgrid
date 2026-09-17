@@ -25,7 +25,7 @@ type Drag =
  * orientation — done in world space so a horizontal drag still yaws "on
  * screen" once the object is tilted, instead of fighting its local frame.
  */
-export function RotationDial({ layer }: { layer: ShapeLayer }) {
+export function RotationDial({ layer, size = SIZE }: { layer: ShapeLayer; size?: number }) {
   const setRotation = useDocumentStore((s) => s.setRotation)
   const beginTransientEdit = useDocumentStore((s) => s.beginTransientEdit)
   const commitTransientEdit = useDocumentStore((s) => s.commitTransientEdit)
@@ -96,8 +96,8 @@ export function RotationDial({ layer }: { layer: ShapeLayer }) {
       ref={svgRef}
       className={`rotation-dial ${layer.locked ? 'rotation-dial--locked' : ''}`}
       viewBox={`0 0 ${SIZE} ${SIZE}`}
-      width={SIZE}
-      height={SIZE}
+      width={size}
+      height={size}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

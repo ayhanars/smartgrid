@@ -8,9 +8,11 @@ import {
   SquareSplitHorizontal,
   Square,
   Box,
+  Printer,
 } from 'lucide-react'
 import { IconButton } from '../components/IconButton'
 import { useTemporalStore } from '../state/documentStore'
+import { useViewStore } from '../state/viewStore'
 import type { ViewMode } from './AppShell'
 import './TopBar.css'
 
@@ -32,6 +34,8 @@ export function TopBar({
   onToggleRightPanel,
 }: TopBarProps) {
   const { undo, redo, pastStates, futureStates } = useTemporalStore()
+  const printPreview = useViewStore((s) => s.printPreview)
+  const setPrintPreview = useViewStore((s) => s.setPrintPreview)
 
   return (
     <header className="top-bar">
@@ -61,6 +65,16 @@ export function TopBar({
           <Command size={13} />
           <span>K</span>
         </button>
+        <div className="top-bar__divider" />
+        <IconButton
+          size="sm"
+          active={printPreview}
+          aria-label="Print preview"
+          title="Print preview — watch the model build up layer by layer"
+          onClick={() => setPrintPreview(!printPreview)}
+        >
+          <Printer size={15} />
+        </IconButton>
         <div className="top-bar__divider" />
         <div className="top-bar__view-toggle">
           <IconButton

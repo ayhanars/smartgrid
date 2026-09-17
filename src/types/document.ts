@@ -65,6 +65,10 @@ export interface ShapeLayer {
   /** True for a shape drawn with the Hole tool: never rendered as its own
    * solid, instead subtracted from whatever it overlaps in the 3D scene. */
   isHole: boolean
+  /** 0–100 viewing opacity in both the 2D canvas and the 3D scene — a
+   * see-through aid for lining things up, never exported (a print is
+   * always solid). Missing means 100. */
+  opacity?: number
   /** Membership in a group (see DocumentState.groups): clicking any member
    * on the canvas selects the whole group, like Figma. */
   groupId?: string

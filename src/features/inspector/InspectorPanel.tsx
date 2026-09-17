@@ -26,8 +26,6 @@ import { HeightSlider } from './HeightSlider'
 import { useAnalysisStore, visibleWarning } from '../../state/analysisStore'
 import './InspectorPanel.css'
 
-const usedColors = ['#4d8dff', '#ff5c5c', '#ffb648', '#7bd88f', '#e7e7ea']
-
 const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
 
 export function InspectorPanel() {
@@ -192,7 +190,6 @@ function EmptyState({ text }: { text: string }) {
 function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount: number }) {
   const resizeShape = useDocumentStore((s) => s.resizeShape)
   const moveShapesBy = useDocumentStore((s) => s.moveShapesBy)
-  const setColor = useDocumentStore((s) => s.setColor)
   const setLayerZ = useDocumentStore((s) => s.setLayerZ)
 
   if (!layer) {
@@ -229,21 +226,90 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
         )}
       </Section>
 
-      <Section title="Appearance">
-        <div className="inspector-color-row">
-          <span className="inspector-color-swatch" style={{ background: layer.color }} />
-          <input type="text" value={layer.color} onChange={(e) => setColor(layer.id, e.target.value)} className="inspector-color-hex" />
-        </div>
-        <div className="inspector-color-palette">
-          {usedColors.map((c) => (
-            <button key={c} type="button" className="inspector-color-palette__dot" style={{ background: c }} onClick={() => setColor(layer.id, c)} />
-          ))}
-        </div>
-      </Section>
+      <AppearanceSection layer={layer} />
 
       {layer.isHole && <RecessedPocketSection layer={layer} />}
       {layer.isHole && <HoleSizePresetsSection layer={layer} />}
     </>
+  )
+}
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i
+
+function AppearanceSection({ layer }: { layer: ShapeLayer }) {
+  const layers = useDocumentStore((s) => s.layers)
+  const order = useDocumentStore((s) => s.order)
+  const setColor = useDocumentStore((s) => s.setColor)
+  const setOpacity = useDocumentStore((s) => s.setOpacity)
+  const [hexDraft, setHexDraft] = useState(layer.color)
+  useEffect(() => setHexDraft(layer.color), [layer.color])
+
+  // The palette is the project's own colors (every solid's fill, in layer
+  // order) so a new shape can pick up an existing filament in one click.
+  const projectColors = useMemo(() => {
+    const seen: string[] = []
+    for (const id of order) {
+      const l = layers[id]
+      if (l && !l.isHole && !seen.includes(l.color)) seen.push(l.color)
+    }
+    return seen
+  }, [layers, order])
+
+  const commitHex = () => {
+    const v = hexDraft.trim()
+    if (HEX_COLOR.test(v)) setColor(layer.id, v.toLowerCase())
+    else setHexDraft(layer.color)
+  }
+
+  return (
+    <Section title="Appearance">
+      <div className="inspector-color-row">
+        <label className="inspector-color-swatch" style={{ background: layer.color }} title="Pick a color">
+          <input type="color" value={layer.color} aria-label="Color picker" onChange={(e) => setColor(layer.id, e.target.value)} />
+        </label>
+        <input
+          type="text"
+          value={hexDraft}
+          aria-label="Color hex"
+          onChange={(e) => setHexDraft(e.target.value)}
+          onBlur={commitHex}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+          className="inspector-color-hex"
+        />
+      </div>
+      {projectColors.length > 0 && (
+        <div className="inspector-color-palette" aria-label="Colors used in this project">
+          {projectColors.map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`inspector-color-palette__dot ${c === layer.color ? 'inspector-color-palette__dot--active' : ''}`}
+              style={{ background: c }}
+              title={c}
+              aria-label={`Use ${c}`}
+              onClick={() => setColor(layer.id, c)}
+            />
+          ))}
+        </div>
+      )}
+      {!layer.isHole && (
+        <div className="inspector-opacity-row">
+          <Field label="Opacity" value={layer.opacity ?? 100} suffix="%" onChange={(v) => setOpacity(layer.id, v)} />
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={layer.opacity ?? 100}
+            aria-label="Opacity slider"
+            onChange={(e) => setOpacity(layer.id, parseFloat(e.target.value))}
+          />
+        </div>
+      )}
+      <p className="inspector-note">Opacity is a viewing aid for lining things up in 2D and 3D — prints are always solid.</p>
+    </Section>
   )
 }
 
