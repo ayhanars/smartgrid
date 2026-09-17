@@ -1,5 +1,11 @@
 import * as THREE from 'three'
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { ShapeRegion } from '../../types/document'
+
+// Same crease-angle cutoff as buildBeveledGeometry — ExtrudeGeometry's own
+// computeVertexNormals() has the identical sharp-corner darkening bug on a
+// concave boolean result (a notch from a Subtract, say).
+const CREASE_ANGLE = Math.PI / 3
 
 /**
  * Plain (non-beveled) extrusion for one region, holes cut natively via
@@ -18,5 +24,5 @@ export function buildSimpleRegionGeometry(region: ShapeRegion, depth: number, sc
   }
   const geo = new THREE.ExtrudeGeometry(shape, { depth: Math.max(0.01, depth) * scale, bevelEnabled: false, steps: 1 })
   geo.rotateX(-Math.PI / 2)
-  return geo
+  return toCreasedNormals(geo, CREASE_ANGLE)
 }

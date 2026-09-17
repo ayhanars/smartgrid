@@ -27,7 +27,11 @@ export type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se'
 
 const MIN_SHAPE_SIZE = 2
 
-export function computeResizedBounds(start: Bounds, handle: ResizeHandle, dx: number, dy: number): Bounds {
+/** `uniform` (held with Shift) locks the resize to the shape's original
+ * aspect ratio using the larger of the two proposed dimensions, keeping
+ * the corner opposite the dragged handle fixed as the anchor — same
+ * convention as every design tool's Shift-resize. */
+export function computeResizedBounds(start: Bounds, handle: ResizeHandle, dx: number, dy: number, uniform = false): Bounds {
   let { x, y, width, height } = start
   if (handle === 'se') {
     width = start.width + dx
@@ -45,6 +49,13 @@ export function computeResizedBounds(start: Bounds, handle: ResizeHandle, dx: nu
     x = start.x + dx
     width = start.width - dx
     height = start.height + dy
+  }
+
+  if (uniform) {
+    const size = Math.max(width, height, MIN_SHAPE_SIZE)
+    if (handle === 'nw' || handle === 'sw') x = start.x + start.width - size
+    if (handle === 'nw' || handle === 'ne') y = start.y + start.height - size
+    return { x, y, width: size, height: size }
   }
 
   if (width < MIN_SHAPE_SIZE) {

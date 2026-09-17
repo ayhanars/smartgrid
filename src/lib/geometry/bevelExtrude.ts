@@ -1,6 +1,18 @@
 import * as THREE from 'three'
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Point2 } from '../../types/document'
 import { computeSafeBevel, erodePolygon } from './offset'
+
+// Below this angle between adjacent faces, normals blend smoothly (a
+// rounded fillet reads as glossy-smooth); at or above it, the edge stays
+// faceted (a star tip or a box corner stays sharp instead of being wrongly
+// averaged into a dark or blown-out face — see CREASE_ANGLE below).
+const CREASE_ANGLE = Math.PI / 3
+
+// How many rings approximate each bevel's quarter-circle profile — enough
+// that consecutive rings are well under CREASE_ANGLE apart so the fillet
+// reads as a smooth curve rather than a chamfer.
+const BEVEL_SEGMENTS = 8
 
 /**
  * Builds an extruded solid with independent, geometry-safe top/bottom
@@ -37,11 +49,6 @@ export function buildBeveledGeometry(
     safeTop *= scale
   }
 
-  const bottomInset = safeBottom > 0 ? erodePolygon(contour, safeBottom) : null
-  const topInset = safeTop > 0 ? erodePolygon(contour, safeTop) : null
-  const bottomCap = bottomInset ?? contour
-  const topCap = topInset ?? contour
-
   const positions: number[] = []
   const indices: number[] = []
 
@@ -64,9 +71,42 @@ export function buildBeveledGeometry(
     }
   }
 
-  if (safeBottom > 0 && bottomInset) addWall(bottomInset, 0, contour, safeBottom)
+  // Traces a quarter-circle fillet profile instead of a single flat taper,
+  // so "bevel" actually reads as a rounded, glossy edge rather than a sharp
+  // chamfer. `mode` picks which quarter of the circle: a bottom bevel starts
+  // narrow (fully eroded) at the cap and widens out to the full contour
+  // where it meets the straight wall; a top bevel does the mirror image.
+  const buildFilletRings = (r: number, mode: 'bottom' | 'top', zStart: number) => {
+    const rings: { ring: Point2[]; z: number }[] = []
+    let lastRing = contour
+    for (let i = 0; i <= BEVEL_SEGMENTS; i++) {
+      const theta = (i / BEVEL_SEGMENTS) * (Math.PI / 2)
+      const erosion = mode === 'bottom' ? r * (1 - Math.sin(theta)) : r * (1 - Math.cos(theta))
+      const z = mode === 'bottom' ? zStart + r * (1 - Math.cos(theta)) : zStart + r * Math.sin(theta)
+      const ring = erosion <= 1e-9 ? contour : (erodePolygon(contour, erosion) ?? lastRing)
+      lastRing = ring
+      rings.push({ ring, z })
+    }
+    return rings
+  }
+
+  const bottomRings = safeBottom > 0 ? buildFilletRings(safeBottom, 'bottom', 0) : null
+  const topRings = safeTop > 0 ? buildFilletRings(safeTop, 'top', depth - safeTop) : null
+
+  const bottomCap = bottomRings ? bottomRings[0].ring : contour
+  const topCap = topRings ? topRings[topRings.length - 1].ring : contour
+
+  if (bottomRings) {
+    for (let i = 0; i < bottomRings.length - 1; i++) {
+      addWall(bottomRings[i].ring, bottomRings[i].z, bottomRings[i + 1].ring, bottomRings[i + 1].z)
+    }
+  }
   if (depth - safeTop > safeBottom + 1e-6) addWall(contour, safeBottom, contour, depth - safeTop)
-  if (safeTop > 0 && topInset) addWall(contour, depth - safeTop, topInset, depth)
+  if (topRings) {
+    for (let i = 0; i < topRings.length - 1; i++) {
+      addWall(topRings[i].ring, topRings[i].z, topRings[i + 1].ring, topRings[i + 1].z)
+    }
+  }
 
   const toVector2 = (ring: Point2[]) => ring.map((p) => new THREE.Vector2(p.x, p.y))
 
@@ -86,5 +126,11 @@ export function buildBeveledGeometry(
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geometry.setIndex(indices)
   geometry.computeVertexNormals()
-  return geometry
+  // Plain computeVertexNormals shares a vertex's normal across every face
+  // touching it, so a sharp reflex corner (a star's inner notch, a plain
+  // box corner) blends into a normal that can point the wrong way and
+  // render as a dark/near-invisible face. Re-deriving with a crease-angle
+  // cutoff keeps genuinely smooth curves (the fillet rings above, rounded
+  // corners) soft while snapping real corners back to flat shading.
+  return toCreasedNormals(geometry, CREASE_ANGLE)
 }

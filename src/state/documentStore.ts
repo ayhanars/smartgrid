@@ -36,6 +36,7 @@ interface DocumentActions {
   moveShapesBy: (ids: string[], dx: number, dy: number) => void
   resizeShape: (id: string, bounds: Bounds) => void
   duplicateShapes: (ids: string[]) => string[]
+  pasteShapes: (sourceLayers: ShapeLayer[]) => string[]
   removeShapes: (ids: string[]) => void
   setSelection: (ids: string[]) => void
   toggleVisibility: (id: string) => void
@@ -219,6 +220,29 @@ export const useDocumentStore = create<DocumentStore>()(
               id: newId,
               name: `${layer.name} copy`,
               transform: { ...layer.transform, x: layer.transform.x + 10, y: layer.transform.y + 10 },
+            }
+            order.push(newId)
+          }
+          return { layers, order, selection: newIds }
+        })
+        return newIds
+      },
+
+      // Takes cloned layer snapshots rather than ids, so pasting still works
+      // after the copied shapes were deleted or the selection changed — the
+      // clipboard doesn't depend on the originals still existing.
+      pasteShapes: (sourceLayers) => {
+        const newIds: string[] = []
+        set((state) => {
+          const layers = { ...state.layers }
+          const order = [...state.order]
+          for (const source of sourceLayers) {
+            const newId = generateId()
+            newIds.push(newId)
+            layers[newId] = {
+              ...source,
+              id: newId,
+              transform: { ...source.transform, x: source.transform.x + 10, y: source.transform.y + 10 },
             }
             order.push(newId)
           }

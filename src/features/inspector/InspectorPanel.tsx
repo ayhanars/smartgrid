@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Copy, Pin, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Pin, Trash2 } from 'lucide-react'
 import { shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
 import type { ShapeLayer } from '../../types/document'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
@@ -7,12 +7,9 @@ import { computeSafeBevel } from '../../lib/geometry/offset'
 import { bedPresets } from '../../lib/geometry/bedPresets'
 import './InspectorPanel.css'
 
-type Tab = 'design' | '3d' | 'export'
-
 const usedColors = ['#4d8dff', '#ff5c5c', '#ffb648', '#7bd88f', '#e7e7ea']
 
 export function InspectorPanel() {
-  const [tab, setTab] = useState<Tab>('design')
   const layers = useDocumentStore((s) => s.layers)
   const selection = useDocumentStore((s) => s.selection)
   const duplicateShapes = useDocumentStore((s) => s.duplicateShapes)
@@ -22,19 +19,6 @@ export function InspectorPanel() {
 
   return (
     <div className="inspector-panel">
-      <div className="inspector-panel__tabs">
-        {(['design', '3d', 'export'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            className={`inspector-panel__tab ${tab === t ? 'inspector-panel__tab--active' : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {t === 'design' ? 'Design' : t === '3d' ? '3D' : 'Export'}
-          </button>
-        ))}
-      </div>
-
       <div className="inspector-panel__selection">
         <span>
           {selection.length === 0
@@ -56,10 +40,29 @@ export function InspectorPanel() {
       </div>
 
       <div className="inspector-panel__body">
-        {tab === 'design' && <DesignTab layer={selectedLayer} multiCount={selection.length} />}
-        {tab === '3d' && <ThreeDTab layer={selectedLayer} multiCount={selection.length} />}
-        {tab === 'export' && <ExportTab />}
+        <CollapsibleGroup title="Design" defaultOpen>
+          <DesignTab layer={selectedLayer} multiCount={selection.length} />
+        </CollapsibleGroup>
+        <CollapsibleGroup title="3D" defaultOpen>
+          <ThreeDTab layer={selectedLayer} multiCount={selection.length} />
+        </CollapsibleGroup>
+        <CollapsibleGroup title="Export">
+          <ExportTab />
+        </CollapsibleGroup>
       </div>
+    </div>
+  )
+}
+
+function CollapsibleGroup({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="inspector-panel__group">
+      <button type="button" className="inspector-panel__group-header" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <span>{title}</span>
+      </button>
+      {open && <div className="inspector-panel__group-body">{children}</div>}
     </div>
   )
 }
@@ -173,44 +176,63 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
 }
 
 function BedPresetsSection() {
+  const [expanded, setExpanded] = useState(false)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
   const pinnedBedPresetId = useDocumentStore((s) => s.pinnedBedPresetId)
   const setBedPreset = useDocumentStore((s) => s.setBedPreset)
   const togglePinnedBedPreset = useDocumentStore((s) => s.togglePinnedBedPreset)
 
+  const selected = bedPresets.find((p) => p.id === bedPresetId) ?? bedPresets[0]
+
   return (
     <Section title="Bed Presets" action={<span className="inspector-section__hint">{bedPresets.length}</span>}>
-      <div className="inspector-preset-list">
-        {bedPresets.map((preset) => (
-          <div
-            key={preset.id}
-            className="inspector-preset-row"
-            role="button"
-            tabIndex={0}
-            onClick={() => setBedPreset(preset.id)}
-          >
-            <input type="radio" checked={bedPresetId === preset.id} readOnly />
-            <div className="inspector-preset-row__text">
-              <span>{preset.label}</span>
-              <span className="inspector-preset-row__size">
-                {preset.width} × {preset.height} mm
-              </span>
-            </div>
-            <button
-              type="button"
-              className="inspector-preset-row__pin"
-              aria-label="Pin as default"
-              aria-pressed={pinnedBedPresetId === preset.id}
-              onClick={(e) => {
-                e.stopPropagation()
-                togglePinnedBedPreset(preset.id)
-              }}
+      <button
+        type="button"
+        className="inspector-preset-summary"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <div className="inspector-preset-row__text">
+          <span>{selected.label}</span>
+          <span className="inspector-preset-row__size">
+            {selected.width} × {selected.height} mm
+          </span>
+        </div>
+        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+      {expanded && (
+        <div className="inspector-preset-list">
+          {bedPresets.map((preset) => (
+            <div
+              key={preset.id}
+              className="inspector-preset-row"
+              role="button"
+              tabIndex={0}
+              onClick={() => setBedPreset(preset.id)}
             >
-              <Pin size={12} fill={pinnedBedPresetId === preset.id ? 'currentColor' : 'none'} />
-            </button>
-          </div>
-        ))}
-      </div>
+              <input type="radio" checked={bedPresetId === preset.id} readOnly />
+              <div className="inspector-preset-row__text">
+                <span>{preset.label}</span>
+                <span className="inspector-preset-row__size">
+                  {preset.width} × {preset.height} mm
+                </span>
+              </div>
+              <button
+                type="button"
+                className="inspector-preset-row__pin"
+                aria-label="Pin as default"
+                aria-pressed={pinnedBedPresetId === preset.id}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  togglePinnedBedPreset(preset.id)
+                }}
+              >
+                <Pin size={12} fill={pinnedBedPresetId === preset.id ? 'currentColor' : 'none'} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </Section>
   )
 }

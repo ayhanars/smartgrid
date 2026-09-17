@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
 import { useDocumentStore, shapeWorldBounds, type Guide } from '../../state/documentStore'
-import type { Bounds, Point2, ShapeKind } from '../../types/document'
+import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../../types/document'
 import type { BooleanOp } from '../../lib/geometry/boolean'
 import { ShapeElement } from './ShapeElement'
 import {
@@ -92,6 +92,7 @@ export function Canvas2DPane() {
     mode: 'handle' | 'move'
     original?: PenAnchor
   } | null>(null)
+  const clipboardRef = useRef<ShapeLayer[]>([])
 
   const layers = useDocumentStore((s) => s.layers)
   const order = useDocumentStore((s) => s.order)
@@ -100,6 +101,8 @@ export function Canvas2DPane() {
   const addShape = useDocumentStore((s) => s.addShape)
   const moveShapesBy = useDocumentStore((s) => s.moveShapesBy)
   const resizeShape = useDocumentStore((s) => s.resizeShape)
+  const duplicateShapes = useDocumentStore((s) => s.duplicateShapes)
+  const pasteShapes = useDocumentStore((s) => s.pasteShapes)
   const applyBoolean = useDocumentStore((s) => s.applyBoolean)
   const addPenShape = useDocumentStore((s) => s.addPenShape)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
@@ -194,6 +197,21 @@ export function Canvas2DPane() {
       } else if (mod && e.key.toLowerCase() === 'r' && !typing) {
         e.preventDefault()
         toggleRulersVisible()
+      } else if (mod && e.key.toLowerCase() === 'c' && !typing) {
+        const { selection: sel, layers: currentLayers } = useDocumentStore.getState()
+        if (sel.length > 0) {
+          e.preventDefault()
+          clipboardRef.current = sel.map((id) => currentLayers[id]).filter((l): l is ShapeLayer => !!l)
+        }
+      } else if (mod && e.key.toLowerCase() === 'v' && !typing) {
+        if (clipboardRef.current.length > 0) {
+          e.preventDefault()
+          const newIds = pasteShapes(clipboardRef.current)
+          // Chain subsequent pastes from where these landed, so repeated
+          // Cmd+V cascades outward instead of stacking in the same spot.
+          const { layers: freshLayers } = useDocumentStore.getState()
+          clipboardRef.current = newIds.map((id) => freshLayers[id]).filter((l): l is ShapeLayer => !!l)
+        }
       } else if (e.key === 'Escape' && tool === 'pen') {
         cancelPenPath()
       }
@@ -207,7 +225,7 @@ export function Canvas2DPane() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [zoom, pan, fitToView, toggleRulersVisible, tool])
+  }, [zoom, pan, fitToView, toggleRulersVisible, pasteShapes, tool])
 
   const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
     e.preventDefault()
@@ -269,6 +287,24 @@ export function Canvas2DPane() {
     }
 
     const nextSelection = wasAlreadySelected ? selection : [id]
+
+    // Cmd/Ctrl-drag: duplicate first, then drag the copies — the originals
+    // stay put, exactly like Cmd-drag in Figma/Illustrator.
+    if ((e.metaKey || e.ctrlKey) && !layer.locked) {
+      const newIds = duplicateShapes(nextSelection)
+      moveShapesBy(newIds, -10, -10) // duplicateShapes offsets by +10,+10; undo that so the copy starts exactly where the original was
+      const freshLayers = useDocumentStore.getState().layers
+      const originals: Record<string, Point2> = {}
+      for (const sid of newIds) {
+        const l = freshLayers[sid]
+        if (l) originals[sid] = { x: l.transform.x, y: l.transform.y }
+      }
+      const clickedIndex = nextSelection.indexOf(id)
+      const clickedId = newIds[clickedIndex] ?? newIds[0]
+      setGesture({ type: 'move', startDoc: doc, originals, dx: 0, dy: 0, moved: false, clickedId, wasAlreadySelected: true })
+      return
+    }
+
     if (!wasAlreadySelected) setSelection(nextSelection)
 
     const originals: Record<string, Point2> = {}
@@ -423,7 +459,13 @@ export function Canvas2DPane() {
       setGesture({ ...gesture, dx, dy, moved })
     } else if (gesture.type === 'resize') {
       const doc = screenToDoc(local.x, local.y)
-      const preview = computeResizedBounds(gesture.startBounds, gesture.handle, doc.x - gesture.startDoc.x, doc.y - gesture.startDoc.y)
+      const preview = computeResizedBounds(
+        gesture.startBounds,
+        gesture.handle,
+        doc.x - gesture.startDoc.x,
+        doc.y - gesture.startDoc.y,
+        e.shiftKey,
+      )
       setGesture({ ...gesture, preview })
     } else if (gesture.type === 'ruler-drag') {
       const overRuler = gesture.orientation === 'horizontal' ? local.y < 0 : local.x < 0
