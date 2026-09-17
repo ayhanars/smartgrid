@@ -47,3 +47,48 @@
   flex-shrink: 0;
   background: var(--border);
 }
+
+.app-shell__toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 560px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.app-shell__toast button {
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.app-shell__toast button:hover {
+  color: var(--text);
+}
+
+.canvas-2d--drop-target::after {
+  content: 'Drop SVG to import';
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-md);
+  background: rgba(77, 141, 255, 0.08);
+  color: var(--accent-text);
+  font-weight: 600;
+  pointer-events: none;
+}

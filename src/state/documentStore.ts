@@ -2,6 +2,7 @@ import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
 import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type ShapeLayer } from '../types/document'
 import type { DocumentSnapshot } from '../lib/persistence/localProjects'
+import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
 import { applyBooleanOp, type BooleanOp } from '../lib/geometry/boolean'
@@ -67,6 +68,9 @@ interface DocumentActions {
   resizeShape: (id: string, bounds: Bounds) => void
   duplicateShapes: (ids: string[]) => string[]
   pasteShapes: (sourceLayers: ShapeLayer[]) => string[]
+  /** Adds shapes redrawn from an imported file (see svgImport.ts) with
+   * their top-left corner at `origin`, grouped when there are several. */
+  addImportedShapes: (shapes: ImportedShape[], origin: Point2, groupName?: string) => string[]
   removeShapes: (ids: string[]) => void
   setSelection: (ids: string[]) => void
   toggleVisibility: (id: string) => void
@@ -364,6 +368,46 @@ export const useDocumentStore = create<DocumentStore>()(
             order.push(newId)
           }
           return { layers, order, selection: newIds }
+        })
+        return newIds
+      },
+
+      addImportedShapes: (shapes, origin, groupName) => {
+        const newIds: string[] = []
+        set((state) => {
+          const layers = { ...state.layers }
+          const order = [...state.order]
+          const groupId = shapes.length > 1 ? generateId() : null
+          for (const shape of shapes) {
+            const all = shape.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+            if (all.length < 3) continue
+            const bounds = contourBounds(all)
+            const localize = (pts: Point2[]) => pts.map((p) => ({ x: p.x - bounds.x, y: p.y - bounds.y }))
+            const id = generateId()
+            newIds.push(id)
+            layers[id] = {
+              id,
+              kind: 'polygon',
+              name: shape.name,
+              visible: true,
+              locked: false,
+              color: shape.color,
+              transform: { x: origin.x + bounds.x, y: origin.y + bounds.y, z: 0, rotationX: 0, rotationY: 0, rotation: 0 },
+              regions: shape.regions.map((r) => ({ outer: { points: localize(r.outer.points) }, holes: r.holes.map((h) => ({ points: localize(h.points) })) })),
+              extrusionDepth: 3,
+              cornerRadius: 0,
+              smartPolish: 0,
+              bevelBottom: 0,
+              bevelTop: 0,
+              isHole: false,
+              ...(groupId ? { groupId } : {}),
+            }
+            order.push(id)
+          }
+          if (newIds.length === 0) return {}
+          const groups = groupId && newIds.length > 1 ? { ...state.groups, [groupId]: { id: groupId, name: groupName ?? 'Imported SVG' } } : state.groups
+          if (groupId && newIds.length === 1) delete layers[newIds[0]].groupId
+          return { layers, order, groups, selection: newIds }
         })
         return newIds
       },
@@ -735,5 +779,5 @@ export function emptyDocument(name = 'Untitled project'): DocumentSnapshot {
 // Dev-only handle so browser automation/debugging can reach the live store
 // (stripped from production builds by the DEV guard).
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore } }).__smartgrid = { useDocumentStore }
+  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore; shapeWorldBounds: typeof shapeWorldBounds } }).__smartgrid = { useDocumentStore, shapeWorldBounds }
 }

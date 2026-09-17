@@ -23,6 +23,7 @@ import { useDocumentStore, shapeWorldBounds, expandToGroup, type Guide } from '.
 import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../../types/document'
 import type { BooleanOp } from '../../lib/geometry/boolean'
 import { isTextEntryTarget } from '../../lib/dom/isTextEntryTarget'
+import { importSvgFiles } from '../../lib/import/importSvgFiles'
 import { ShapeElement } from './ShapeElement'
 import {
   clamp,
@@ -38,8 +39,13 @@ import { flattenPenAnchors, type PenAnchor } from '../../lib/geometry/pen'
 import { RulerTicks } from './RulerTicks'
 import './Canvas2DPane.css'
 
-const MIN_ZOOM = 0.05
-const MAX_ZOOM = 8
+/** Screen pixels per document mm at "100%": real size on a 96 dpi
+ * display, the same 1 mm = 3.78 px that Illustrator/Inkscape/Sketch use
+ * for physical units — so a 256 mm plate at 100% is about as big as the
+ * real thing, instead of 1 px per mm. */
+export const PX_PER_MM_AT_100 = 96 / 25.4
+const MIN_ZOOM = 0.02 * PX_PER_MM_AT_100
+const MAX_ZOOM = 16 * PX_PER_MM_AT_100
 const CLICK_THRESHOLD_PX = 4
 const PEN_CLOSE_THRESHOLD_PX = 10
 
@@ -229,9 +235,11 @@ export function Canvas2DPane() {
       } else if (mod && e.key === '-' && !typing) {
         e.preventDefault()
         zoomAtCenter(1 / 1.2)
-      } else if (mod && e.key === '0' && !typing) {
+      } else if (mod && (e.key === '0' || e.key.toLowerCase() === 'o') && !typing) {
+        // Cmd+0 (and Cmd+O, which is otherwise the browser's open-file
+        // dialog) both go to real-size 100%.
         e.preventDefault()
-        zoomAtCenter(1 / zoom)
+        zoomAtCenter(PX_PER_MM_AT_100 / zoom)
       } else if (mod && e.key.toLowerCase() === 'r' && !typing) {
         e.preventDefault()
         toggleRulersVisible()
@@ -648,8 +656,49 @@ export function Canvas2DPane() {
           : 'crosshair'
   const rulerLengthPx = { width: svgRef.current?.clientWidth ?? 0, height: svgRef.current?.clientHeight ?? 0 }
 
+  // Drag-and-drop SVG import: dropped files land centered on the pointer.
+  const [isDropTarget, setIsDropTarget] = useState(false)
+  const dragDepth = useRef(0)
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
+  const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!hasFiles(e)) return
+    e.preventDefault()
+    dragDepth.current++
+    setIsDropTarget(true)
+  }
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!hasFiles(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }
+  const onDragLeave = () => {
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setIsDropTarget(false)
+  }
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!hasFiles(e)) return
+    e.preventDefault()
+    dragDepth.current = 0
+    setIsDropTarget(false)
+    const svg = svgRef.current
+    let at: Point2 | undefined
+    if (svg) {
+      const rect = svg.getBoundingClientRect()
+      at = screenToDoc(e.clientX - rect.left, e.clientY - rect.top)
+    }
+    void importSvgFiles(e.dataTransfer.files, at).then((ids) => {
+      if (ids.length) setTool('select')
+    })
+  }
+
   return (
-    <div className="canvas-2d">
+    <div
+      className={`canvas-2d ${isDropTarget ? 'canvas-2d--drop-target' : ''}`}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       {rulersVisible && (
         <>
           <div className="canvas-2d__ruler canvas-2d__ruler--top" onPointerDown={(e) => handleRulerPointerDown(e, 'horizontal')}>
@@ -810,10 +859,10 @@ export function Canvas2DPane() {
         <button
           type="button"
           className="canvas-2d__zoom-value"
-          title="Reset to 100%"
-          onClick={() => zoomAtCenter(1 / zoom)}
+          title="Reset to 100% (real size) — ⌘0"
+          onClick={() => zoomAtCenter(PX_PER_MM_AT_100 / zoom)}
         >
-          {Math.round(zoom * 100)}%
+          {Math.round((zoom / PX_PER_MM_AT_100) * 100)}%
         </button>
         <IconButton size="sm" aria-label="Zoom in" shortcut="⇧+" onClick={() => zoomAtCenter(1.2)}>
           <ZoomIn size={14} />

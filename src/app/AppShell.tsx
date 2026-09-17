@@ -13,6 +13,28 @@ import './AppShell.css'
 
 export type ViewMode = 'split' | '2d' | '3d'
 
+const TOAST_MS = 6000
+
+/** Transient one-liner from the view store (import results, errors). */
+function Toast() {
+  const notice = useViewStore((s) => s.notice)
+  const setNotice = useViewStore((s) => s.setNotice)
+  useEffect(() => {
+    if (!notice) return
+    const handle = window.setTimeout(() => setNotice(null), TOAST_MS)
+    return () => window.clearTimeout(handle)
+  }, [notice, setNotice])
+  if (!notice) return null
+  return (
+    <div className="app-shell__toast" role="status">
+      <span>{notice.text}</span>
+      <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)}>
+        ×
+      </button>
+    </div>
+  )
+}
+
 export function AppShell() {
   const [viewMode, setViewMode] = useState<ViewMode>('split')
   const [leftPanelOpen, setLeftPanelOpen] = useState(true)
@@ -79,6 +101,7 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      <Toast />
       <TopBar
         viewMode={viewMode}
         onViewModeChange={setViewMode}

@@ -12,19 +12,26 @@ interface ViewState {
   gizmoMode: 'translate' | 'rotate'
   /** Local autosave state shown in the top bar. */
   saveStatus: 'idle' | 'saving' | 'saved'
+  /** One-line transient message (import results etc.), shown as a toast. */
+  notice: { id: number; text: string } | null
   setPrintPreview: (on: boolean) => void
   setPreviewHeight: (height: number | null) => void
   setGizmoMode: (mode: 'translate' | 'rotate') => void
   setSaveStatus: (status: 'idle' | 'saving' | 'saved') => void
+  setNotice: (text: string | null) => void
 }
+
+let noticeCounter = 0
 
 export const useViewStore = create<ViewState>()((set) => ({
   printPreview: false,
   previewHeight: null,
   gizmoMode: 'translate',
   saveStatus: 'idle',
+  notice: null,
   setPrintPreview: (on) => set({ printPreview: on, previewHeight: null }),
   setPreviewHeight: (height) => set({ previewHeight: height }),
   setGizmoMode: (mode) => set({ gizmoMode: mode }),
   setSaveStatus: (status) => set({ saveStatus: status }),
+  setNotice: (text) => set({ notice: text ? { id: ++noticeCounter, text } : null }),
 }))

@@ -11,6 +11,7 @@ import {
   Redo2,
   Trash2,
   Undo2,
+  Upload,
   PanelLeft,
   PanelRight,
   SquareSplitHorizontal,
@@ -21,6 +22,7 @@ import { IconButton } from '../components/IconButton'
 import { emptyDocument, serializeDocument, useDocumentStore, useTemporalStore } from '../state/documentStore'
 import { useViewStore } from '../state/viewStore'
 import { createLocalProject, deleteLocalProject, duplicateLocalProject, saveLocalProject } from '../lib/persistence/localProjects'
+import { importSvgFiles } from '../lib/import/importSvgFiles'
 import type { ViewMode } from './AppShell'
 import '../features/layers/LayerContextMenu.css'
 import './TopBar.css'
@@ -56,6 +58,7 @@ export function TopBar({
   const [draft, setDraft] = useState(projectName)
   const workspaceRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => setDraft(projectName), [projectName, editingName])
 
@@ -133,6 +136,11 @@ export function TopBar({
               New project
             </button>
             <div className="layer-context-menu__divider" />
+            <button type="button" role="menuitem" onClick={run(() => fileInputRef.current?.click())}>
+              <Upload size={13} />
+              Import SVG…
+            </button>
+            <div className="layer-context-menu__divider" />
             <button type="button" role="menuitem" onClick={run(() => setEditingName(true))}>
               <Pencil size={13} />
               Rename project
@@ -148,6 +156,18 @@ export function TopBar({
             </button>
           </div>
         )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".svg,image/svg+xml"
+          multiple
+          hidden
+          aria-label="Import SVG file"
+          onChange={(e) => {
+            if (e.target.files?.length) void importSvgFiles(e.target.files)
+            e.target.value = ''
+          }}
+        />
         <div className="top-bar__divider" />
         <IconButton size="sm" aria-label="Undo" disabled={!pastStates.length} onClick={() => undo()}>
           <Undo2 size={15} />
