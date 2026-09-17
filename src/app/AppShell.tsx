@@ -5,6 +5,9 @@ import { InspectorPanel } from '../features/inspector/InspectorPanel'
 import { Canvas2DPane } from '../features/canvas-2d/Canvas2DPane'
 import { Viewport3DPane } from '../features/viewport-3d/Viewport3DPane'
 import { useDocumentStore } from '../state/documentStore'
+import { useAnalysisStore } from '../state/analysisStore'
+import { analyzeSupport } from '../lib/geometry/support'
+import { isTextEntryTarget } from '../lib/dom/isTextEntryTarget'
 import './AppShell.css'
 
 export type ViewMode = 'split' | '2d' | '3d'
@@ -16,8 +19,7 @@ export function AppShell() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+      if (isTextEntryTarget(e.target)) return
 
       const mod = e.metaKey || e.ctrlKey
       const { selection, removeShapes, setSelection, groupShapes, ungroupShapes } = useDocumentStore.getState()
@@ -41,6 +43,18 @@ export function AppShell() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  // Re-run the floating/support analysis whenever the document changes.
+  // Debounced so a live dial/slider drag doesn't rebuild every shape's
+  // geometry on every pointer move.
+  const layers = useDocumentStore((s) => s.layers)
+  const order = useDocumentStore((s) => s.order)
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      useAnalysisStore.getState().setWarnings(analyzeSupport(layers, order))
+    }, 60)
+    return () => window.clearTimeout(handle)
+  }, [layers, order])
 
   useEffect(() => {
     // Browsers report a trackpad pinch as a wheel event with ctrlKey set,

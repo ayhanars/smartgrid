@@ -22,6 +22,7 @@ import { IconButton } from '../../components/IconButton'
 import { useDocumentStore, shapeWorldBounds, expandToGroup, type Guide } from '../../state/documentStore'
 import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../../types/document'
 import type { BooleanOp } from '../../lib/geometry/boolean'
+import { isTextEntryTarget } from '../../lib/dom/isTextEntryTarget'
 import { ShapeElement } from './ShapeElement'
 import {
   clamp,
@@ -195,8 +196,7 @@ export function Canvas2DPane() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      const target = e.target as HTMLElement
-      const typing = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+      const typing = isTextEntryTarget(e.target)
       if (e.key === 'Alt') setIsAltDown(true)
       if (e.code === 'Space' && !typing) {
         e.preventDefault()

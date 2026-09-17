@@ -67,6 +67,12 @@ interface DocumentActions {
   setBevelBottom: (id: string, amount: number) => void
   setBevelTop: (id: string, amount: number) => void
   setLayerZ: (id: string, z: number) => void
+  setRotation: (id: string, rotation: { x?: number; y?: number; z?: number }) => void
+  /** Wraps a continuous drag (dial, slider) so it lands in undo history as
+   * ONE step instead of hundreds — begin on pointer-down, commit on
+   * pointer-up. Commit is a no-op for history if nothing changed. */
+  beginTransientEdit: () => void
+  commitTransientEdit: () => void
   snapHoleToPocket: (id: string, floorThicknessMM: number) => void
   setBedPreset: (id: string) => void
   togglePinnedBedPreset: (id: string) => void
@@ -102,9 +108,11 @@ export function artboardSize(state: Pick<DocumentState, 'bedPresetId' | 'customB
 
 export type DocumentStore = DocumentState & DocumentActions
 
+let transientSnapshot: Pick<DocumentState, 'layers' | 'order' | 'groups'> | null = null
+
 export const useDocumentStore = create<DocumentStore>()(
   temporal(
-    (set) => ({
+    (set, get) => ({
       layers: {},
       groups: {},
       order: [],
@@ -128,7 +136,7 @@ export const useDocumentStore = create<DocumentStore>()(
           visible: true,
           locked: false,
           color: '#4d8dff',
-          transform: { x: bounds.x, y: bounds.y, z: 0, rotation: 0 },
+          transform: { x: bounds.x, y: bounds.y, z: 0, rotationX: 0, rotationY: 0, rotation: 0 },
           regions: createShapeRegions(kind, width, height),
           extrusionDepth: 3,
           cornerRadius: 0,
@@ -197,7 +205,7 @@ export const useDocumentStore = create<DocumentStore>()(
           visible: true,
           locked: false,
           color: '#4d8dff',
-          transform: { x: bounds.x, y: bounds.y, z: 0, rotation: 0 },
+          transform: { x: bounds.x, y: bounds.y, z: 0, rotationX: 0, rotationY: 0, rotation: 0 },
           regions: [{ outer: { points: localPoints }, holes: [] }],
           extrusionDepth: 3,
           cornerRadius: 0,
@@ -394,6 +402,55 @@ export const useDocumentStore = create<DocumentStore>()(
           return { layers: { ...state.layers, [id]: { ...layer, transform: { ...layer.transform, z: Math.max(0, z) } } } }
         }),
 
+      setRotation: (id, rotation) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer || layer.locked) return {}
+          return {
+            layers: {
+              ...state.layers,
+              [id]: {
+                ...layer,
+                transform: {
+                  ...layer.transform,
+                  rotationX: rotation.x ?? layer.transform.rotationX,
+                  rotationY: rotation.y ?? layer.transform.rotationY,
+                  rotation: rotation.z ?? layer.transform.rotation,
+                },
+              },
+            },
+          }
+        }),
+
+      beginTransientEdit: () => {
+        const { layers, order, groups } = get()
+        transientSnapshot = { layers, order, groups }
+        useDocumentStore.temporal.getState().pause()
+      },
+
+      // zundo records the pre-change state on every tracked set, so while
+      // paused nothing is recorded. To end up with exactly one entry for the
+      // whole drag: silently restore the pre-drag snapshot, resume tracking,
+      // then re-apply the final state as a single tracked change.
+      commitTransientEdit: () => {
+        const temporal = useDocumentStore.temporal.getState()
+        const snapshot = transientSnapshot
+        transientSnapshot = null
+        if (!snapshot) {
+          temporal.resume()
+          return
+        }
+        const { layers, order, groups } = get()
+        const changed = layers !== snapshot.layers || order !== snapshot.order || groups !== snapshot.groups
+        if (!changed) {
+          temporal.resume()
+          return
+        }
+        set(snapshot)
+        temporal.resume()
+        set({ layers, order, groups })
+      },
+
       // Sinks a hole shape so it stops just short of the BOTTOM of whatever
       // solids it overlaps in XY, leaving a thin floor — enough to hide a
       // magnet flush without punching all the way through the part. A
@@ -539,6 +596,11 @@ export const useDocumentStore = create<DocumentStore>()(
       // Selection is transient UI state, not something Cmd+Z should walk
       // back through — only the shape data itself belongs in history.
       partialize: (state) => ({ layers: state.layers, order: state.order, groups: state.groups }),
+      // Without this zundo records an entry on EVERY set — including a
+      // plain selection change that leaves the document untouched — so
+      // undo would sometimes appear to do nothing. Store updates are
+      // immutable, so reference equality of the tracked slices is exact.
+      equality: (a, b) => a.layers === b.layers && a.order === b.order && a.groups === b.groups,
       limit: 100,
     },
   ),
@@ -548,13 +610,38 @@ export function useTemporalStore() {
   return useStore(useDocumentStore.temporal, (state) => state)
 }
 
-export function shapeWorldBounds(layer: ShapeLayer): Bounds {
+/** The shape's local points with its Z-spin (`rotation`) applied about the
+ * footprint center — the outline the 2D canvas actually shows. Tilts
+ * (rotationX/Y) can't be drawn in 2D and are left to the 3D geometry. */
+export function rotatedLocalPoints(layer: ShapeLayer, points: Point2[]): Point2[] {
+  const deg = layer.transform.rotation
+  if (!deg) return points
   const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
   const local = contourBounds(allPoints)
+  const cx = local.x + local.width / 2
+  const cy = local.y + local.height / 2
+  const rad = (deg * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  return points.map((p) => ({
+    x: cx + (p.x - cx) * cos - (p.y - cy) * sin,
+    y: cy + (p.x - cx) * sin + (p.y - cy) * cos,
+  }))
+}
+
+export function shapeWorldBounds(layer: ShapeLayer): Bounds {
+  const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+  const local = contourBounds(rotatedLocalPoints(layer, allPoints))
   return {
     x: layer.transform.x + local.x,
     y: layer.transform.y + local.y,
     width: local.width,
     height: local.height,
   }
+}
+
+// Dev-only handle so browser automation/debugging can reach the live store
+// (stripped from production builds by the DEV guard).
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore } }).__smartgrid = { useDocumentStore }
 }

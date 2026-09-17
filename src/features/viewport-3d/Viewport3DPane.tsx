@@ -13,6 +13,7 @@ import { cutHolesFromSolid } from '../../lib/geometry/holeCut'
 import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import { PrinterPlate } from './PrinterPlate'
+import { useAnalysisStore } from '../../state/analysisStore'
 import './Viewport3DPane.css'
 
 function rectsOverlap(a: Bounds, b: Bounds): boolean {
@@ -35,6 +36,11 @@ export function Viewport3DPane() {
   const artboardHeight = bed?.height ?? customBedHeight
   const bedWidth = artboardWidth * SCENE_SCALE
   const bedDepth = artboardHeight * SCENE_SCALE
+  const warnings = useAnalysisStore((s) => s.warnings)
+  const dismissed = useAnalysisStore((s) => s.dismissed)
+  const dismiss = useAnalysisStore((s) => s.dismiss)
+  const activeWarnings = warnings.filter((w) => layers[w.id] && !(w.severity === 'partial' && dismissed.includes(w.id)))
+  const warningById = new Map(activeWarnings.map((w) => [w.id, w.severity] as const))
 
   const handleSelect = (id: string, additive: boolean) => {
     if (additive) {
@@ -113,6 +119,7 @@ export function Viewport3DPane() {
               artboardWidth={artboardWidth}
               artboardHeight={artboardHeight}
               cutGeometries={cutGeometriesById[id]}
+              warning={warningById.get(id)}
             />
           )
         })}
@@ -131,6 +138,30 @@ export function Viewport3DPane() {
           <GizmoViewport axisColors={['#ff5c5c', '#7bd88f', '#4d8dff']} labelColor="black" />
         </GizmoHelper>
       </Canvas>
+
+      {activeWarnings.length > 0 && (
+        <div className="viewport-3d__alerts" role="status">
+          {activeWarnings.map((w) => (
+            <div key={w.id} className={`viewport-3d__alert viewport-3d__alert--${w.severity}`}>
+              <button type="button" className="viewport-3d__alert-name" onClick={() => setSelection([w.id])}>
+                {layers[w.id].name}
+              </button>
+              <span>
+                {w.severity === 'critical'
+                  ? w.supporterIds.length === 0 || Math.round(w.supportedFraction * 100) === 0
+                    ? 'is floating'
+                    : `barely touches what's under it (${Math.round(w.supportedFraction * 100)}%)`
+                  : `rests on only ${Math.round(w.supportedFraction * 100)}%`}
+              </span>
+              {w.severity === 'partial' && (
+                <button type="button" className="viewport-3d__alert-dismiss" aria-label="Dismiss warning" onClick={() => dismiss(w.id)}>
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="viewport-3d__controls">
         <IconButton size="sm" active={wireframe} aria-label="Toggle wireframe" onClick={() => setWireframe((v) => !v)}>

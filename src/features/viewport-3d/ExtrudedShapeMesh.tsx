@@ -17,6 +17,9 @@ interface ExtrudedShapeMeshProps {
    * via real CSG (see Viewport3DPane) — bypasses the normal per-shape
    * build when this shape has any holes cutting into it. */
   cutGeometries?: THREE.BufferGeometry[]
+  /** Support analysis result: outlines the shape red (floating) or amber
+   * (partially supported) so the problem is visible in the scene itself. */
+  warning?: 'critical' | 'partial'
 }
 
 export function ExtrudedShapeMesh({
@@ -27,6 +30,7 @@ export function ExtrudedShapeMesh({
   artboardWidth,
   artboardHeight,
   cutGeometries,
+  warning,
 }: ExtrudedShapeMeshProps) {
   const geometries = useMemo(
     (): THREE.BufferGeometry[] => cutGeometries ?? buildLayerGeometries(layer, SCENE_SCALE),
@@ -56,7 +60,11 @@ export function ExtrudedShapeMesh({
             transparent={layer.isHole}
             opacity={layer.isHole ? 0.35 : 1}
           />
-          {isSelected && <Edges color="#4d8dff" lineWidth={2} />}
+          {warning ? (
+            <Edges color={warning === 'critical' ? '#ff5c5c' : '#ffb648'} lineWidth={2} />
+          ) : (
+            isSelected && <Edges color="#4d8dff" lineWidth={2} />
+          )}
         </mesh>
       ))}
     </group>

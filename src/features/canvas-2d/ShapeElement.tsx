@@ -1,5 +1,5 @@
 import type { Bounds, ShapeLayer } from '../../types/document'
-import { regionsToSvgPath } from '../../lib/geometry/primitives'
+import { contourBounds, regionsToSvgPath } from '../../lib/geometry/primitives'
 
 interface ShapeElementProps {
   layer: ShapeLayer
@@ -18,6 +18,12 @@ export function ShapeElement({ layer, isSelected, previewOffset, previewResize, 
   if (!layer.visible) return null
 
   const path = regionsToSvgPath(layer.regions)
+  const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+  const local = contourBounds(allPoints)
+  // Z-spin shown in 2D about the footprint center; tilts only exist in 3D.
+  const spin = layer.transform.rotation
+    ? ` rotate(${layer.transform.rotation} ${local.x + local.width / 2} ${local.y + local.height / 2})`
+    : ''
 
   let transform: string
   if (previewResize) {
@@ -26,11 +32,11 @@ export function ShapeElement({ layer, isSelected, previewOffset, previewResize, 
     const scaleY = startBounds.height > 0 ? bounds.height / startBounds.height : 1
     const tx = bounds.x + (layer.transform.x - startBounds.x) * scaleX
     const ty = bounds.y + (layer.transform.y - startBounds.y) * scaleY
-    transform = `translate(${tx} ${ty}) scale(${scaleX} ${scaleY})`
+    transform = `translate(${tx} ${ty}) scale(${scaleX} ${scaleY})${spin}`
   } else {
     const dx = previewOffset?.dx ?? 0
     const dy = previewOffset?.dy ?? 0
-    transform = `translate(${layer.transform.x + dx} ${layer.transform.y + dy})`
+    transform = `translate(${layer.transform.x + dx} ${layer.transform.y + dy})${spin}`
   }
 
   return (

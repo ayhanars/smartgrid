@@ -20,7 +20,10 @@ import { IconButton } from '../../components/IconButton'
 import type { ShapeLayer } from '../../types/document'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
 import { computeSafeBevel } from '../../lib/geometry/offset'
-import { bedPresets, CUSTOM_BED_ID } from '../../lib/geometry/bedPresets'
+import { bedPresets, CUSTOM_BED_ID, CUSTOM_BED_MAX_Z, getBedPreset } from '../../lib/geometry/bedPresets'
+import { RotationDial } from './RotationDial'
+import { HeightSlider } from './HeightSlider'
+import { useAnalysisStore, visibleWarning } from '../../state/analysisStore'
 import './InspectorPanel.css'
 
 const usedColors = ['#4d8dff', '#ff5c5c', '#ffb648', '#7bd88f', '#e7e7ea']
@@ -471,6 +474,7 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
 
   return (
     <>
+      <OrientationSection layer={layer} />
       <Section title="Extrusion">
         <div className="inspector-grid-2">
           <Field label="Depth" value={layer.extrusionDepth} suffix="mm" onChange={(v) => setExtrusionDepth(layer.id, v)} />
@@ -494,6 +498,68 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
             {displayUnit}, bottom {round(safeBottom / UNIT_FACTORS[displayUnit])}
             {displayUnit}.
           </p>
+        )}
+      </Section>
+    </>
+  )
+}
+
+function OrientationSection({ layer }: { layer: ShapeLayer }) {
+  const selection = useDocumentStore((s) => s.selection)
+  const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const setRotation = useDocumentStore((s) => s.setRotation)
+  const setSelection = useDocumentStore((s) => s.setSelection)
+  const dismiss = useAnalysisStore((s) => s.dismiss)
+  const warning = useAnalysisStore((s) => visibleWarning(s, layer.id))
+  const layers = useDocumentStore((s) => s.layers)
+  const bedMaxZ = getBedPreset(bedPresetId)?.maxZ ?? CUSTOM_BED_MAX_Z
+  const t = layer.transform
+  const supporterNames = warning?.supporterIds.map((id) => layers[id]?.name).filter(Boolean).join(', ')
+
+  return (
+    <>
+      <Section
+        title="Orientation"
+        action={
+          (t.rotationX || t.rotationY || t.rotation) ? (
+            <button type="button" className="inspector-section__hint inspector-section__hint--button" onClick={() => setRotation(layer.id, { x: 0, y: 0, z: 0 })}>
+              Reset
+            </button>
+          ) : undefined
+        }
+      >
+        <div className="inspector-orientation">
+          <RotationDial layer={layer} />
+          <div className="inspector-orientation__fields">
+            <Field label="Tilt X" value={t.rotationX} suffix="°" disabled={layer.locked} onChange={(v) => setRotation(layer.id, { x: v })} />
+            <Field label="Tilt Y" value={t.rotationY} suffix="°" disabled={layer.locked} onChange={(v) => setRotation(layer.id, { y: v })} />
+            <Field label="Spin Z" value={t.rotation} suffix="°" disabled={layer.locked} onChange={(v) => setRotation(layer.id, { z: v })} />
+          </div>
+        </div>
+        <p className="inspector-note">Drag the outer ring to spin, the inner ball to tilt. Spin shows in 2D; tilts only in 3D.</p>
+      </Section>
+
+      <Section title="Height">
+        <HeightSlider layer={layer} selectionIds={selection.includes(layer.id) ? selection : [layer.id]} bedMaxZ={bedMaxZ} />
+        {!layer.isHole && warning && (
+          <div className={`support-note support-note--${warning.severity}`}>
+            <span>
+              {warning.severity === 'critical'
+                ? warning.supporterIds.length === 0 || Math.round(warning.supportedFraction * 100) === 0
+                  ? 'Floating — nothing underneath supports this shape, it will fail to print.'
+                  : `Floating — only ${Math.round(warning.supportedFraction * 100)}% of it touches ${supporterNames}.`
+                : `Partial support — ${Math.round(warning.supportedFraction * 100)}% of it rests on ${supporterNames}.`}
+            </span>
+            {warning.severity === 'partial' ? (
+              <button type="button" onClick={() => dismiss(layer.id)}>
+                Dismiss
+              </button>
+            ) : warning.supporterIds.length > 0 ? (
+              <button type="button" onClick={() => setSelection(warning.supporterIds)}>
+                Show
+              </button>
+            ) : null}
+          </div>
         )}
       </Section>
     </>

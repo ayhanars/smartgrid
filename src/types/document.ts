@@ -30,6 +30,12 @@ export interface Transform2D {
    * extrusionDepth are what make a recessed pocket possible: the cutter
    * doesn't have to span the full height of whatever it cuts. */
   z: number
+  /** Euler angles in degrees, always applied in a fixed XYZ order in the
+   * print frame (X/Y along the plate, Z up): `rotationX`/`rotationY` tilt
+   * the object, `rotation` spins it about its own Z (the only one visible
+   * in the 2D canvas). */
+  rotationX: number
+  rotationY: number
   rotation: number
 }
 
