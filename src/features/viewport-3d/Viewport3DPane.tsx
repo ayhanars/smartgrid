@@ -12,6 +12,7 @@ import { buildLayerGeometries } from '../../lib/geometry/layerGeometry'
 import { cutHolesFromSolid } from '../../lib/geometry/holeCut'
 import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
+import { PrinterPlate } from './PrinterPlate'
 import './Viewport3DPane.css'
 
 function rectsOverlap(a: Bounds, b: Bounds): boolean {
@@ -97,10 +98,7 @@ export function Viewport3DPane() {
         <ambientLight intensity={0.6} />
         <directionalLight position={[bedWidth * 2, bedWidth * 3, bedWidth]} intensity={1.1} castShadow />
 
-        <mesh position={[0, -0.01, 0]}>
-          <boxGeometry args={[bedWidth, 0.02, bedDepth]} />
-          <meshStandardMaterial color="#1b1c22" />
-        </mesh>
+        <PrinterPlate width={bedWidth} depth={bedDepth} widthMM={artboardWidth} depthMM={artboardHeight} />
 
         {order.map((id) => {
           const layer = layers[id]
@@ -120,10 +118,10 @@ export function Viewport3DPane() {
         })}
 
         <Grid
-          position={[0, 0, 0]}
+          position={[0, -bedWidth * 0.02, 0]}
           args={[bedWidth, bedDepth]}
-          cellColor="#28282f"
-          sectionColor="#35353e"
+          cellColor="#1f1f26"
+          sectionColor="#2b2b34"
           fadeDistance={bedWidth * 6}
           infiniteGrid
         />

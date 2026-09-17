@@ -161,8 +161,17 @@
   gap: 2px;
 }
 
-.layer-row:hover .layer-row__actions {
+.layer-row:hover .layer-row__actions,
+.layer-row--hidden .layer-row__actions {
   display: flex;
+}
+
+/* A hidden layer stays listed but reads as disabled, with its closed-eye
+ * toggle always showing so it's obvious why it's not on the canvas. */
+.layer-row--hidden .layer-row__thumb,
+.layer-row--hidden .layer-row__name,
+.layer-row--hidden .layer-row__icon {
+  opacity: 0.38;
 }
 
 .layer-row__toggle {

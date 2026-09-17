@@ -13,6 +13,7 @@ export const bedPresets: BedPreset[] = [
   { id: 'x1', label: 'Bambu Lab X1', width: 256, height: 256 },
   { id: 'x1c', label: 'Bambu Lab X1 Carbon', width: 256, height: 256 },
   { id: 'x1e', label: 'Bambu Lab X1E', width: 256, height: 256 },
+  { id: 'x2d', label: 'Bambu Lab X2D', width: 256, height: 256 },
   { id: 'h2d', label: 'Bambu Lab H2D', width: 350, height: 320 },
   { id: 'h2s', label: 'Bambu Lab H2S', width: 350, height: 320 },
 ]

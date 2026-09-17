@@ -3,7 +3,7 @@ import {
   Circle,
   Combine,
   Hand,
-  Minus,
+  CircleDashed,
   MousePointer2,
   PenTool,
   Pentagon,
@@ -50,7 +50,7 @@ const drawTools: { id: DrawableTool; label: string; icon: typeof Square }[] = [
   { id: 'circle', label: 'Circle', icon: Circle },
   { id: 'polygon', label: 'Polygon', icon: Pentagon },
   { id: 'star', label: 'Star', icon: Star },
-  { id: 'hole', label: 'Hole', icon: Minus },
+  { id: 'hole', label: 'Hole', icon: CircleDashed },
 ]
 
 const booleanOps: { id: BooleanOp; label: string; icon: typeof Square }[] = [
@@ -86,6 +86,7 @@ export function Canvas2DPane() {
   const [tool, setTool] = useState<Tool>('select')
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const [isSpaceDown, setIsSpaceDown] = useState(false)
+  const [isAltDown, setIsAltDown] = useState(false)
   const [penAnchors, setPenAnchors] = useState<PenAnchor[]>([])
   const [penCursor, setPenCursor] = useState<Point2 | null>(null)
   const [penDraftHandle, setPenDraftHandle] = useState<{
@@ -196,6 +197,7 @@ export function Canvas2DPane() {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement
       const typing = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+      if (e.key === 'Alt') setIsAltDown(true)
       if (e.code === 'Space' && !typing) {
         e.preventDefault()
         setIsSpaceDown(true)
@@ -254,6 +256,7 @@ export function Canvas2DPane() {
     }
     function onKeyUp(e: KeyboardEvent) {
       if (e.code === 'Space') setIsSpaceDown(false)
+      if (e.key === 'Alt') setIsAltDown(false)
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
@@ -298,7 +301,17 @@ export function Canvas2DPane() {
     setGesture({ type: 'pan', startScreen: local, startPan: pan })
   }
 
+  // An inspector field keeps keyboard focus after you click back onto the
+  // canvas (the SVG isn't focusable), which made Backspace/Delete look
+  // broken — the typing guard was correctly refusing to delete shapes while
+  // a text input was still focused. Clicking the canvas now ends that edit.
+  const blurActiveInput = () => {
+    const active = document.activeElement
+    if (active instanceof HTMLElement && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur()
+  }
+
   const handleBackgroundPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    blurActiveInput()
     if (isSpaceDown || tool === 'pan') {
       startPan(e)
       return
@@ -323,6 +336,7 @@ export function Canvas2DPane() {
   }
 
   const handleShapePointerDown = (e: React.PointerEvent<SVGGElement>, id: string) => {
+    blurActiveInput()
     if (isSpaceDown || tool === 'pan') {
       e.stopPropagation()
       startPan(e)
@@ -347,9 +361,9 @@ export function Canvas2DPane() {
 
     const nextSelection = wasAlreadySelected ? selection : [id]
 
-    // Cmd/Ctrl-drag: duplicate first, then drag the copies — the originals
-    // stay put, exactly like Cmd-drag in Figma/Illustrator.
-    if ((e.metaKey || e.ctrlKey) && !layer.locked) {
+    // Option/Alt-drag: duplicate first, then drag the copies — the originals
+    // stay put, exactly like Option-drag in Figma/Illustrator.
+    if (e.altKey && !layer.locked) {
       const newIds = duplicateShapes(nextSelection)
       moveShapesBy(newIds, -10, -10) // duplicateShapes offsets by +10,+10; undo that so the copy starts exactly where the original was
       const freshLayers = useDocumentStore.getState().layers
@@ -610,7 +624,15 @@ export function Canvas2DPane() {
   const draftKind = gesture?.type === 'draft' ? gesture.kind : null
 
   const cursor =
-    isSpaceDown || tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : tool === 'zoom' ? 'zoom-in' : 'crosshair'
+    isSpaceDown || tool === 'pan'
+      ? 'grab'
+      : tool === 'select'
+        ? 'default'
+        : tool === 'zoom'
+          ? isAltDown
+            ? 'zoom-out'
+            : 'zoom-in'
+          : 'crosshair'
   const rulerLengthPx = { width: svgRef.current?.clientWidth ?? 0, height: svgRef.current?.clientHeight ?? 0 }
 
   return (

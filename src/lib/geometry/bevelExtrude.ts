@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Point2 } from '../../types/document'
-import { computeSafeBevel, erodePolygon } from './offset'
+import { computeSafeBevel, erodePolygon, signedArea } from './offset'
 
 // Below this angle between adjacent faces, normals blend smoothly (a
 // rounded fillet reads as glossy-smooth); at or above it, the edge stays
@@ -29,11 +29,16 @@ const BEVEL_SEGMENTS = 8
  * the inputs, so this stays reusable for STL export later too.
  */
 export function buildBeveledGeometry(
-  contour: Point2[],
+  inputContour: Point2[],
   depth: number,
   bevelBottomRequested: number,
   bevelTopRequested: number,
 ): THREE.BufferGeometry {
+  // Wall and cap triangle winding below assumes the same orientation every
+  // primitive shape has (positive signed area). A pen path clicked in the
+  // other direction arrives reversed and would build inside-out — every
+  // face back-face culled, "the sides disappear" — so normalize it first.
+  const contour = signedArea(inputContour) < 0 ? [...inputContour].reverse() : inputContour
   const n = contour.length
   if (n < 3 || depth <= 0) return new THREE.BufferGeometry()
 

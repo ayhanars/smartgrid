@@ -72,7 +72,7 @@ export function RulerTicks({ orientation, lengthPx, zoom, pan }: RulerTicksProps
         ) : (
           <g key={v}>
             <line x1={0} y1={pos} x2={RULER_SIZE} y2={pos} className="ruler-ticks__major" />
-            <text x={2} y={pos - 3} className="ruler-ticks__label" transform={`rotate(-90 2 ${pos - 3})`}>
+            <text x={13} y={pos - 3} className="ruler-ticks__label" transform={`rotate(-90 13 ${pos - 3})`}>
               {label}
             </text>
           </g>

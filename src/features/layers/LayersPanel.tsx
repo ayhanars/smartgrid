@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Circle, Eye, EyeOff, Lock, Minus, Pentagon, Plus, Square, Star, Unlock } from 'lucide-react'
+import { Circle, CircleDashed, Eye, EyeOff, Lock, Pentagon, Plus, Square, Star, Unlock } from 'lucide-react'
 import { useDocumentStore } from '../../state/documentStore'
 import type { ShapeKind, ShapeLayer } from '../../types/document'
 import { contourBounds, regionsToSvgPath } from '../../lib/geometry/primitives'
@@ -10,7 +10,7 @@ const kindIcon: Record<ShapeKind, ReactNode> = {
   circle: <Circle size={13} />,
   polygon: <Pentagon size={13} />,
   star: <Star size={13} />,
-  hole: <Minus size={13} />,
+  hole: <CircleDashed size={13} />,
 }
 
 /** A real scaled-to-fit render of the shape's own outline, not just a flat
@@ -82,7 +82,7 @@ export function LayersPanel() {
           return (
             <div
               key={id}
-              className={`layer-row ${isSelected ? 'layer-row--selected' : ''}`}
+              className={`layer-row ${isSelected ? 'layer-row--selected' : ''} ${layer.visible ? '' : 'layer-row--hidden'}`}
               onClick={(e) => {
                 if (e.shiftKey) {
                   setSelection(isSelected ? selection.filter((sid) => sid !== id) : [...selection, id])
