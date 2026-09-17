@@ -59,6 +59,9 @@ export interface ShapeLayer {
   /** True for a shape drawn with the Hole tool: never rendered as its own
    * solid, instead subtracted from whatever it overlaps in the 3D scene. */
   isHole: boolean
+  /** Membership in a group (see DocumentState.groups): clicking any member
+   * on the canvas selects the whole group, like Figma. */
+  groupId?: string
   polygonSides?: number
   starPoints?: number
   starInnerRatio?: number

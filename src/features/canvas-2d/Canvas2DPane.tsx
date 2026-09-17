@@ -19,7 +19,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
-import { useDocumentStore, shapeWorldBounds, type Guide } from '../../state/documentStore'
+import { useDocumentStore, shapeWorldBounds, expandToGroup, type Guide } from '../../state/documentStore'
 import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../../types/document'
 import type { BooleanOp } from '../../lib/geometry/boolean'
 import { ShapeElement } from './ShapeElement'
@@ -352,14 +352,21 @@ export function Canvas2DPane() {
     const local = getLocalPoint(e)
     svgRef.current?.setPointerCapture(e.pointerId)
     const doc = screenToDoc(local.x, local.y)
-    const wasAlreadySelected = selection.includes(id)
+    // Clicking a grouped shape grabs the whole group; Cmd/Ctrl-click drills
+    // into the single member, like Figma.
+    const clickTargets = e.metaKey || e.ctrlKey ? [id] : expandToGroup(layers, order, id)
+    const wasAlreadySelected = clickTargets.every((tid) => selection.includes(tid))
 
     if (e.shiftKey) {
-      setSelection(wasAlreadySelected ? selection.filter((sid) => sid !== id) : [...selection, id])
+      setSelection(
+        wasAlreadySelected
+          ? selection.filter((sid) => !clickTargets.includes(sid))
+          : Array.from(new Set([...selection, ...clickTargets])),
+      )
       return
     }
 
-    const nextSelection = wasAlreadySelected ? selection : [id]
+    const nextSelection = wasAlreadySelected ? selection : clickTargets
 
     // Option/Alt-drag: duplicate first, then drag the copies — the originals
     // stay put, exactly like Option-drag in Figma/Illustrator.
@@ -520,7 +527,13 @@ export function Canvas2DPane() {
         width: Math.abs(currentDoc.x - startDoc.x),
         height: Math.abs(currentDoc.y - startDoc.y),
       }
-      const hits = order.filter((id) => rectsIntersect(marqueeBounds, shapeWorldBounds(layers[id])))
+      const hits = Array.from(
+        new Set(
+          order
+            .filter((id) => rectsIntersect(marqueeBounds, shapeWorldBounds(layers[id])))
+            .flatMap((id) => expandToGroup(layers, order, id)),
+        ),
+      )
       const merged = gesture.additive ? Array.from(new Set([...gesture.baseSelection, ...hits])) : hits
       setSelection(merged)
       setGesture({ ...gesture, currentScreen: local })

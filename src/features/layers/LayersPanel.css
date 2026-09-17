@@ -166,6 +166,53 @@
   display: flex;
 }
 
+.layer-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: default;
+}
+
+.layer-group:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.layer-group--selected {
+  background: var(--accent-bg);
+  color: var(--text);
+}
+
+.layer-group__chevron {
+  display: inline-flex;
+  width: 16px;
+  color: var(--text-faint);
+}
+
+.layer-group__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.layer-group__count {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.layer-row--nested {
+  margin-left: 18px;
+  border-left: 1px solid var(--border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 /* A hidden layer stays listed but reads as disabled, with its closed-eye
  * toggle always showing so it's obvious why it's not on the canvas. */
 .layer-row--hidden .layer-row__thumb,

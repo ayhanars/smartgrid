@@ -1,0 +1,50 @@
+.layer-context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.layer-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+}
+
+.layer-context-menu button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.layer-context-menu button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.layer-context-menu button kbd {
+  margin-left: auto;
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.layer-context-menu__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.layer-context-menu__danger {
+  color: var(--danger) !important;
+}

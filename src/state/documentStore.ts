@@ -25,8 +25,14 @@ export interface Guide {
   position: number
 }
 
+export interface ShapeGroup {
+  id: string
+  name: string
+}
+
 interface DocumentState {
   layers: Record<string, ShapeLayer>
+  groups: Record<string, ShapeGroup>
   /** Back-to-front draw order (also top-to-bottom in the Layers panel, reversed for display). */
   order: string[]
   selection: string[]
@@ -72,6 +78,17 @@ interface DocumentActions {
   removeGuide: (id: string) => void
   toggleRulersVisible: () => void
   alignShapes: (ids: string[], mode: AlignMode) => void
+  groupShapes: (ids: string[]) => string | null
+  ungroupShapes: (ids: string[]) => void
+  reorderLayer: (id: string, where: 'front' | 'back') => void
+}
+
+/** The ids that a click on `id` should select: every member of its group,
+ * or just itself when it isn't grouped. */
+export function expandToGroup(layers: Record<string, ShapeLayer>, order: string[], id: string): string[] {
+  const groupId = layers[id]?.groupId
+  if (!groupId) return [id]
+  return order.filter((oid) => layers[oid]?.groupId === groupId)
 }
 
 export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom'
@@ -89,6 +106,7 @@ export const useDocumentStore = create<DocumentStore>()(
   temporal(
     (set) => ({
       layers: {},
+      groups: {},
       order: [],
       selection: [],
       bedPresetId: DEFAULT_BED_ID,
@@ -240,20 +258,35 @@ export const useDocumentStore = create<DocumentStore>()(
         set((state) => {
           const layers = { ...state.layers }
           const order = [...state.order]
+          const groups = { ...state.groups }
+          // Copies of grouped shapes land in a fresh group of their own
+          // rather than being folded into the original's.
+          const groupRemap = new Map<string, string>()
           for (const id of ids) {
             const layer = state.layers[id]
             if (!layer) continue
             const newId = generateId()
             newIds.push(newId)
+            let groupId = layer.groupId
+            if (groupId) {
+              let mapped = groupRemap.get(groupId)
+              if (!mapped) {
+                mapped = generateId()
+                groupRemap.set(groupId, mapped)
+                groups[mapped] = { id: mapped, name: `${state.groups[groupId]?.name ?? 'Group'} copy` }
+              }
+              groupId = mapped
+            }
             layers[newId] = {
               ...layer,
               id: newId,
               name: `${layer.name} copy`,
               transform: { ...layer.transform, x: layer.transform.x + 10, y: layer.transform.y + 10 },
+              ...(groupId ? { groupId } : {}),
             }
             order.push(newId)
           }
-          return { layers, order, selection: newIds }
+          return { layers, order, groups, selection: newIds }
         })
         return newIds
       },
@@ -419,6 +452,51 @@ export const useDocumentStore = create<DocumentStore>()(
 
       toggleRulersVisible: () => set((state) => ({ rulersVisible: !state.rulersVisible })),
 
+      groupShapes: (ids) => {
+        const members = ids.filter((id, i) => ids.indexOf(id) === i)
+        if (members.length === 0) return null
+        const groupId = generateId()
+        set((state) => {
+          const layers = { ...state.layers }
+          for (const id of members) {
+            const layer = layers[id]
+            if (layer) layers[id] = { ...layer, groupId }
+          }
+          const groupCount = Object.keys(state.groups).length + 1
+          // Drop any group that this regrouping emptied out.
+          const groups: Record<string, ShapeGroup> = { ...state.groups, [groupId]: { id: groupId, name: `Group ${groupCount}` } }
+          for (const gid of Object.keys(groups)) {
+            if (!Object.values(layers).some((l) => l.groupId === gid)) delete groups[gid]
+          }
+          return { layers, groups, selection: members }
+        })
+        return groupId
+      },
+
+      ungroupShapes: (ids) =>
+        set((state) => {
+          const affectedGroups = new Set(ids.map((id) => state.layers[id]?.groupId).filter((g): g is string => !!g))
+          if (affectedGroups.size === 0) return {}
+          const layers = { ...state.layers }
+          for (const [id, layer] of Object.entries(layers)) {
+            if (layer.groupId && affectedGroups.has(layer.groupId)) {
+              const { groupId: _dropped, ...rest } = layer
+              layers[id] = rest
+            }
+          }
+          const groups = { ...state.groups }
+          for (const gid of affectedGroups) delete groups[gid]
+          return { layers, groups }
+        }),
+
+      reorderLayer: (id, where) =>
+        set((state) => {
+          if (!state.layers[id]) return {}
+          const moving = expandToGroup(state.layers, state.order, id)
+          const rest = state.order.filter((oid) => !moving.includes(oid))
+          return { order: where === 'front' ? [...rest, ...moving] : [...moving, ...rest] }
+        }),
+
       // Figma semantics: with several shapes selected, align them to the
       // selection's own combined bounds; with one, align it to the artboard.
       alignShapes: (ids, mode) =>
@@ -460,7 +538,7 @@ export const useDocumentStore = create<DocumentStore>()(
     {
       // Selection is transient UI state, not something Cmd+Z should walk
       // back through — only the shape data itself belongs in history.
-      partialize: (state) => ({ layers: state.layers, order: state.order }),
+      partialize: (state) => ({ layers: state.layers, order: state.order, groups: state.groups }),
       limit: 100,
     },
   ),

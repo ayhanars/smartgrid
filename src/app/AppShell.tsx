@@ -20,13 +20,17 @@ export function AppShell() {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
 
       const mod = e.metaKey || e.ctrlKey
-      const { selection, removeShapes, setSelection } = useDocumentStore.getState()
+      const { selection, removeShapes, setSelection, groupShapes, ungroupShapes } = useDocumentStore.getState()
 
       if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length) {
         e.preventDefault()
         removeShapes(selection)
       } else if (e.key === 'Escape' && selection.length) {
         setSelection([])
+      } else if (mod && e.key.toLowerCase() === 'g' && selection.length) {
+        e.preventDefault()
+        if (e.shiftKey) ungroupShapes(selection)
+        else groupShapes(selection)
       } else if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         const temporal = useDocumentStore.temporal.getState()
