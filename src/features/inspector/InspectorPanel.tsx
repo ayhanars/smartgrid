@@ -173,6 +173,7 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
   const resizeShape = useDocumentStore((s) => s.resizeShape)
   const moveShapesBy = useDocumentStore((s) => s.moveShapesBy)
   const setColor = useDocumentStore((s) => s.setColor)
+  const setLayerZ = useDocumentStore((s) => s.setLayerZ)
 
   if (!layer) {
     return (
@@ -193,7 +194,19 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
           <Field label="Y" value={bounds.y} suffix="mm" disabled={layer.locked} onChange={(v) => moveShapesBy([layer.id], 0, v - bounds.y)} />
           <Field label="W" value={bounds.width} suffix="mm" disabled={layer.locked} onChange={(v) => resizeShape(layer.id, { ...bounds, width: v })} />
           <Field label="H" value={bounds.height} suffix="mm" disabled={layer.locked} onChange={(v) => resizeShape(layer.id, { ...bounds, height: v })} />
+          <Field
+            label="Z"
+            value={layer.transform.z}
+            suffix="mm"
+            disabled={layer.locked}
+            onChange={(v) => setLayerZ(layer.id, v)}
+          />
         </div>
+        {layer.isHole && (
+          <p className="inspector-note">
+            Print height of this cutter's own bottom — independent of whatever solid it cuts into.
+          </p>
+        )}
       </Section>
 
       <Section title="Appearance">
@@ -207,7 +220,89 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
           ))}
         </div>
       </Section>
+
+      {layer.isHole && <RecessedPocketSection layer={layer} />}
+      {layer.isHole && <HoleSizePresetsSection layer={layer} />}
     </>
+  )
+}
+
+const DEFAULT_FLOOR_THICKNESS_MM = 0.6
+
+function RecessedPocketSection({ layer }: { layer: ShapeLayer }) {
+  const [floorThickness, setFloorThickness] = useState(DEFAULT_FLOOR_THICKNESS_MM)
+  const snapHoleToPocket = useDocumentStore((s) => s.snapHoleToPocket)
+
+  return (
+    <Section title="Recessed Pocket">
+      <Field
+        label="Floor thickness"
+        value={floorThickness}
+        suffix="mm"
+        onChange={(v) => setFloorThickness(Math.max(0, v))}
+      />
+      <p className="inspector-note">
+        Sinks this hole so it stops just short of the bottom of whatever it overlaps — enough to hide a magnet
+        flush without cutting all the way through.
+      </p>
+      <button
+        type="button"
+        className="inspector-export-btn"
+        onClick={() => snapHoleToPocket(layer.id, floorThickness)}
+      >
+        Snap to Recessed Pocket
+      </button>
+    </Section>
+  )
+}
+
+const MAGNET_DIAMETERS_MM = [3, 4, 5, 6, 8, 10, 12]
+const MAGNET_THICKNESSES_MM = [1, 1.5, 2, 3]
+const SCREW_CLEARANCE_MM: { label: string; diameter: number }[] = [
+  { label: 'M2', diameter: 2.4 },
+  { label: 'M3', diameter: 3.4 },
+  { label: 'M4', diameter: 4.5 },
+  { label: 'M5', diameter: 5.5 },
+  { label: 'M6', diameter: 6.6 },
+  { label: 'M8', diameter: 9 },
+]
+
+function HoleSizePresetsSection({ layer }: { layer: ShapeLayer }) {
+  const resizeShape = useDocumentStore((s) => s.resizeShape)
+  const setExtrusionDepth = useDocumentStore((s) => s.setExtrusionDepth)
+
+  const setDiameter = (diameterMM: number) => {
+    const bounds = shapeWorldBounds(layer)
+    resizeShape(layer.id, { ...bounds, width: diameterMM, height: diameterMM })
+  }
+
+  return (
+    <Section title="Size Presets">
+      <p className="inspector-field__label">Magnet diameter</p>
+      <div className="inspector-preset-chips">
+        {MAGNET_DIAMETERS_MM.map((d) => (
+          <button key={d} type="button" className="inspector-preset-chip" onClick={() => setDiameter(d)}>
+            {d}mm
+          </button>
+        ))}
+      </div>
+      <p className="inspector-field__label">Magnet thickness</p>
+      <div className="inspector-preset-chips">
+        {MAGNET_THICKNESSES_MM.map((t) => (
+          <button key={t} type="button" className="inspector-preset-chip" onClick={() => setExtrusionDepth(layer.id, t)}>
+            {t}mm
+          </button>
+        ))}
+      </div>
+      <p className="inspector-field__label">Screw clearance</p>
+      <div className="inspector-preset-chips">
+        {SCREW_CLEARANCE_MM.map(({ label, diameter }) => (
+          <button key={label} type="button" className="inspector-preset-chip" onClick={() => setDiameter(diameter)}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </Section>
   )
 }
 

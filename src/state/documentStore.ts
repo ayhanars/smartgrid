@@ -11,6 +11,13 @@ function generateId() {
   return `shape-${idCounter}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+/** Same bounding-box overlap test the actual 3D hole/solid cut uses (see
+ * ExtrudedShapeMesh) — real XY footprint overlap, not just "on the same
+ * plate". */
+function rectsOverlap(a: Bounds, b: Bounds): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
 export interface Guide {
   id: string
   orientation: 'horizontal' | 'vertical'
@@ -53,6 +60,8 @@ interface DocumentActions {
   setSmartPolish: (id: string, intensity: number) => void
   setBevelBottom: (id: string, amount: number) => void
   setBevelTop: (id: string, amount: number) => void
+  setLayerZ: (id: string, z: number) => void
+  snapHoleToPocket: (id: string, floorThicknessMM: number) => void
   setBedPreset: (id: string) => void
   togglePinnedBedPreset: (id: string) => void
   setCustomBedSize: (width: number, height: number) => void
@@ -91,7 +100,7 @@ export const useDocumentStore = create<DocumentStore>()(
           visible: true,
           locked: false,
           color: '#4d8dff',
-          transform: { x: bounds.x, y: bounds.y, rotation: 0 },
+          transform: { x: bounds.x, y: bounds.y, z: 0, rotation: 0 },
           regions: createShapeRegions(kind, width, height),
           extrusionDepth: 3,
           cornerRadius: 0,
@@ -160,7 +169,7 @@ export const useDocumentStore = create<DocumentStore>()(
           visible: true,
           locked: false,
           color: '#4d8dff',
-          transform: { x: bounds.x, y: bounds.y, rotation: 0 },
+          transform: { x: bounds.x, y: bounds.y, z: 0, rotation: 0 },
           regions: [{ outer: { points: localPoints }, holes: [] }],
           extrusionDepth: 3,
           cornerRadius: 0,
@@ -334,6 +343,48 @@ export const useDocumentStore = create<DocumentStore>()(
           if (!layer) return {}
           return { layers: { ...state.layers, [id]: { ...layer, bevelTop: Math.max(0, amount) } } }
         }),
+
+      setLayerZ: (id, z) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer || layer.locked) return {}
+          return { layers: { ...state.layers, [id]: { ...layer, transform: { ...layer.transform, z: Math.max(0, z) } } } }
+        }),
+
+      // Sinks a hole shape so it stops just short of the BOTTOM of whatever
+      // solids it overlaps in XY, leaving a thin floor — enough to hide a
+      // magnet flush without punching all the way through the part. A
+      // hole's z/depth are otherwise independent of anything underneath it
+      // (never touched by any future auto-stack/floating-shape logic,
+      // which should treat holes as non-physical) — this is the one place
+      // that deliberately moves a hole based on what it overlaps.
+      snapHoleToPocket: (id, floorThicknessMM) => {
+        const TOP_OVERSHOOT_MM = 1
+        set((state) => {
+          const hole = state.layers[id]
+          if (!hole || !hole.isHole || hole.locked) return {}
+          const holeBounds = shapeWorldBounds(hole)
+          const overlapping = state.order
+            .map((oid) => state.layers[oid])
+            .filter(
+              (l): l is ShapeLayer =>
+                !!l && !l.isHole && l.id !== id && rectsOverlap(holeBounds, shapeWorldBounds(l)),
+            )
+          if (overlapping.length === 0) return {}
+
+          const bottomZ = Math.min(...overlapping.map((l) => l.transform.z))
+          const topZ = Math.max(...overlapping.map((l) => l.transform.z + l.extrusionDepth))
+          const newZ = Math.max(0, bottomZ + Math.max(0, floorThicknessMM))
+          const newDepth = Math.max(0.05, topZ + TOP_OVERSHOOT_MM - newZ)
+
+          return {
+            layers: {
+              ...state.layers,
+              [id]: { ...hole, extrusionDepth: newDepth, transform: { ...hole.transform, z: newZ } },
+            },
+          }
+        })
+      },
 
       setBedPreset: (id) => set({ bedPresetId: id }),
 

@@ -25,6 +25,11 @@ export type ShapeKind = 'rect' | 'circle' | 'polygon' | 'star' | 'hole'
 export interface Transform2D {
   x: number
   y: number
+  /** World-space print height (mm) of this shape's own bottom — independent
+   * of everything else on the plate. 0 sits on the bed. A hole's z and
+   * extrusionDepth are what make a recessed pocket possible: the cutter
+   * doesn't have to span the full height of whatever it cuts. */
+  z: number
   rotation: number
 }
 

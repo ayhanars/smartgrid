@@ -1,14 +1,22 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import type * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
 import { GizmoHelper, GizmoViewport, Grid, OrbitControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import { Box, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
-import { useDocumentStore } from '../../state/documentStore'
+import { shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
+import type { Bounds } from '../../types/document'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
+import { buildLayerGeometries } from '../../lib/geometry/layerGeometry'
+import { cutHolesFromSolid } from '../../lib/geometry/holeCut'
 import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import './Viewport3DPane.css'
+
+function rectsOverlap(a: Bounds, b: Bounds): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
 
 export function Viewport3DPane() {
   const [wireframe, setWireframe] = useState(false)
@@ -34,6 +42,50 @@ export function Viewport3DPane() {
       setSelection([id])
     }
   }
+
+  // A hole is a cutting tool, not a printable shape: any solid whose XY
+  // footprint overlaps a hole's gets that hole's volume subtracted from it
+  // via a real 3D boolean (see holeCut.ts), independent of the hole's own
+  // Z/depth. Solids with nothing overlapping skip this entirely and render
+  // through ExtrudedShapeMesh's normal (uncut) path.
+  const cutGeometriesById = useMemo(() => {
+    const result: Record<string, THREE.BufferGeometry[]> = {}
+    const holeIds = order.filter((id) => layers[id]?.isHole && layers[id]?.visible)
+    if (holeIds.length === 0) return result
+
+    const toWorld = (layer: (typeof layers)[string]) => ({
+      worldX: (layer.transform.x - artboardWidth / 2) * SCENE_SCALE,
+      worldY: layer.transform.z * SCENE_SCALE,
+      worldZ: (layer.transform.y - artboardHeight / 2) * SCENE_SCALE,
+    })
+
+    for (const id of order) {
+      const layer = layers[id]
+      if (!layer || layer.isHole || !layer.visible) continue
+      const solidBounds = shapeWorldBounds(layer)
+      const overlappingHoles = holeIds.filter((hid) => hid !== id && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
+      if (overlappingHoles.length === 0) continue
+
+      const solidWorld = toWorld(layer)
+      const holeGeoms = overlappingHoles.flatMap((hid) => {
+        const holeLayer = layers[hid]
+        const holeWorld = toWorld(holeLayer)
+        return buildLayerGeometries(holeLayer, SCENE_SCALE).map((geometry) => ({ geometry, ...holeWorld }))
+      })
+
+      try {
+        result[id] = buildLayerGeometries(layer, SCENE_SCALE).map((geo) =>
+          cutHolesFromSolid({ geometry: geo, ...solidWorld }, holeGeoms),
+        )
+      } catch (err) {
+        // CSG on arbitrary/degenerate geometry is inherently best-effort —
+        // fall back to rendering this one shape uncut rather than taking
+        // the whole viewport down with it.
+        console.error(`Hole cut failed for shape ${id}, rendering it uncut instead:`, err)
+      }
+    }
+    return result
+  }, [layers, order, artboardWidth, artboardHeight])
 
   return (
     <div className="viewport-3d">
@@ -62,6 +114,7 @@ export function Viewport3DPane() {
               onSelect={handleSelect}
               artboardWidth={artboardWidth}
               artboardHeight={artboardHeight}
+              cutGeometries={cutGeometriesById[id]}
             />
           )
         })}
