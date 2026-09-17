@@ -2,7 +2,7 @@ import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
 import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../types/document'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
-import { DEFAULT_BED_ID } from '../lib/geometry/bedPresets'
+import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
 import { applyBooleanOp, type BooleanOp } from '../lib/geometry/boolean'
 
 let idCounter = 0
@@ -71,6 +71,16 @@ interface DocumentActions {
   updateGuidePosition: (id: string, position: number) => void
   removeGuide: (id: string) => void
   toggleRulersVisible: () => void
+  alignShapes: (ids: string[], mode: AlignMode) => void
+}
+
+export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom'
+
+/** Current plate size in mm — the artboard every single-shape alignment
+ * snaps to. */
+export function artboardSize(state: Pick<DocumentState, 'bedPresetId' | 'customBedWidth' | 'customBedHeight'>) {
+  const preset = getBedPreset(state.bedPresetId)
+  return { width: preset?.width ?? state.customBedWidth, height: preset?.height ?? state.customBedHeight }
 }
 
 export type DocumentStore = DocumentState & DocumentActions
@@ -408,6 +418,44 @@ export const useDocumentStore = create<DocumentStore>()(
       removeGuide: (id) => set((state) => ({ guides: state.guides.filter((g) => g.id !== id) })),
 
       toggleRulersVisible: () => set((state) => ({ rulersVisible: !state.rulersVisible })),
+
+      // Figma semantics: with several shapes selected, align them to the
+      // selection's own combined bounds; with one, align it to the artboard.
+      alignShapes: (ids, mode) =>
+        set((state) => {
+          const targets = ids.map((id) => state.layers[id]).filter((l): l is ShapeLayer => !!l && !l.locked)
+          if (targets.length === 0) return {}
+          const boundsById = new Map(targets.map((l) => [l.id, shapeWorldBounds(l)] as const))
+          let ref: Bounds
+          if (targets.length > 1) {
+            const all = [...boundsById.values()]
+            const minX = Math.min(...all.map((b) => b.x))
+            const minY = Math.min(...all.map((b) => b.y))
+            const maxX = Math.max(...all.map((b) => b.x + b.width))
+            const maxY = Math.max(...all.map((b) => b.y + b.height))
+            ref = { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+          } else {
+            const { width, height } = artboardSize(state)
+            ref = { x: 0, y: 0, width, height }
+          }
+          const layers = { ...state.layers }
+          for (const layer of targets) {
+            const b = boundsById.get(layer.id)!
+            let dx = 0
+            let dy = 0
+            if (mode === 'left') dx = ref.x - b.x
+            else if (mode === 'hcenter') dx = ref.x + ref.width / 2 - (b.x + b.width / 2)
+            else if (mode === 'right') dx = ref.x + ref.width - (b.x + b.width)
+            else if (mode === 'top') dy = ref.y - b.y
+            else if (mode === 'vcenter') dy = ref.y + ref.height / 2 - (b.y + b.height / 2)
+            else dy = ref.y + ref.height - (b.y + b.height)
+            layers[layer.id] = {
+              ...layer,
+              transform: { ...layer.transform, x: layer.transform.x + dx, y: layer.transform.y + dy },
+            }
+          }
+          return { layers }
+        }),
     }),
     {
       // Selection is transient UI state, not something Cmd+Z should walk

@@ -344,6 +344,20 @@
   background: var(--bg-hover);
 }
 
+.inspector-align-row {
+  display: flex;
+  gap: 10px;
+}
+
+.inspector-align-group {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
 .inspector-preset-chips {
   display: flex;
   flex-wrap: wrap;

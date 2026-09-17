@@ -1,6 +1,22 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Copy, Pin, Trash2 } from 'lucide-react'
-import { shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
+import {
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Pin,
+  Trash2,
+} from 'lucide-react'
+import { shapeWorldBounds, useDocumentStore, type AlignMode } from '../../state/documentStore'
+import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
+import { writeBinaryStl } from '../../lib/export/stl'
+import { write3mf } from '../../lib/export/threeMf'
+import { IconButton } from '../../components/IconButton'
 import type { ShapeLayer } from '../../types/document'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
 import { computeSafeBevel } from '../../lib/geometry/offset'
@@ -48,6 +64,7 @@ export function InspectorPanel() {
 
       <div className="inspector-panel__body">
         <CollapsibleGroup title="Design" defaultOpen>
+          {selection.length > 0 && <AlignmentSection ids={selection} />}
           <DesignTab layer={selectedLayer} multiCount={selection.length} />
         </CollapsibleGroup>
         <CollapsibleGroup title="3D" defaultOpen>
@@ -224,6 +241,39 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
       {layer.isHole && <RecessedPocketSection layer={layer} />}
       {layer.isHole && <HoleSizePresetsSection layer={layer} />}
     </>
+  )
+}
+
+const ALIGN_ACTIONS: { mode: AlignMode; label: string; icon: typeof AlignStartVertical }[] = [
+  { mode: 'left', label: 'Align left', icon: AlignStartVertical },
+  { mode: 'hcenter', label: 'Align horizontal centers', icon: AlignCenterVertical },
+  { mode: 'right', label: 'Align right', icon: AlignEndVertical },
+  { mode: 'top', label: 'Align top', icon: AlignStartHorizontal },
+  { mode: 'vcenter', label: 'Align vertical centers', icon: AlignCenterHorizontal },
+  { mode: 'bottom', label: 'Align bottom', icon: AlignEndHorizontal },
+]
+
+function AlignmentSection({ ids }: { ids: string[] }) {
+  const alignShapes = useDocumentStore((s) => s.alignShapes)
+  return (
+    <Section title="Alignment" action={<span className="inspector-section__hint">{ids.length > 1 ? 'to selection' : 'to artboard'}</span>}>
+      <div className="inspector-align-row">
+        <div className="inspector-align-group">
+          {ALIGN_ACTIONS.slice(0, 3).map(({ mode, label, icon: Icon }) => (
+            <IconButton key={mode} size="md" aria-label={label} onClick={() => alignShapes(ids, mode)}>
+              <Icon size={16} />
+            </IconButton>
+          ))}
+        </div>
+        <div className="inspector-align-group">
+          {ALIGN_ACTIONS.slice(3).map(({ mode, label, icon: Icon }) => (
+            <IconButton key={mode} size="md" aria-label={label} onClick={() => alignShapes(ids, mode)}>
+              <Icon size={16} />
+            </IconButton>
+          ))}
+        </div>
+      </div>
+    </Section>
   )
 }
 
@@ -451,18 +501,39 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
 }
 
 function ExportTab() {
+  const layers = useDocumentStore((s) => s.layers)
+  const order = useDocumentStore((s) => s.order)
+  const solidCount = order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible).length
+  const colorCount = new Set(order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible).map((id) => layers[id].color)).size
+
+  const exportAs = (format: '3mf' | 'stl') => {
+    const meshes = buildExportMeshes(layers, order)
+    if (meshes.length === 0) return
+    if (format === '3mf') downloadBlob(write3mf(meshes), 'smartgrid.3mf', 'model/3mf')
+    else downloadBlob(writeBinaryStl(meshes), 'smartgrid.stl', 'model/stl')
+  }
+
   return (
     <>
       <Section title="Format">
         <div className="inspector-export-buttons">
-          <button type="button" className="inspector-export-btn inspector-export-btn--primary" disabled>
-            Export STL
-          </button>
-          <button type="button" className="inspector-export-btn" disabled>
+          <button
+            type="button"
+            className="inspector-export-btn inspector-export-btn--primary"
+            disabled={solidCount === 0}
+            onClick={() => exportAs('3mf')}
+          >
             Export 3MF
           </button>
+          <button type="button" className="inspector-export-btn" disabled={solidCount === 0} onClick={() => exportAs('stl')}>
+            Export STL
+          </button>
         </div>
-        <p className="inspector-note">Not wired yet — needs the 3D extrusion engine.</p>
+        <p className="inspector-note">
+          {solidCount === 0
+            ? 'Draw a solid shape to export.'
+            : `${solidCount} solid${solidCount === 1 ? '' : 's'}, ${colorCount} color${colorCount === 1 ? '' : 's'} — holes are already cut. 3MF keeps each shape's color as its own filament for Bambu Studio; STL is geometry only.`}
+        </p>
       </Section>
     </>
   )
