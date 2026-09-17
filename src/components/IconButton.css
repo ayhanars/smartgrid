@@ -1,10 +1,57 @@
 .icon-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
   transition: background 0.12s ease, color 0.12s ease;
+}
+
+.icon-button__tooltip {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: #050506;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.1s ease 0.35s, visibility 0s linear 0.35s;
+  z-index: 20;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.icon-button__tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #050506;
+}
+
+.icon-button__tooltip-shortcut {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.icon-button:hover .icon-button__tooltip,
+.icon-button:focus-visible .icon-button__tooltip {
+  opacity: 1;
+  visibility: visible;
 }
 
 .icon-button--md {

@@ -18,6 +18,7 @@
   right: 0;
   height: 20px;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
 }
 
 .canvas-2d__ruler--left {
@@ -26,6 +27,33 @@
   bottom: 0;
   width: 20px;
   border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.canvas-2d__ruler-left-ticks {
+  position: absolute;
+  left: 0;
+}
+
+.ruler-ticks {
+  display: block;
+  pointer-events: none;
+}
+
+.ruler-ticks__minor {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.ruler-ticks__major {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+}
+
+.ruler-ticks__label {
+  fill: var(--text-faint);
+  font-size: 9px;
+  font-family: var(--mono);
 }
 
 .canvas-2d__svg {
@@ -173,6 +201,20 @@
   padding: 4px 8px;
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.canvas-2d__zoom-value {
+  min-width: 34px;
+  border-radius: var(--radius-sm);
+  padding: 2px 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-2d__zoom-value:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .canvas-2d__status {

@@ -34,6 +34,7 @@ import {
 import { createShapeRegions, pointsToSvgPath } from '../../lib/geometry/primitives'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
 import { flattenPenAnchors, type PenAnchor } from '../../lib/geometry/pen'
+import { RulerTicks } from './RulerTicks'
 import './Canvas2DPane.css'
 
 const MIN_ZOOM = 0.05
@@ -125,20 +126,32 @@ export function Canvas2DPane() {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top }
   }
 
-  const fitToView = useCallback(() => {
+  const zoomToBounds = useCallback((bounds: Bounds, padding = 60) => {
     const svg = svgRef.current
     if (!svg) return
     const rect = svg.getBoundingClientRect()
-    const padding = 60
     const availW = Math.max(50, rect.width - padding * 2)
     const availH = Math.max(50, rect.height - padding * 2)
-    const nextZoom = clamp(Math.min(availW / ARTBOARD_WIDTH, availH / ARTBOARD_HEIGHT), MIN_ZOOM, MAX_ZOOM)
+    const w = Math.max(1, bounds.width)
+    const h = Math.max(1, bounds.height)
+    const nextZoom = clamp(Math.min(availW / w, availH / h), MIN_ZOOM, MAX_ZOOM)
     setZoom(nextZoom)
     setPan({
-      x: (rect.width - ARTBOARD_WIDTH * nextZoom) / 2,
-      y: (rect.height - ARTBOARD_HEIGHT * nextZoom) / 2,
+      x: rect.width / 2 - (bounds.x + w / 2) * nextZoom,
+      y: rect.height / 2 - (bounds.y + h / 2) * nextZoom,
     })
-  }, [ARTBOARD_WIDTH, ARTBOARD_HEIGHT])
+  }, [])
+
+  const fitToView = useCallback(() => {
+    zoomToBounds({ x: 0, y: 0, width: ARTBOARD_WIDTH, height: ARTBOARD_HEIGHT })
+  }, [zoomToBounds, ARTBOARD_WIDTH, ARTBOARD_HEIGHT])
+
+  const zoomToSelection = useCallback(() => {
+    const bounds = unionBounds(
+      selection.map((id) => layers[id]).filter((l): l is ShapeLayer => !!l).map(shapeWorldBounds),
+    )
+    if (bounds) zoomToBounds(bounds, 100)
+  }, [zoomToBounds, selection, layers])
 
   useLayoutEffect(() => {
     fitToView()
@@ -185,15 +198,21 @@ export function Canvas2DPane() {
         setIsSpaceDown(true)
       }
       const mod = e.metaKey || e.ctrlKey
-      if (mod && (e.key === '0')) {
-        e.preventDefault()
-        fitToView()
-      } else if (mod && (e.key === '=' || e.key === '+')) {
+      if (!mod && e.shiftKey && (e.key === '=' || e.key === '+') && !typing) {
         e.preventDefault()
         zoomAtCenter(1.2)
-      } else if (mod && e.key === '-') {
+      } else if (!mod && e.shiftKey && (e.key === '-' || e.key === '_') && !typing) {
         e.preventDefault()
         zoomAtCenter(1 / 1.2)
+      } else if (!mod && e.shiftKey && (e.key === '1' || e.key === '!') && !typing) {
+        e.preventDefault()
+        fitToView()
+      } else if (!mod && e.shiftKey && (e.key === '2' || e.key === '@') && !typing) {
+        e.preventDefault()
+        zoomToSelection()
+      } else if (!mod && !e.shiftKey && e.key.toLowerCase() === 'h' && !typing) {
+        e.preventDefault()
+        setTool('pan')
       } else if (mod && e.key.toLowerCase() === 'r' && !typing) {
         e.preventDefault()
         toggleRulersVisible()
@@ -225,17 +244,36 @@ export function Canvas2DPane() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [zoom, pan, fitToView, toggleRulersVisible, pasteShapes, tool])
+  }, [zoom, pan, fitToView, zoomToSelection, toggleRulersVisible, pasteShapes, tool])
 
-  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
-    e.preventDefault()
-    const local = getLocalPoint(e)
-    const docPoint = screenToDoc(local.x, local.y)
-    const factor = Math.exp(-e.deltaY * 0.0015)
-    const nextZoom = clamp(zoom * factor, MIN_ZOOM, MAX_ZOOM)
-    setZoom(nextZoom)
-    setPan({ x: local.x - docPoint.x * nextZoom, y: local.y - docPoint.y * nextZoom })
-  }
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+    // Attached as a real native listener (not React's onWheel) so
+    // preventDefault reliably works — React can register its root wheel
+    // listener as passive, which silently no-ops preventDefault from a JSX
+    // handler in some browsers.
+    function onWheel(e: WheelEvent) {
+      e.preventDefault()
+      // Trackpad pinch (browsers report it as wheel + ctrlKey) or an
+      // explicit Cmd/Ctrl held while scrolling zooms; a plain scroll —
+      // mouse wheel or a two-finger trackpad swipe — pans instead, same as
+      // every design tool.
+      if (e.ctrlKey || e.metaKey) {
+        const rect = svg!.getBoundingClientRect()
+        const local = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+        const docPoint = screenToDoc(local.x, local.y)
+        const factor = Math.exp(-e.deltaY * 0.0015)
+        const nextZoom = clamp(zoom * factor, MIN_ZOOM, MAX_ZOOM)
+        setZoom(nextZoom)
+        setPan({ x: local.x - docPoint.x * nextZoom, y: local.y - docPoint.y * nextZoom })
+      } else {
+        setPan((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }))
+      }
+    }
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheel)
+  }, [zoom, screenToDoc])
 
   const startPan = (e: React.PointerEvent) => {
     const local = getLocalPoint(e)
@@ -526,13 +564,20 @@ export function Canvas2DPane() {
   const draftKind = gesture?.type === 'draft' ? gesture.kind : null
 
   const cursor = isSpaceDown || tool === 'pan' ? 'grab' : tool === 'select' ? 'default' : 'crosshair'
+  const rulerLengthPx = { width: svgRef.current?.clientWidth ?? 0, height: svgRef.current?.clientHeight ?? 0 }
 
   return (
     <div className="canvas-2d">
       {rulersVisible && (
         <>
-          <div className="canvas-2d__ruler canvas-2d__ruler--top" onPointerDown={(e) => handleRulerPointerDown(e, 'horizontal')} />
-          <div className="canvas-2d__ruler canvas-2d__ruler--left" onPointerDown={(e) => handleRulerPointerDown(e, 'vertical')} />
+          <div className="canvas-2d__ruler canvas-2d__ruler--top" onPointerDown={(e) => handleRulerPointerDown(e, 'horizontal')}>
+            <RulerTicks orientation="horizontal" lengthPx={rulerLengthPx.width} zoom={zoom} pan={pan} />
+          </div>
+          <div className="canvas-2d__ruler canvas-2d__ruler--left" onPointerDown={(e) => handleRulerPointerDown(e, 'vertical')}>
+            <div className="canvas-2d__ruler-left-ticks" style={{ top: rulerSize }}>
+              <RulerTicks orientation="vertical" lengthPx={rulerLengthPx.height} zoom={zoom} pan={pan} />
+            </div>
+          </div>
         </>
       )}
 
@@ -550,7 +595,6 @@ export function Canvas2DPane() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onWheel={handleWheel}
       >
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
           <rect className="canvas-2d__artboard" x={0} y={0} width={ARTBOARD_WIDTH} height={ARTBOARD_HEIGHT} />
@@ -654,7 +698,7 @@ export function Canvas2DPane() {
         <IconButton size="md" active={tool === 'select'} aria-label="Select" onClick={() => setTool('select')}>
           <MousePointer2 size={16} />
         </IconButton>
-        <IconButton size="md" active={tool === 'pan'} aria-label="Pan" onClick={() => setTool('pan')}>
+        <IconButton size="md" active={tool === 'pan'} aria-label="Pan" shortcut="H" onClick={() => setTool('pan')}>
           <Hand size={16} />
         </IconButton>
         <IconButton size="md" aria-label="Artboard" disabled>
@@ -674,11 +718,18 @@ export function Canvas2DPane() {
       </div>
 
       <div className="canvas-2d__zoom">
-        <IconButton size="sm" aria-label="Zoom out" onClick={() => zoomAtCenter(1 / 1.2)}>
+        <IconButton size="sm" aria-label="Zoom out" shortcut="⇧-" onClick={() => zoomAtCenter(1 / 1.2)}>
           <ZoomOut size={14} />
         </IconButton>
-        <span>{Math.round(zoom * 100)}%</span>
-        <IconButton size="sm" aria-label="Zoom in" onClick={() => zoomAtCenter(1.2)}>
+        <button
+          type="button"
+          className="canvas-2d__zoom-value"
+          title="Reset to 100%"
+          onClick={() => zoomAtCenter(1 / zoom)}
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <IconButton size="sm" aria-label="Zoom in" shortcut="⇧+" onClick={() => zoomAtCenter(1.2)}>
           <ZoomIn size={14} />
         </IconButton>
       </div>

@@ -41,12 +41,20 @@ export function flattenPenAnchors(anchors: PenAnchor[], closed: boolean): Point2
   for (let i = 0; i < segmentCount; i++) {
     const a = anchors[i]
     const b = anchors[(i + 1) % anchors.length]
+    // The closing segment of a closed path wraps back to anchors[0], whose
+    // point is already result[0] — every consumer of a contour (erodePolygon,
+    // triangulateShape, the primitive shapes) treats the point list as
+    // implicitly closed, so appending that point again here would leave a
+    // bogus zero-length closing edge that corrupts bevel erosion on concave
+    // paths (an L-shape's inner corner, say).
+    const isClosingSegment = closed && i === segmentCount - 1
     if (!a.handleOut && !b.handleIn) {
-      result.push(b.point)
+      if (!isClosingSegment) result.push(b.point)
     } else {
       const p1 = a.handleOut ?? a.point
       const p2 = b.handleIn ?? b.point
-      for (let s = 1; s <= CURVE_SEGMENTS; s++) {
+      const lastStep = isClosingSegment ? CURVE_SEGMENTS - 1 : CURVE_SEGMENTS
+      for (let s = 1; s <= lastStep; s++) {
         result.push(cubicBezierPoint(a.point, p1, p2, b.point, s / CURVE_SEGMENTS))
       }
     }

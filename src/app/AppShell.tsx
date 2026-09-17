@@ -38,6 +38,19 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  useEffect(() => {
+    // Browsers report a trackpad pinch as a wheel event with ctrlKey set,
+    // and left un-prevented it zooms the whole page instead of the canvas
+    // underneath — block that globally so a pinch anywhere in the app
+    // never escapes into a native browser zoom; Canvas2DPane still handles
+    // pinch/Cmd-scroll itself to zoom the artboard.
+    function onWheel(e: WheelEvent) {
+      if (e.ctrlKey) e.preventDefault()
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [])
+
   return (
     <div className="app-shell">
       <TopBar

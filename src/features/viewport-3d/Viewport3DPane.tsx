@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { GizmoHelper, GizmoViewport, Grid, OrbitControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
-import { Maximize, Scan, ZoomIn, ZoomOut } from 'lucide-react'
+import { Box, Maximize, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
 import { useDocumentStore } from '../../state/documentStore'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
@@ -81,7 +81,7 @@ export function Viewport3DPane() {
 
       <div className="viewport-3d__controls">
         <IconButton size="sm" active={wireframe} aria-label="Toggle wireframe" onClick={() => setWireframe((v) => !v)}>
-          <Scan size={15} />
+          <Box size={15} />
         </IconButton>
         <IconButton size="sm" aria-label="Reset view" onClick={() => controlsRef.current?.reset()}>
           <Maximize size={15} />
