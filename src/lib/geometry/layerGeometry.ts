@@ -1,5 +1,7 @@
 import * as THREE from 'three'
-import type { ShapeLayer } from '../../types/document'
+import type { Point2, ShapeLayer } from '../../types/document'
+import { contourBounds } from './primitives'
+import { rotatedLocalPoints } from './layerBounds'
 import { roundPolygonCorners, smartPolishCorners } from './rounding'
 import { buildBeveledGeometry } from './bevelExtrude'
 import { buildSimpleRegionGeometry } from './multiRegionExtrude'
@@ -69,18 +71,28 @@ function effectiveContour(layer: ShapeLayer) {
  * geometry used for normal rendering — shared with the CSG hole-cut path
  * and the exporter so a hole/solid brush is built exactly the same way a
  * plain mesh would be, orientation included. */
-export function buildLayerGeometries(layer: ShapeLayer, scale: number): THREE.BufferGeometry[] {
+export interface LayerGeometryOptions {
+  /** Subdivide faces at about this step (mm) — see BeveledGeometryOptions. */
+  tessellate?: number
+}
+
+/** The face subdivision a perforated body is built with. */
+export function perforationTessellation(layer: ShapeLayer): number | undefined {
+  const perforation = !layer.isHole ? layer.perforation : undefined
+  return perforation ? Math.min(2.5, Math.max(1, perforation.spacing / 2)) : undefined
+}
+
+export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: LayerGeometryOptions = {}): THREE.BufferGeometry[] {
   const depth = Math.max(0.2, layer.extrusionDepth)
   const contour = effectiveContour(layer)
 
   let geometries: THREE.BufferGeometry[]
   if (contour) {
-    const perforation = !layer.isHole ? layer.perforation : undefined
     const geo = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop, {
       flare: layer.isHole && (layer.bevelMode ?? 'rim') === 'rim',
       texture: layer.texture ?? null,
       textureSign: layer.isHole ? 1 : -1,
-      tessellate: perforation ? Math.min(2.5, Math.max(1, perforation.spacing / 2)) : undefined,
+      tessellate: options.tessellate ?? perforationTessellation(layer),
     })
     geo.scale(scale, scale, scale)
     geometries = [geo]
@@ -93,15 +105,34 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number): THREE.Bu
   })
 }
 
+/** A hole layer's footprint rings expressed in `solid`'s own unrotated
+ * local frame (the frame its geometry and cutters are built in): world
+ * XY, then undo the solid's spin about its footprint center. */
+function holeFootprintsInLocalFrame(solid: ShapeLayer, hole: ShapeLayer): Point2[][] {
+  const all = solid.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+  const bounds = contourBounds(all)
+  const cx = bounds.x + bounds.width / 2
+  const cy = bounds.y + bounds.height / 2
+  const rad = (-solid.transform.rotation * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const toLocal = (p: Point2): Point2 => {
+    const x = p.x - solid.transform.x - cx
+    const y = p.y - solid.transform.y - cy
+    return { x: cx + x * cos - y * sin, y: cy + x * sin + y * cos }
+  }
+  return hole.regions.map((r) => rotatedLocalPoints(hole, r.outer.points).map((p) => toLocal({ x: p.x + hole.transform.x, y: p.y + hole.transform.y })))
+}
+
 /** The shape's own perforation cutter (real holes through its walls/top),
  * in the same frame and orientation as `buildLayerGeometries` — subtract
  * it like any hole. Null when the shape has no perforation. */
-export function buildLayerCutters(layer: ShapeLayer, scale: number): THREE.BufferGeometry[] {
+export function buildLayerCutters(layer: ShapeLayer, scale: number, cavities: ShapeLayer[] = []): THREE.BufferGeometry[] {
   if (!layer.perforation || layer.isHole) return []
   const contour = effectiveContour(layer)
   if (!contour) return []
   const depth = Math.max(0.2, layer.extrusionDepth)
-  const cutter = buildPerforationCutter(contour, depth, layer.perforation)
+  const cutter = buildPerforationCutter(contour, depth, layer.perforation, cavities.flatMap((hole) => holeFootprintsInLocalFrame(layer, hole)))
   if (!cutter) return []
   cutter.scale(scale, scale, scale)
   // Same bake as the body: derive it from the body's own (unscaled) mesh.

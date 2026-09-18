@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three'
 import type { Bounds, ShapeLayer } from '../../types/document'
 import { shapeWorldBounds } from '../../state/documentStore'
-import { buildLayerCutters, buildLayerGeometries } from '../../lib/geometry/layerGeometry'
+import { buildLayerCutters, buildLayerGeometries, perforationTessellation } from '../../lib/geometry/layerGeometry'
 import { cutHolesAsync, type CsgJob } from '../../lib/geometry/csgClient'
 import type { PositionedGeometry } from '../../lib/geometry/holeCut'
 import { SCENE_SCALE } from './sceneScale'
@@ -83,13 +83,17 @@ export function useCutGeometries(
       let job = builtCache.current.get(key)
       if (!job) {
         const world = toWorld(layer)
+        const holeLayers = overlappingHoles.map((hid) => layers[hid])
+        // Cavities go first and, on a perforated body, are built at the
+        // same subdivision: a cavity's few huge faces split against tens
+        // of thousands of drilled-wall triangles takes ~40 s instead of 2.
+        const tessellate = perforationTessellation(layer)
         const holes: PositionedGeometry[] = [
-          ...buildLayerCutters(layer, SCENE_SCALE).map((geometry) => ({ geometry, ...world })),
-          ...overlappingHoles.flatMap((hid) => {
-            const holeLayer = layers[hid]
+          ...holeLayers.flatMap((holeLayer) => {
             const holeWorld = toWorld(holeLayer)
-            return buildLayerGeometries(holeLayer, SCENE_SCALE).map((geometry) => ({ geometry, ...holeWorld }))
+            return buildLayerGeometries(holeLayer, SCENE_SCALE, { tessellate }).map((geometry) => ({ geometry, ...holeWorld }))
           }),
+          ...buildLayerCutters(layer, SCENE_SCALE, holeLayers).map((geometry) => ({ geometry, ...world })),
         ]
         if (holes.length === 0) continue
         job = { key, bodies: buildLayerGeometries(layer, SCENE_SCALE), holes, world }

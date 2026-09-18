@@ -719,23 +719,32 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
   if (!supported) return null
   return (
     <Section
-      title="Perforation"
+      title="Holes in the walls"
       action={
         perf ? (
           <button type="button" className="inspector-section__hint inspector-section__hint--button" onClick={() => setPerforation(layer.id, null)}>
             Remove
           </button>
         ) : (
-          <span className="inspector-section__hint">holes</span>
+          <span className="inspector-section__hint">basket, grille</span>
         )
       }
     >
       {!perf ? (
         <>
-          <button type="button" className="inspector-export-btn" onClick={() => patch({})}>
-            Drill a pattern of holes
+          <button
+            type="button"
+            className="inspector-export-btn"
+            onClick={() => {
+              // Start with a plain margin at the floor and the rim, like a
+              // printed basket: holes right at an edge print badly.
+              const margin = layer.extrusionDepth >= 12 ? 3 : 0
+              patch({ wallFrom: margin, wallTo: layer.extrusionDepth - margin })
+            }}
+          >
+            Add a grid of holes
           </button>
-          <p className="inspector-note">Evenly spaced real holes through the walls or the top — a basket, a speaker grille, a soap dish.</p>
+          <p className="inspector-note">Evenly spaced round holes through the side walls. Hollow the shape out first for a basket; the holes stop at the cavity.</p>
         </>
       ) : (
         <>
@@ -779,7 +788,7 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
           </div>
           <div className="inspector-preset-chips">
             <button type="button" className={`inspector-preset-chip ${perf.depth == null ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ depth: null })}>
-              Right through
+              Through the wall
             </button>
             <button type="button" className={`inspector-preset-chip ${perf.depth != null ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ depth: perf.depth ?? 2 })}>
               To a depth
@@ -815,7 +824,7 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
             </div>
           )}
           <p className="inspector-note">
-            Holes never straddle a corner; on a hollowed shape "right through" opens the walls into the cavity. Keep spacing at least a nozzle width or two above the hole size.
+            Holes never straddle a corner. "Through the wall" stops at a hollowed cavity, or goes right through a solid block. Keep spacing at least a nozzle width or two above the hole size.
           </p>
         </>
       )}

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { ShapeLayer } from '../../types/document'
 import { shapeWorldBounds } from '../../state/documentStore'
-import { buildLayerCutters, buildLayerGeometries } from '../geometry/layerGeometry'
+import { buildLayerCutters, buildLayerGeometries, perforationTessellation } from '../geometry/layerGeometry'
 import { cutHolesAsync } from '../geometry/csgClient'
 
 export interface ExportMesh {
@@ -37,13 +37,15 @@ export async function buildExportMeshes(layers: Record<string, ShapeLayer>, orde
     const solidBounds = shapeWorldBounds(layer)
     const overlapping = holeIds.filter((hid) => rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
     const solidWorld = toWorld(layer)
+    const holeLayers = overlapping.map((hid) => layers[hid])
+    const tessellate = perforationTessellation(layer)
+    // Same order and subdivision as the viewport (see useCutGeometries).
     const holeGeoms = [
-      ...buildLayerCutters(layer, 1).map((geometry) => ({ geometry, ...solidWorld })),
-      ...overlapping.flatMap((hid) => {
-        const hole = layers[hid]
+      ...holeLayers.flatMap((hole) => {
         const w = toWorld(hole)
-        return buildLayerGeometries(hole, 1).map((geometry) => ({ geometry, ...w }))
+        return buildLayerGeometries(hole, 1, { tessellate }).map((geometry) => ({ geometry, ...w }))
       }),
+      ...buildLayerCutters(layer, 1, holeLayers).map((geometry) => ({ geometry, ...solidWorld })),
     ]
 
     for (const geo of buildLayerGeometries(layer, 1)) {

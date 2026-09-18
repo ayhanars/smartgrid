@@ -57,13 +57,41 @@ function centersAlong(length: number, size: number, spacing: number, stagger: bo
   return out.map((c) => c + spacing / 2).filter((c) => c + size / 2 <= length)
 }
 
+/** Distance along the ray (origin, dir) to the nearest crossing of any
+ * ring's edge beyond `minT`, or null when it hits nothing. */
+function rayToRings(origin: Point2, dir: Point2, rings: Point2[][], minT: number): number | null {
+  let best: number | null = null
+  for (const ring of rings) {
+    const n = ring.length
+    for (let i = 0; i < n; i++) {
+      const a = ring[i]
+      const b = ring[(i + 1) % n]
+      const ex = b.x - a.x
+      const ey = b.y - a.y
+      const denom = dir.x * ey - dir.y * ex
+      if (Math.abs(denom) < 1e-12) continue
+      const wx = a.x - origin.x
+      const wy = a.y - origin.y
+      const t = (wx * ey - wy * ex) / denom
+      const u = (wx * dir.y - wy * dir.x) / denom
+      if (t > minT && u >= 0 && u <= 1 && (best === null || t < best)) best = t
+    }
+  }
+  return best
+}
+
 /**
  * The combined cutter for a shape's perforation, in the same local frame
  * as the shape's own geometry (mm, Y up, before rotation baking): holes
  * along each wall (from the outer surface inward) and/or down through the
  * top face, on a grid or staggered lattice, sized and spaced in mm.
+ *
+ * `innerContours` are the footprints (same frame) of cavities cut into
+ * this shape — a hollowed box's inside. A wall hole "through the wall"
+ * then stops just inside the cavity instead of tunnelling across the
+ * whole object, which is both what a basket needs and far cheaper to cut.
  */
-export function buildPerforationCutter(contour: Point2[], depth: number, perforation: Perforation): THREE.BufferGeometry | null {
+export function buildPerforationCutter(contour: Point2[], depth: number, perforation: Perforation, innerContours: Point2[][] = []): THREE.BufferGeometry | null {
   const { size, spacing } = perforation
   if (size <= 0.2 || spacing <= size) return null
   const parts: THREE.BufferGeometry[] = []
@@ -83,8 +111,7 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
       maxX = Math.max(maxX, p.x)
       maxY = Math.max(maxY, p.y)
     }
-    const throughLength = Math.hypot(maxX - minX, maxY - minY) + 2 * OVERSHOOT_MM
-    const length = (holeDepth ?? throughLength - OVERSHOOT_MM) + OVERSHOOT_MM
+    const throughLength = Math.hypot(maxX - minX, maxY - minY) + OVERSHOOT_MM
     const from = Math.max(0, perforation.wallFrom ?? 0)
     const to = Math.min(depth, perforation.wallTo ?? depth)
     const rows = centersAlong(to - from, size, spacing, false).map((v) => from + v)
@@ -104,6 +131,16 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
         for (const u of centersAlong(len, size, spacing, stagger)) {
           const px = a.x + dir.x * u
           const py = a.y + dir.y * u
+          // How deep this hole goes: the set depth, else to the nearest
+          // cavity behind this wall, else out the far side of the solid.
+          let reach = holeDepth
+          if (reach == null) {
+            const inward = { x: -nrm.x, y: -nrm.y }
+            const cavity = rayToRings({ x: px, y: py }, inward, innerContours, 0)
+            const exit = rayToRings({ x: px, y: py }, inward, [contour], 1e-6)
+            reach = cavity != null ? cavity + OVERSHOOT_MM : exit != null ? exit + OVERSHOOT_MM : throughLength
+          }
+          const length = reach + OVERSHOOT_MM
           const geo = cutterShape(perforation.shape, size, length)
           geo.applyQuaternion(q)
           // Runs from just outside the surface inward.

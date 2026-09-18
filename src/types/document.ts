@@ -138,7 +138,7 @@ export interface Perforation {
   topInset?: number
 }
 
-export const DEFAULT_PERFORATION: Perforation = { shape: 'round', pattern: 'grid', size: 3, spacing: 6, target: 'walls', depth: null }
+export const DEFAULT_PERFORATION: Perforation = { shape: 'round', pattern: 'grid', size: 3, spacing: 5.5, target: 'walls', depth: null }
 
 export interface ShapeLayer {
   id: string
