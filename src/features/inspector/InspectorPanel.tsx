@@ -27,6 +27,7 @@ import { RotationDial } from './RotationDial'
 import { HeightSlider } from './HeightSlider'
 import { useAnalysisStore, visibleWarning } from '../../state/analysisStore'
 import { unitDropDelta, unitRest } from '../../lib/geometry/stacking'
+import { useViewStore } from '../../state/viewStore'
 import './InspectorPanel.css'
 
 const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
@@ -239,6 +240,7 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
 
       {layer.isHole && <RecessedPocketSection layer={layer} />}
       {layer.isHole && <HoleSizePresetsSection layer={layer} />}
+      {!layer.isHole && <ShellSection layer={layer} />}
     </>
   )
 }
@@ -380,6 +382,65 @@ function RecessedPocketSection({ layer }: { layer: ShapeLayer }) {
           Pause the print at layer <strong>{pauseLayer}</strong> ({round(pocketTop)} mm) to drop the magnet in, then resume.
         </p>
       )}
+    </Section>
+  )
+}
+
+const DEFAULT_WALL_MM = 1.6
+const DEFAULT_SHELL_FLOOR_MM = 1.2
+
+/** Shell: one click turns a solid into a container by generating the
+ * negative (hole) object from its own outline — the same mechanism as a
+ * hand-drawn hole, just automated and grouped with the solid. */
+function ShellSection({ layer }: { layer: ShapeLayer }) {
+  const [wall, setWall] = useState(DEFAULT_WALL_MM)
+  const [floor, setFloor] = useState(DEFAULT_SHELL_FLOOR_MM)
+  const [openFrom, setOpenFrom] = useState<'top' | 'bottom'>('top')
+  const hollowOut = useDocumentStore((s) => s.hollowOut)
+  const layerHeight = useDocumentStore((s) => s.printSettings.layerHeight)
+  const setNotice = useViewStore((s) => s.setNotice)
+  const floorLayers = Math.max(1, Math.ceil(floor / layerHeight - 1e-6))
+
+  const run = () => {
+    const result = hollowOut(layer.id, { wall, floor, openFrom })
+    if (!result) {
+      setNotice(`${layer.name} is too narrow to hollow out with ${round(wall)} mm walls — try a thinner wall.`)
+      return
+    }
+    setNotice(
+      result.wall < wall - 0.01
+        ? `Hollowed out ${layer.name} — walls limited to ${round(result.wall)} mm where the outline is narrow.`
+        : `Hollowed out ${layer.name}: ${round(wall)} mm walls, ${round(floorLayers * layerHeight)} mm ${openFrom === 'top' ? 'floor' : 'ceiling'}. The cavity is a hole object grouped with it.`,
+    )
+  }
+
+  return (
+    <Section title="Shell" action={<span className="inspector-section__hint">hollow out</span>}>
+      <div className="inspector-grid-2">
+        <Field label="Wall thickness" value={wall} suffix="mm" onChange={(v) => setWall(Math.max(0.4, v))} />
+        <Field label={openFrom === 'top' ? 'Floor thickness' : 'Ceiling thickness'} value={floor} suffix="mm" onChange={(v) => setFloor(Math.max(0, v))} />
+      </div>
+      <p className="inspector-field__label">Open from</p>
+      <div className="inspector-preset-chips">
+        {(['top', 'bottom'] as const).map((side) => (
+          <button
+            key={side}
+            type="button"
+            className={`inspector-preset-chip ${openFrom === side ? 'inspector-preset-chip--active' : ''}`}
+            onClick={() => setOpenFrom(side)}
+          >
+            {side === 'top' ? 'Top (cup, tray, planter)' : 'Bottom (cap, lid)'}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="inspector-export-btn inspector-export-btn--primary" onClick={run}>
+        Hollow out
+      </button>
+      <p className="inspector-note">
+        Makes a hole object from this shape's outline, inset by the wall, reaching from {floorLayers} layer{floorLayers === 1 ? '' : 's'} (
+        {round(floorLayers * layerHeight)} mm) {openFrom === 'top' ? 'above the bottom up through the top' : 'below the top down through the bottom'}.
+        Rounded corners and polish carry into the cavity; the outer bevel stays on the rim.
+      </p>
     </Section>
   )
 }

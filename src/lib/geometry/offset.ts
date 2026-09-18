@@ -222,6 +222,23 @@ export function erodePolygon(points: Point2[], distance: number): Point2[] | nul
   return collapsed
 }
 
+/**
+ * Outward-offsets (dilates) a simple polygon by `distance` — the mirror of
+ * `erodePolygon`, used to widen a hole ring when a shell's wall wraps
+ * around it. Null when the result would self-intersect.
+ */
+export function dilatePolygon(points: Point2[], distance: number): Point2[] | null {
+  if (distance <= 0) return points.slice()
+  if (points.length < 3) return null
+  const area0 = Math.abs(signedArea(points))
+  if (area0 < 1e-6) return null
+  const a = offsetOnce(points, distance, false)
+  const b = offsetOnce(points, distance, true)
+  const grown = Math.abs(signedArea(a)) > Math.abs(signedArea(b)) ? a : b
+  if (Math.abs(signedArea(grown)) <= area0) return null
+  return isSimplePolygon(grown) ? grown : null
+}
+
 /** Binary-searches the largest bevel distance (down from `requested`) at
  * which `erodePolygon` still succeeds, so a bevel that would otherwise
  * corrupt the mesh gets silently reduced instead. */

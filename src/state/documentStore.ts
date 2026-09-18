@@ -6,6 +6,7 @@ import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking'
+import { buildShellCavity, type ShellOptions } from '../lib/geometry/shell'
 
 export { rotatedLocalPoints, shapeWorldBounds }
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
@@ -100,6 +101,10 @@ interface DocumentActions {
   beginTransientEdit: () => void
   commitTransientEdit: () => void
   snapHoleToPocket: (id: string, floorThicknessMM: number) => void
+  /** Shell: adds a hole object that hollows the solid out to walls of the
+   * given thickness (floor rounded up to whole print layers), grouped with
+   * it. Returns the new cavity's id, or null if the outline is too narrow. */
+  hollowOut: (id: string, options: ShellOptions) => { cavityId: string; wall: number } | null
   setBedPreset: (id: string) => void
   togglePinnedBedPreset: (id: string) => void
   setCustomBedSize: (width: number, height: number) => void
@@ -656,6 +661,50 @@ export const useDocumentStore = create<DocumentStore>()(
             },
           }
         })
+      },
+
+      hollowOut: (id, options) => {
+        const state = get()
+        const solid = state.layers[id]
+        if (!solid || solid.isHole) return null
+        const layerHeight = state.printSettings.layerHeight
+        const floorLayers = Math.max(1, Math.ceil(Math.max(0, options.floor) / layerHeight - 1e-6))
+        const cavity = buildShellCavity(solid, { ...options, floor: floorLayers * layerHeight })
+        if (!cavity) return null
+        const cavityId = generateId()
+        set((s) => {
+          const layers = { ...s.layers }
+          let groups = s.groups
+          // The cavity belongs with its solid: join its group, or start one.
+          let groupId = solid.groupId
+          if (!groupId) {
+            groupId = generateId()
+            groups = { ...groups, [groupId]: { id: groupId, name: `${solid.name} shell` } }
+            layers[id] = { ...solid, groupId }
+          }
+          layers[cavityId] = {
+            id: cavityId,
+            kind: 'hole',
+            name: `${solid.name} cavity`,
+            visible: true,
+            locked: false,
+            color: solid.color,
+            transform: { x: cavity.x, y: cavity.y, z: cavity.z, rotationX: 0, rotationY: 0, rotation: 0 },
+            regions: cavity.regions,
+            extrusionDepth: cavity.depth,
+            cornerRadius: 0,
+            smartPolish: 0,
+            bevelBottom: 0,
+            bevelTop: 0,
+            isHole: true,
+            groupId,
+          }
+          const at = s.order.indexOf(id)
+          const order = [...s.order]
+          order.splice(at + 1, 0, cavityId)
+          return { layers, groups, order, selection: [cavityId] }
+        })
+        return { cavityId, wall: cavity.wall }
       },
 
       setBedPreset: (id) => set({ bedPresetId: id }),
