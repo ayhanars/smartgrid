@@ -19,6 +19,10 @@ interface ViewState {
   setGizmoMode: (mode: 'translate' | 'rotate') => void
   setSaveStatus: (status: 'idle' | 'saving' | 'saved') => void
   setNotice: (text: string | null) => void
+  /** Bumped when a custom texture tile finishes decoding, so meshes that
+   * sampled it too early rebuild. */
+  tileVersion: number
+  bumpTileVersion: () => void
 }
 
 let noticeCounter = 0
@@ -34,4 +38,6 @@ export const useViewStore = create<ViewState>()((set) => ({
   setGizmoMode: (mode) => set({ gizmoMode: mode }),
   setSaveStatus: (status) => set({ saveStatus: status }),
   setNotice: (text) => set({ notice: text ? { id: ++noticeCounter, text } : null }),
+  tileVersion: 0,
+  bumpTileVersion: () => set((s) => ({ tileVersion: s.tileVersion + 1 })),
 }))

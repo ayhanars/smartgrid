@@ -26,6 +26,13 @@ function rectsOverlap(a: Bounds, b: Bounds): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
+export interface CarveOptions {
+  /** inplace: cut exactly where the tool sits now; top/bottom: a pocket of
+   * `depth` mm from that face; through: the whole height. */
+  mode: 'inplace' | 'top' | 'bottom' | 'through'
+  depth?: number
+}
+
 export interface Guide {
   id: string
   orientation: 'horizontal' | 'vertical'
@@ -111,7 +118,7 @@ interface DocumentActions {
   /** Carve: turns `toolId` into a hole cutter positioned against `baseId`
    * (from its top, from its bottom, or right through) and groups the two,
    * so the pair reads and moves as one object. */
-  carveWith: (baseId: string, toolId: string, mode: 'top' | 'bottom' | 'through') => void
+  carveWith: (baseId: string, toolId: string, options: CarveOptions) => void
   setBedPreset: (id: string) => void
   togglePinnedBedPreset: (id: string) => void
   setCustomBedSize: (width: number, height: number) => void
@@ -730,23 +737,23 @@ export const useDocumentStore = create<DocumentStore>()(
           return { layers: { ...state.layers, [id]: { ...layer, texture: clean } } }
         }),
 
-      carveWith: (baseId, toolId, mode) =>
+      carveWith: (baseId, toolId, options) =>
         set((state) => {
           const base = state.layers[baseId]
           const tool = state.layers[toolId]
           if (!base || !tool || base.isHole || baseId === toolId) return {}
           const OVERSHOOT = 1
           const baseTop = base.transform.z + base.extrusionDepth
-          const d = tool.extrusionDepth
-          let z: number
-          let depth: number
-          if (mode === 'through') {
+          const d = Math.max(0.05, options.depth ?? tool.extrusionDepth)
+          let z = tool.transform.z
+          let depth = tool.extrusionDepth
+          if (options.mode === 'through') {
             z = base.transform.z - OVERSHOOT
             depth = base.extrusionDepth + 2 * OVERSHOOT
-          } else if (mode === 'top') {
+          } else if (options.mode === 'top') {
             z = baseTop - d
             depth = d + OVERSHOOT
-          } else {
+          } else if (options.mode === 'bottom') {
             z = base.transform.z - OVERSHOOT
             depth = d + OVERSHOOT
           }

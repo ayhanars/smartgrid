@@ -5,6 +5,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { ShapeLayer } from '../../types/document'
 import { buildLayerGeometries } from '../../lib/geometry/layerGeometry'
 import { SCENE_SCALE } from './sceneScale'
+import { useViewStore } from '../../state/viewStore'
 
 // Only creases sharper than this get an outline segment. The default 15°
 // also catches the ~25° cone tips where a polished corner collapses under a
@@ -47,9 +48,12 @@ export function ExtrudedShapeMesh({
   clippingPlanes,
   onGroupRef,
 }: ExtrudedShapeMeshProps) {
+  // A custom texture tile decoding late bumps tileVersion -> rebuild.
+  const tileVersion = useViewStore((s) => s.tileVersion)
   const geometries = useMemo(
     (): THREE.BufferGeometry[] => cutGeometries ?? buildLayerGeometries(layer, SCENE_SCALE),
-    [cutGeometries, layer],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cutGeometries, layer, tileVersion],
   )
 
   // The shape's local center — the outer group sits here so a gizmo's

@@ -75,7 +75,9 @@ export const INFILL_PATTERNS: { id: InfillPattern; label: string }[] = [
   { id: 'cubic', label: 'Cubic' },
 ]
 
-export type TexturePattern = 'ripples' | 'flutes' | 'grid' | 'bricks' | 'diamonds' | 'honeycomb' | 'dots' | 'wood'
+export type TexturePattern = 'ripples' | 'flutes' | 'grid' | 'bricks' | 'diamonds' | 'honeycomb' | 'dots' | 'wood' | 'custom'
+
+export type WallSide = 'front' | 'back' | 'left' | 'right'
 
 /** Printable relief cut INTO a shape's surfaces (outer dimensions stay
  * exact): grooves on the side walls and/or the top face. On a hole
@@ -87,6 +89,19 @@ export interface SurfaceTexture {
   size: number
   /** Groove depth, mm. */
   depth: number
+  /** Which walls get the pattern (by the wall's outward direction on the
+   * plate); missing = all of them. */
+  sides?: WallSide[]
+  /** Wall band, mm from the shape's bottom; missing = whole height. */
+  wallFrom?: number
+  wallTo?: number
+  /** Plain rim left around the top-face pattern, mm. */
+  topInset?: number
+  /** Custom pattern: a small grayscale image (data URL) where dark = groove.
+   * Only used when pattern === 'custom'. */
+  tile?: string
+  /** Custom pattern repeats (true) or is placed once, centered (false). */
+  repeat?: boolean
 }
 
 export const TEXTURE_PATTERNS: { id: TexturePattern; label: string; hint: string }[] = [
@@ -98,6 +113,7 @@ export const TEXTURE_PATTERNS: { id: TexturePattern; label: string; hint: string
   { id: 'honeycomb', label: 'Honeycomb', hint: 'hex cells' },
   { id: 'dots', label: 'Dimples', hint: 'rounded pits' },
   { id: 'wood', label: 'Wood grain', hint: 'wavy grain' },
+  { id: 'custom', label: 'Your image', hint: 'uploaded SVG/PNG, dark = groove' },
 ]
 
 export const DEFAULT_TEXTURE: SurfaceTexture = { pattern: 'grid', target: 'walls', size: 4, depth: 0.6 }

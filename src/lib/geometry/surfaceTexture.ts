@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { intersection, type MultiPolygon, type Ring } from 'polygon-clipping'
-import type { Point2, SurfaceTexture, TexturePattern } from '../../types/document'
+import type { Point2, SurfaceTexture, WallSide } from '../../types/document'
+import { getTile, sampleTile } from './customTile'
 
 /** Mesh pieces in the same layout buildBeveledGeometry accumulates:
  * flat xyz positions and triangle indices (local to `positions`). */
@@ -20,19 +21,44 @@ function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t)
 }
 
+/** Deterministic 0..1 hash of an integer cell, for per-brick / per-cell
+ * variation that reads as hand-made rather than machine-perfect. */
+function cellHash(i: number, j: number, salt = 0): number {
+  const x = Math.sin(i * 127.1 + j * 311.7 + salt * 74.7) * 43758.5453
+  return x - Math.floor(x)
+}
+
+/** Smooth value noise, 0..1. */
+function noise2(x: number, y: number, salt = 0): number {
+  const ix = Math.floor(x)
+  const iy = Math.floor(y)
+  const fx = x - ix
+  const fy = y - iy
+  const sx = fx * fx * (3 - 2 * fx)
+  const sy = fy * fy * (3 - 2 * fy)
+  const a = cellHash(ix, iy, salt)
+  const b = cellHash(ix + 1, iy, salt)
+  const c = cellHash(ix, iy + 1, salt)
+  const d = cellHash(ix + 1, iy + 1, salt)
+  return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy
+}
+
 /** A groove of relative width `w` centered on every integer of `x`
- * (x already in pattern-cell units), 1 at the center, 0 outside. */
+ * (x already in pattern-cell units): rounded profile, 1 at the center. */
 function groove(x: number, w: number): number {
   const t = frac(x)
   const d = Math.min(t, 1 - t)
   return 1 - smoothstep(0, w / 2, d)
 }
 
-/** Groove strength (0 = untouched surface, 1 = full depth) at surface
- * coordinates u, v (mm) for a pattern with repeat `size` mm. */
-export function patternStrength(pattern: TexturePattern, u: number, v: number, size: number): number {
-  const s = Math.max(0.5, size)
-  switch (pattern) {
+/**
+ * Groove strength (0 = untouched surface, 1 = full depth) at surface
+ * coordinates u, v (mm). `extent` is the size of the surface being
+ * textured (for a custom image placed once, centered).
+ */
+export function patternStrength(texture: SurfaceTexture, u: number, v: number, extent: { width: number; height: number }): number {
+  const s = Math.max(0.5, texture.size)
+  switch (texture.pattern) {
     case 'ripples':
       return 0.5 - 0.5 * Math.cos((TWO_PI * v) / s)
     case 'flutes':
@@ -40,19 +66,26 @@ export function patternStrength(pattern: TexturePattern, u: number, v: number, s
     case 'grid':
       return Math.max(groove(u / s, 0.3), groove(v / s, 0.3))
     case 'bricks': {
+      // Running bond, 2:1 bricks. Mortar joints are the grooves; every
+      // brick also sits at a slightly different depth with a soft
+      // pillowed face, which is what makes real brickwork read as such.
       const row = Math.floor(v / s)
       const shift = row % 2 === 0 ? 0 : 0.5
-      return Math.max(groove(v / s, 0.18), groove(u / (2 * s) + shift, 0.09))
+      const col = Math.floor(u / (2 * s) + shift)
+      const mortar = Math.max(groove(v / s, 0.2), groove(u / (2 * s) + shift, 0.1))
+      const fu = frac(u / (2 * s) + shift)
+      const fv = frac(v / s)
+      const pillow = 0.12 * (1 - Math.pow(Math.abs(fu - 0.5) * 2, 3)) * (1 - Math.pow(Math.abs(fv - 0.5) * 2, 3))
+      const wobble = 0.1 * cellHash(col, row) + 0.05 * noise2((u / s) * 5, (v / s) * 5, 3)
+      return Math.max(mortar, Math.min(1, wobble + 0.12 - pillow))
     }
     case 'diamonds':
       return Math.max(groove((u + v) / s, 0.24), groove((u - v) / s, 0.24))
     case 'honeycomb': {
-      // Pointy-top hexagons, flat-to-flat = s. Distance from the nearest cell
-      // center's hex boundary decides the groove.
+      // Pointy-top hexagons, flat-to-flat = s: groove along the cell walls.
       const R = s / Math.sqrt(3)
       const q = ((Math.sqrt(3) / 3) * u - (1 / 3) * v) / R
       const r = ((2 / 3) * v) / R
-      // cube rounding
       let rq = Math.round(q)
       let rr = Math.round(r)
       const rs = Math.round(-q - r)
@@ -68,23 +101,51 @@ export function patternStrength(pattern: TexturePattern, u: number, v: number, s
       const inradius = (R * Math.sqrt(3)) / 2
       let m = 0
       for (const a of [0, Math.PI / 3, (2 * Math.PI) / 3]) m = Math.max(m, Math.abs(px * Math.cos(a) + py * Math.sin(a)))
-      const dist = inradius - m
-      return 1 - smoothstep(0, 0.16 * s, dist)
+      return 1 - smoothstep(0, 0.16 * s, inradius - m)
     }
     case 'dots': {
+      // Hemispherical dimples on a staggered lattice.
       const row = Math.floor(v / s)
       const shift = row % 2 === 0 ? 0 : 0.5
       const dx = (frac(u / s + shift) - 0.5) * s
       const dy = (frac(v / s) - 0.5) * s
-      const d = Math.hypot(dx, dy)
-      return 1 - smoothstep(0, 0.36 * s, d)
+      const r = 0.36 * s
+      const d = Math.hypot(dx, dy) / r
+      return d >= 1 ? 0 : Math.sqrt(1 - d * d)
     }
     case 'wood': {
-      const t = v / s + 0.22 * Math.sin((TWO_PI * u) / (4.3 * s)) + 0.09 * Math.sin((TWO_PI * u) / (1.37 * s) + 1.7) + 0.05 * Math.sin((TWO_PI * v) / (0.7 * s))
-      const g = 0.5 - 0.5 * Math.cos(TWO_PI * t)
-      return g * g
+      // Grain: wavy growth rings (low frequency, drifting), with fine
+      // fibre lines and a little noise so no two boards look alike.
+      const drift = 0.35 * noise2(u / (6 * s), v / (3 * s), 1) + 0.15 * Math.sin((TWO_PI * u) / (4.3 * s))
+      const rings = v / s + drift
+      const ring = 0.5 - 0.5 * Math.cos(TWO_PI * rings)
+      const fibre = 0.5 - 0.5 * Math.cos(TWO_PI * (v / (s * 0.23) + 0.6 * noise2(u / s, v / s, 2)))
+      const knots = noise2(u / (2.5 * s), v / (2.5 * s), 4)
+      return Math.min(1, ring * ring * 0.8 + fibre * 0.18 + (knots > 0.82 ? (knots - 0.82) * 3 : 0))
+    }
+    case 'custom': {
+      if (!texture.tile) return 0
+      const tile = getTile(texture.tile)
+      if (!tile) return 0
+      const aspect = tile.height / tile.width
+      if (texture.repeat === false) {
+        // Placed once, `size` mm wide, centered on the surface.
+        const w = s
+        const h = s * aspect
+        const x0 = extent.width / 2 - w / 2
+        const y0 = extent.height / 2 - h / 2
+        return sampleTile(tile, (u - x0) / w, (v - y0) / h, false)
+      }
+      return sampleTile(tile, u / s, v / (s * aspect), true)
     }
   }
+}
+
+/** Which side of the plate a wall faces, from its outward normal in
+ * document coordinates (y grows toward the printer's front). */
+function sideOf(nx: number, ny: number): WallSide {
+  if (Math.abs(nx) >= Math.abs(ny)) return nx >= 0 ? 'right' : 'left'
+  return ny >= 0 ? 'front' : 'back'
 }
 
 /** Subdivision step for a pattern: fine enough to resolve it, capped so a
@@ -126,7 +187,7 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
   })
 
   // Columns around the ring: each edge split by arc length.
-  const columns: { p: Point2; nrm: Point2; u: number }[] = []
+  const columns: { p: Point2; nrm: Point2; u: number; side: WallSide }[] = []
   let u = 0
   for (let i = 0; i < n; i++) {
     const p = ring[i]
@@ -138,17 +199,30 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
       const nx = vertexNormals[i].x * (1 - t) + vertexNormals[(i + 1) % n].x * t
       const ny = vertexNormals[i].y * (1 - t) + vertexNormals[(i + 1) % n].y * t
       const nl = Math.hypot(nx, ny) || 1
-      columns.push({ p: { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }, nrm: { x: nx / nl, y: ny / nl }, u: u + len * t })
+      // Which wall a column belongs to is decided by its own edge's normal,
+      // not the corner-blended vertex normal used for displacement.
+      columns.push({ p: { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }, nrm: { x: nx / nl, y: ny / nl }, u: u + len * t, side: sideOf(edgeNormals[i].x, edgeNormals[i].y) })
     }
     u += len
   }
   const cols = columns.length
+  const perimeter = u
+  const sides = texture.sides && texture.sides.length > 0 ? new Set(texture.sides) : null
+  const bandFrom = texture.wallFrom
+  const bandTo = texture.wallTo
   for (let c = 0; c < cols; c++) {
     const col = columns[c]
+    const onSide = !sides || sides.has(col.side) ? 1 : 0
     for (let j = 0; j <= rows; j++) {
       const z = zA + (height * j) / rows
-      const fade = j === 0 || j === rows ? 0 : 1
-      const d = sign * texture.depth * patternStrength(texture.pattern, col.u, z - zA, texture.size) * fade
+      // Fade at the very ends (so the wall still meets caps/bevels) and at
+      // the edges of a height band, over about one pattern step.
+      const endFade = j === 0 || j === rows ? 0 : 1
+      const bandFade = Math.min(
+        bandFrom == null ? 1 : smoothstep(bandFrom - step, bandFrom + step, z - zA),
+        bandTo == null ? 1 : 1 - smoothstep(bandTo - step, bandTo + step, z - zA),
+      )
+      const d = sign * texture.depth * patternStrength(texture, col.u, z - zA, { width: perimeter, height }) * endFade * bandFade * onSide
       positions.push(col.p.x + col.nrm.x * d, z, col.p.y + col.nrm.y * d)
     }
   }
@@ -233,9 +307,10 @@ export function buildTexturedCap(ring: Point2[], z: number, texture: SurfaceText
   const positions: number[] = []
   const indices: number[] = []
   const vertexIndex = new Map<string, number>()
+  const inset = Math.max(1.5 * step, texture.topInset ?? 0)
   const heightAt = (x: number, y: number) => {
-    const fade = smoothstep(1.5 * step, 2.5 * step, distanceToRing({ x, y }, ring))
-    return z - texture.depth * patternStrength(texture.pattern, x - minX, y - minY, texture.size) * fade
+    const fade = smoothstep(inset, inset + step, distanceToRing({ x, y }, ring))
+    return z - texture.depth * patternStrength(texture, x - minX, y - minY, { width: maxX - minX, height: maxY - minY }) * fade
   }
   const vertex = (x: number, y: number) => {
     const key = `${x.toFixed(5)},${y.toFixed(5)}`

@@ -74,6 +74,7 @@ export function Viewport3DPane() {
   const setPrintPreview = useViewStore((s) => s.setPrintPreview)
   const gizmoMode = useViewStore((s) => s.gizmoMode)
   const setGizmoMode = useViewStore((s) => s.setGizmoMode)
+  const tileVersion = useViewStore((s) => s.tileVersion)
 
   // A pointer that is on (or has just used) a gizmo handle must never
   // re-select whatever mesh happens to sit under it — otherwise a bigger
@@ -220,7 +221,8 @@ export function Viewport3DPane() {
       }
     }
     return result
-  }, [layers, order, artboardWidth, artboardHeight])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers, order, artboardWidth, artboardHeight, tileVersion])
 
   // What the print preview caps: the same geometry each shape renders
   // with (hole-cut where applicable), so the cross-section matches.

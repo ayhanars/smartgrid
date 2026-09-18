@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ArrowDownToLine,
   Layers2,
@@ -19,7 +19,9 @@ import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
 import { IconButton } from '../../components/IconButton'
-import { DEFAULT_TEXTURE, INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type ShapeLayer, type SurfaceTexture } from '../../types/document'
+import { DEFAULT_TEXTURE, INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type ShapeLayer, type SurfaceTexture, type WallSide } from '../../types/document'
+import { TexturePreview } from './TexturePreview'
+import { prepareTile } from '../../lib/geometry/customTile'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
 import { computeSafeBevel } from '../../lib/geometry/offset'
 import { bedPresets, CUSTOM_BED_ID, CUSTOM_BED_MAX_Z, getBedPreset } from '../../lib/geometry/bedPresets'
@@ -39,13 +41,6 @@ export function InspectorPanel() {
   const removeShapes = useDocumentStore((s) => s.removeShapes)
 
   const selectedLayer = selection.length === 1 ? (layers[selection[0]] ?? null) : null
-
-  // Context follows what you're doing: shape editing while something is
-  // selected, project-level settings otherwise — but either stays a click
-  // away.
-  const hasSelection = selection.length > 0
-  const [tab, setTab] = useState<'shape' | 'project'>(hasSelection ? 'shape' : 'project')
-  useEffect(() => setTab(hasSelection ? 'shape' : 'project'), [hasSelection])
 
   return (
     <div className="inspector-panel">
@@ -74,17 +69,8 @@ export function InspectorPanel() {
         <UnitToggle />
       </div>
 
-      <div className="inspector-panel__tabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === 'shape'} className={tab === 'shape' ? 'inspector-panel__tab--active' : ''} onClick={() => setTab('shape')}>
-          Shape
-        </button>
-        <button type="button" role="tab" aria-selected={tab === 'project'} className={tab === 'project' ? 'inspector-panel__tab--active' : ''} onClick={() => setTab('project')}>
-          Project
-        </button>
-      </div>
-
       <div className="inspector-panel__body">
-        {tab === 'project' ? (
+        {selection.length === 0 ? (
           <>
             <CollapsibleGroup title="Printer" defaultOpen>
               <BedPresetsSection />
@@ -96,8 +82,6 @@ export function InspectorPanel() {
               <ExportTab />
             </CollapsibleGroup>
           </>
-        ) : selection.length === 0 ? (
-          <EmptyState text="Select a shape (or draw one) to edit it here. Printer, print settings and export live under Project." />
         ) : (
           <>
             <CollapsibleGroup title="Design" defaultOpen>
@@ -112,6 +96,9 @@ export function InspectorPanel() {
                 <CarveSection ids={selection} />
               </CollapsibleGroup>
             )}
+            <CollapsibleGroup title="Export">
+              <ExportTab />
+            </CollapsibleGroup>
           </>
         )}
       </div>
@@ -475,14 +462,41 @@ function ShellSection({ layer }: { layer: ShapeLayer }) {
   )
 }
 
+const MAX_TILE_BYTES = 400 * 1024
+
 /** Printable relief on the shape's surfaces — grooves cut into the
  * material so outer dimensions and fits stay exact. On a cutter it
  * decorates the cavity walls it leaves. */
 function TextureSection({ layer }: { layer: ShapeLayer }) {
   const setTexture = useDocumentStore((s) => s.setTexture)
+  const setNotice = useViewStore((s) => s.setNotice)
+  const fileRef = useRef<HTMLInputElement>(null)
   const texture = layer.texture ?? null
   const supported = layer.regions.length === 1 && layer.regions[0].holes.length === 0
   const patch = (p: Partial<SurfaceTexture>) => setTexture(layer.id, { ...(texture ?? DEFAULT_TEXTURE), ...p })
+  const wallFrom = texture?.wallFrom ?? 0
+  const wallTo = texture?.wallTo ?? layer.extrusionDepth
+  const sides = texture?.sides ?? []
+
+  const upload = async (file: File) => {
+    if (file.size > MAX_TILE_BYTES) {
+      setNotice(`${file.name} is ${Math.round(file.size / 1024)} KB — keep texture images under 400 KB (a simple SVG is a few KB).`)
+      return
+    }
+    try {
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = () => reject(new Error('read failed'))
+        reader.readAsDataURL(file)
+      })
+      await prepareTile(url)
+      patch({ pattern: 'custom', tile: url, repeat: texture?.repeat ?? true, target: layer.isHole ? 'walls' : (texture?.target ?? 'top') })
+      setNotice(`${file.name} is now the texture: dark areas become grooves, white or transparent stays flat.`)
+    } catch {
+      setNotice(`${file.name} could not be read as an image.`)
+    }
+  }
 
   if (!supported) {
     return (
@@ -490,6 +504,10 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
         <p className="inspector-note">Textures need an outline without holes in it — apply them to the shapes before combining, or to a cutter.</p>
       </Section>
     )
+  }
+  const toggleSide = (side: WallSide) => {
+    const next = sides.includes(side) ? sides.filter((x) => x !== side) : [...sides, side]
+    patch({ sides: next.length === 0 || next.length === 4 ? undefined : next })
   }
   return (
     <Section
@@ -502,24 +520,62 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
         ) : undefined
       }
     >
-      <div className="inspector-preset-chips">
-        <button type="button" className={`inspector-preset-chip ${!texture ? 'inspector-preset-chip--active' : ''}`} onClick={() => setTexture(layer.id, null)}>
-          None
+      <div className="texture-grid">
+        <button type="button" className={`texture-choice ${!texture ? 'texture-choice--active' : ''}`} onClick={() => setTexture(layer.id, null)}>
+          <span className="texture-choice__none">None</span>
+          <span>Plain</span>
         </button>
-        {TEXTURE_PATTERNS.map((p) => (
+        {TEXTURE_PATTERNS.filter((p) => p.id !== 'custom').map((p) => (
           <button
             key={p.id}
             type="button"
-            className={`inspector-preset-chip ${texture?.pattern === p.id ? 'inspector-preset-chip--active' : ''}`}
+            className={`texture-choice ${texture?.pattern === p.id ? 'texture-choice--active' : ''}`}
             title={p.hint}
+            aria-label={p.label}
             onClick={() => patch({ pattern: p.id, target: layer.isHole ? 'walls' : (texture?.target ?? 'walls') })}
           >
-            {p.label}
+            <TexturePreview texture={{ ...DEFAULT_TEXTURE, ...texture, pattern: p.id }} />
+            <span>{p.label}</span>
           </button>
         ))}
+        <button
+          type="button"
+          className={`texture-choice ${texture?.pattern === 'custom' ? 'texture-choice--active' : ''}`}
+          title="Upload an SVG or PNG: dark = groove, white/transparent = flat"
+          aria-label="Upload image texture"
+          onClick={() => (texture?.tile ? patch({ pattern: 'custom' }) : fileRef.current?.click())}
+        >
+          {texture?.tile ? <TexturePreview texture={{ ...texture, pattern: 'custom' }} /> : <span className="texture-choice__none">SVG / PNG</span>}
+          <span>Your image</span>
+        </button>
       </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
+        hidden
+        aria-label="Upload texture image"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) void upload(f)
+          e.target.value = ''
+        }}
+      />
       {texture && (
         <>
+          {texture.pattern === 'custom' && (
+            <div className="inspector-preset-chips">
+              <button type="button" className="inspector-preset-chip" onClick={() => fileRef.current?.click()}>
+                Upload SVG / PNG…
+              </button>
+              <button type="button" className={`inspector-preset-chip ${texture.repeat !== false ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ repeat: true })}>
+                Repeat
+              </button>
+              <button type="button" className={`inspector-preset-chip ${texture.repeat === false ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ repeat: false })}>
+                Once, centered
+              </button>
+            </div>
+          )}
           {!layer.isHole && (
             <>
               <p className="inspector-field__label">Apply to</p>
@@ -531,12 +587,7 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
                     ['both', 'Both'],
                   ] as const
                 ).map(([t, label]) => (
-                  <button
-                    key={t}
-                    type="button"
-                    className={`inspector-preset-chip ${texture.target === t ? 'inspector-preset-chip--active' : ''}`}
-                    onClick={() => patch({ target: t })}
-                  >
+                  <button key={t} type="button" className={`inspector-preset-chip ${texture.target === t ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ target: t })}>
                     {label}
                   </button>
                 ))}
@@ -544,9 +595,38 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
             </>
           )}
           <div className="inspector-grid-2">
-            <Field label="Pattern size" value={texture.size} suffix="mm" onChange={(v) => patch({ size: v })} />
+            <Field label={texture.pattern === 'custom' && texture.repeat === false ? 'Image width' : 'Pattern size'} value={texture.size} suffix="mm" onChange={(v) => patch({ size: v })} />
             <Field label="Groove depth" value={texture.depth} suffix="mm" onChange={(v) => patch({ depth: v })} />
           </div>
+          {texture.target !== 'top' && (
+            <>
+              <p className="inspector-field__label">Which walls</p>
+              <div className="inspector-preset-chips">
+                <button type="button" className={`inspector-preset-chip ${sides.length === 0 ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ sides: undefined })}>
+                  All
+                </button>
+                {(['front', 'back', 'left', 'right'] as const).map((side) => (
+                  <button key={side} type="button" className={`inspector-preset-chip ${sides.includes(side) ? 'inspector-preset-chip--active' : ''}`} onClick={() => toggleSide(side)}>
+                    {side[0].toUpperCase() + side.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div className="inspector-grid-2">
+                <Field label="Band from (bottom)" value={wallFrom} suffix="mm" onChange={(v) => patch({ wallFrom: Math.max(0, v) })} />
+                <Field label="Band to" value={wallTo} suffix="mm" onChange={(v) => patch({ wallTo: Math.max(0, v) })} />
+              </div>
+              {(texture.wallFrom != null || texture.wallTo != null) && (
+                <button type="button" className="inspector-preset-chip" style={{ marginTop: 6 }} onClick={() => patch({ wallFrom: undefined, wallTo: undefined })}>
+                  Whole height
+                </button>
+              )}
+            </>
+          )}
+          {texture.target !== 'walls' && !layer.isHole && (
+            <div className="inspector-grid-2" style={{ marginTop: 8 }}>
+              <Field label="Top rim left plain" value={texture.topInset ?? 0} suffix="mm" onChange={(v) => patch({ topInset: Math.max(0, v) })} />
+            </div>
+          )}
           <p className="inspector-note">
             {layer.isHole
               ? 'Cut into the walls of the cavity this cutter leaves. Outer dimensions of the part stay exact.'
@@ -563,6 +643,7 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
 function CarveSection({ ids }: { ids: string[] }) {
   const layers = useDocumentStore((s) => s.layers)
   const order = useDocumentStore((s) => s.order)
+  const layerHeight = useDocumentStore((s) => s.printSettings.layerHeight)
   const carveWith = useDocumentStore((s) => s.carveWith)
   const setNotice = useViewStore((s) => s.setNotice)
   const a = layers[ids[0]]
@@ -570,12 +651,26 @@ function CarveSection({ ids }: { ids: string[] }) {
   // Default tool: an existing hole, else whichever was drawn later.
   const defaultTool = a?.isHole ? a.id : b?.isHole ? b.id : order.indexOf(a?.id ?? '') > order.indexOf(b?.id ?? '') ? a?.id : b?.id
   const [toolId, setToolId] = useState<string | undefined>(defaultTool)
-  const [mode, setMode] = useState<'top' | 'bottom' | 'through'>('top')
   useEffect(() => setToolId(defaultTool), [defaultTool])
-  if (!a || !b) return null
   const tool = layers[toolId ?? ''] ?? b
-  const base = tool.id === a.id ? b : a
+  const base = tool && a && b ? (tool.id === a.id ? b : a) : null
+
+  // A cut never reaches the bed unless asked to: leave a floor of a few
+  // layers under a pocket.
+  const floor = Math.max(1.2, 3 * layerHeight)
+  const maxPocket = base ? Math.max(0.2, base.extrusionDepth - floor) : 1
+  const suggested = base && tool ? Math.min(tool.extrusionDepth, maxPocket) : 1
+  const [depth, setDepth] = useState(suggested)
+  useEffect(() => setDepth(suggested), [suggested])
+  // If the tool already sits inside the base, "as positioned" is the
+  // obvious intent; a tool resting on top means "pocket from the top".
+  const overlapsInZ = base && tool ? tool.transform.z < base.transform.z + base.extrusionDepth - 0.01 && tool.transform.z + tool.extrusionDepth > base.transform.z + 0.01 : false
+  const [mode, setMode] = useState<'inplace' | 'top' | 'bottom' | 'through'>(overlapsInZ ? 'inplace' : 'top')
+  useEffect(() => setMode(overlapsInZ ? 'inplace' : 'top'), [overlapsInZ])
+
+  if (!a || !b || !base || !tool) return null
   if (base.isHole) return <p className="inspector-note">Pick a solid shape to carve into.</p>
+  const pocketDepth = Math.min(depth, maxPocket)
 
   return (
     <div className="inspector-section">
@@ -597,8 +692,9 @@ function CarveSection({ ids }: { ids: string[] }) {
       <div className="inspector-preset-chips">
         {(
           [
-            ['top', `From the top, ${round(tool.extrusionDepth)} mm deep`],
-            ['bottom', `From the bottom, ${round(tool.extrusionDepth)} mm deep`],
+            ['inplace', 'As positioned'],
+            ['top', 'Pocket from the top'],
+            ['bottom', 'Pocket from the bottom'],
             ['through', 'Right through'],
           ] as const
         ).map(([m, label]) => (
@@ -607,19 +703,30 @@ function CarveSection({ ids }: { ids: string[] }) {
           </button>
         ))}
       </div>
+      {(mode === 'top' || mode === 'bottom') && (
+        <div className="inspector-grid-2">
+          <Field label="Cut depth" value={pocketDepth} suffix="mm" onChange={(v) => setDepth(Math.max(0.1, v))} />
+          <Field label="Floor left" value={round(base.extrusionDepth - pocketDepth, 2)} suffix="mm" />
+        </div>
+      )}
+      <p className="inspector-note">
+        {mode === 'inplace'
+          ? `${tool.name} cuts exactly the space it occupies now (Z ${round(tool.transform.z)}–${round(tool.transform.z + tool.extrusionDepth)} mm). Move it up or down first to place the cut.`
+          : mode === 'through'
+            ? `${tool.name}'s outline is cut through the whole height of ${base.name}.`
+            : `${tool.name}'s outline is cut ${round(pocketDepth)} mm into ${base.name} from the ${mode}, leaving ${round(base.extrusionDepth - pocketDepth, 2)} mm of material.`}
+      </p>
       <button
         type="button"
         className="inspector-export-btn inspector-export-btn--primary"
         onClick={() => {
-          carveWith(base.id, tool.id, mode)
-          setNotice(`${tool.name} now carves ${base.name} — the two are grouped as one object. Its rim bevel and texture shape the cut.`)
+          carveWith(base.id, tool.id, { mode, depth: pocketDepth })
+          setNotice(`${tool.name} now carves ${base.name} — grouped as one object. Its rim bevel and texture shape the cut.`)
         }}
       >
         Carve {base.name} with {tool.name}
       </button>
-      <p className="inspector-note">
-        {tool.name} becomes the negative: it keeps its outline, bevel (as a rim bevel) and texture, and is grouped with {base.name} so they move together. Export cuts it out.
-      </p>
+      <p className="inspector-note">{tool.name} becomes the negative and stays editable: its outline, rim bevel and texture shape the cut; export cuts it out.</p>
     </div>
   )
 }
