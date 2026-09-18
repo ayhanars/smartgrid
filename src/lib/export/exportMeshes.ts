@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { ShapeLayer } from '../../types/document'
 import { shapeWorldBounds } from '../../state/documentStore'
 import { buildLayerCutters, buildLayerGeometries } from '../geometry/layerGeometry'
-import { cutHolesFromSolid } from '../geometry/holeCut'
+import { cutHolesAsync } from '../geometry/csgClient'
 
 export interface ExportMesh {
   name: string
@@ -25,7 +25,7 @@ const Y_UP_TO_Z_UP = new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0
  * overlapping hole already subtracted, exactly as the viewport shows them,
  * in mm at the shape's real plate position. Holes are cutters, so they
  * never appear as objects of their own. */
-export function buildExportMeshes(layers: Record<string, ShapeLayer>, order: string[]): ExportMesh[] {
+export async function buildExportMeshes(layers: Record<string, ShapeLayer>, order: string[]): Promise<ExportMesh[]> {
   const holeIds = order.filter((id) => layers[id]?.isHole && layers[id]?.visible)
   const toWorld = (layer: ShapeLayer) => ({ worldX: layer.transform.x, worldY: layer.transform.z, worldZ: layer.transform.y })
 
@@ -49,7 +49,7 @@ export function buildExportMeshes(layers: Record<string, ShapeLayer>, order: str
     for (const geo of buildLayerGeometries(layer, 1)) {
       let finalGeo: THREE.BufferGeometry = geo
       try {
-        finalGeo = cutHolesFromSolid({ geometry: geo, ...solidWorld }, holeGeoms)
+        finalGeo = await cutHolesAsync({ geometry: geo, ...solidWorld }, holeGeoms).promise
       } catch (err) {
         console.error(`Hole cut failed for "${layer.name}" during export, exporting it uncut:`, err)
       }

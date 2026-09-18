@@ -115,10 +115,25 @@ export function buildLayerCutters(layer: ShapeLayer, scale: number): THREE.Buffe
 /** Real geometric Z range (mm, print frame) of the built shape — derived
  * from the actual geometry, not assumed from z + extrusionDepth, so a
  * tilted or beveled object can't drift out of sync with what's rendered. */
+const zRangeCache = new WeakMap<ShapeLayer, { bottomZ: number; topZ: number }>()
+
 export function layerZRange(layer: ShapeLayer): { bottomZ: number; topZ: number } {
+  // Layer objects are immutable store values, so one build per object is
+  // enough however many callers ask (preview, stacking, support analysis).
+  const cached = zRangeCache.get(layer)
+  if (cached) return cached
+  const range = computeZRange(layer)
+  zRangeCache.set(layer, range)
+  return range
+}
+
+function computeZRange(layer: ShapeLayer): { bottomZ: number; topZ: number } {
   let min = Infinity
   let max = -Infinity
-  for (const geo of buildLayerGeometries(layer, 1)) {
+  // Surface relief cuts inward and perforations only remove material, so
+  // neither changes the extents: build the plain (cheap) body for them.
+  const plain: ShapeLayer = layer.texture || layer.perforation ? { ...layer, texture: undefined, perforation: undefined } : layer
+  for (const geo of buildLayerGeometries(plain, 1)) {
     geo.computeBoundingBox()
     const bb = geo.boundingBox!
     min = Math.min(min, bb.min.y)

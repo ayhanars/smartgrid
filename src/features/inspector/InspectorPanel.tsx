@@ -1328,11 +1328,18 @@ function ExportTab() {
   const solidCount = order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible).length
   const colorCount = new Set(order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible).map((id) => layers[id].color)).size
 
-  const exportAs = (format: '3mf' | 'stl') => {
-    const meshes = buildExportMeshes(layers, order)
-    if (meshes.length === 0) return
-    if (format === '3mf') downloadBlob(write3mf(meshes), 'smartgrid.3mf', 'model/3mf')
-    else downloadBlob(writeBinaryStl(meshes), 'smartgrid.stl', 'model/stl')
+  const [preparing, setPreparing] = useState(false)
+  const exportAs = async (format: '3mf' | 'stl') => {
+    if (preparing) return
+    setPreparing(true)
+    try {
+      const meshes = await buildExportMeshes(layers, order)
+      if (meshes.length === 0) return
+      if (format === '3mf') downloadBlob(write3mf(meshes), 'smartgrid.3mf', 'model/3mf')
+      else downloadBlob(writeBinaryStl(meshes), 'smartgrid.stl', 'model/stl')
+    } finally {
+      setPreparing(false)
+    }
   }
 
   return (
@@ -1342,12 +1349,12 @@ function ExportTab() {
           <button
             type="button"
             className="inspector-export-btn inspector-export-btn--primary"
-            disabled={solidCount === 0}
+            disabled={solidCount === 0 || preparing}
             onClick={() => exportAs('3mf')}
           >
-            Export 3MF
+            {preparing ? 'Preparing…' : 'Export 3MF'}
           </button>
-          <button type="button" className="inspector-export-btn" disabled={solidCount === 0} onClick={() => exportAs('stl')}>
+          <button type="button" className="inspector-export-btn" disabled={solidCount === 0 || preparing} onClick={() => exportAs('stl')}>
             Export STL
           </button>
         </div>

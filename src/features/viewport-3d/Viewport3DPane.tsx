@@ -5,21 +5,19 @@ import { ContactShadows, Environment, GizmoHelper, GizmoViewcube, Grid, Lightfor
 import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib'
 import { ArrowDownToLine, Box, Layers2, Maximize, Move3d, Rotate3d, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
-import { expandToGroup, shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
-import type { Bounds } from '../../types/document'
+import { expandToGroup, useDocumentStore } from '../../state/documentStore'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
 import {
-  buildLayerCutters,
   buildLayerGeometries,
   layerPrintQuaternion,
   layerZRange,
   printQuaternionToEuler,
   sceneRotationToPrint,
 } from '../../lib/geometry/layerGeometry'
-import { cutHolesFromSolid } from '../../lib/geometry/holeCut'
 import { unitRest } from '../../lib/geometry/stacking'
 import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
+import { useCutGeometries } from './useCutGeometries'
 import { PrinterPlate } from './PrinterPlate'
 import { PrintPreviewSlider } from './PrintPreviewSlider'
 import { PreviewCaps, type PreviewCapItem } from './PreviewCaps'
@@ -28,9 +26,6 @@ import { useAnalysisStore } from '../../state/analysisStore'
 import { useViewStore } from '../../state/viewStore'
 import './Viewport3DPane.css'
 
-function rectsOverlap(a: Bounds, b: Bounds): boolean {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-}
 
 interface GizmoDrag {
   startPosition: THREE.Vector3
@@ -187,60 +182,7 @@ export function Viewport3DPane() {
     commitTransientEdit()
   }
 
-  // A hole is a cutting tool, not a printable shape: any solid whose XY
-  // footprint overlaps a hole's gets that hole's volume subtracted from it
-  // via a real 3D boolean (see holeCut.ts), independent of the hole's own
-  // Z/depth. Solids with nothing overlapping skip this entirely and render
-  // through ExtrudedShapeMesh's normal (uncut) path.
-  const { cutGeometriesById, uncutGeometriesById } = useMemo(() => {
-    const result: Record<string, THREE.BufferGeometry[]> = {}
-    // The same shapes before the cut: the selection outline is traced on
-    // these, because a boolean result is full of split edges that an edge
-    // finder mistakes for creases (a web of stray lines across the faces).
-    const uncut: Record<string, THREE.BufferGeometry[]> = {}
-    const empty = { cutGeometriesById: result, uncutGeometriesById: uncut }
-    const holeIds = order.filter((id) => layers[id]?.isHole && layers[id]?.visible)
-    if (holeIds.length === 0 && !order.some((id) => layers[id]?.perforation && !layers[id]?.isHole)) return empty
-
-    const toWorld = (layer: (typeof layers)[string]) => ({
-      worldX: (layer.transform.x - artboardWidth / 2) * SCENE_SCALE,
-      worldY: layer.transform.z * SCENE_SCALE,
-      worldZ: (layer.transform.y - artboardHeight / 2) * SCENE_SCALE,
-    })
-
-    for (const id of order) {
-      const layer = layers[id]
-      if (!layer || layer.isHole || !layer.visible) continue
-      const solidBounds = shapeWorldBounds(layer)
-      const overlappingHoles = holeIds.filter((hid) => hid !== id && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
-      const solidWorld = toWorld(layer)
-      // The shape's own perforation is just another cutter, at its own place.
-      const ownCutters = buildLayerCutters(layer, SCENE_SCALE).map((geometry) => ({ geometry, ...solidWorld }))
-      if (overlappingHoles.length === 0 && ownCutters.length === 0) continue
-
-      const holeGeoms = [
-        ...ownCutters,
-        ...overlappingHoles.flatMap((hid) => {
-          const holeLayer = layers[hid]
-          const holeWorld = toWorld(holeLayer)
-          return buildLayerGeometries(holeLayer, SCENE_SCALE).map((geometry) => ({ geometry, ...holeWorld }))
-        }),
-      ]
-
-      try {
-        const bodies = buildLayerGeometries(layer, SCENE_SCALE)
-        result[id] = bodies.map((geo) => cutHolesFromSolid({ geometry: geo, ...solidWorld }, holeGeoms))
-        uncut[id] = bodies
-      } catch (err) {
-        // CSG on arbitrary/degenerate geometry is inherently best-effort —
-        // fall back to rendering this one shape uncut rather than taking
-        // the whole viewport down with it.
-        console.error(`Hole cut failed for shape ${id}, rendering it uncut instead:`, err)
-      }
-    }
-    return empty
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layers, order, artboardWidth, artboardHeight, tileVersion])
+  const { cutGeometriesById, uncutGeometriesById, pending: cutsPending } = useCutGeometries(layers, order, artboardWidth, artboardHeight, tileVersion)
 
   // What the print preview caps: the same geometry each shape renders
   // with (hole-cut where applicable), so the cross-section matches.
@@ -397,6 +339,12 @@ export function Viewport3DPane() {
         {import.meta.env.DEV && <DevExpose />}
       </Canvas>
 
+      {cutsPending > 0 && (
+        <div className="viewport-3d__busy" role="status">
+          <span className="viewport-3d__busy-dot" />
+          Cutting holes{cutsPending > 1 ? ` in ${cutsPending} shapes` : ''}…
+        </div>
+      )}
       {activeWarnings.length > 0 && (
         <div className="viewport-3d__alerts" role="status">
           {activeWarnings.map((w) => (

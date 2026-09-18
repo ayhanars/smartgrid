@@ -552,7 +552,7 @@
 
 .texture-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   margin-bottom: 10px;
 }
@@ -650,10 +650,9 @@
 .texture-popover {
   position: absolute;
   z-index: 40;
+  left: 0;
   right: 0;
   top: calc(100% + 6px);
-  width: 330px;
-  max-width: calc(100vw - 40px);
   padding: 8px;
   background: var(--bg-panel-raised);
   border: 1px solid var(--border-strong);

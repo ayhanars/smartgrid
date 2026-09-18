@@ -267,3 +267,33 @@
   border-color: var(--accent);
   color: var(--accent-text);
 }
+
+.viewport-3d__busy {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.viewport-3d__busy-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: viewport-busy-pulse 1s ease-in-out infinite;
+}
+
+@keyframes viewport-busy-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
