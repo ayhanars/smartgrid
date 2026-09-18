@@ -19,7 +19,7 @@ import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
 import { IconButton } from '../../components/IconButton'
-import { INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, type InfillPattern, type ShapeLayer } from '../../types/document'
+import { DEFAULT_TEXTURE, INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type ShapeLayer, type SurfaceTexture } from '../../types/document'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
 import { computeSafeBevel } from '../../lib/geometry/offset'
 import { bedPresets, CUSTOM_BED_ID, CUSTOM_BED_MAX_Z, getBedPreset } from '../../lib/geometry/bedPresets'
@@ -39,6 +39,13 @@ export function InspectorPanel() {
   const removeShapes = useDocumentStore((s) => s.removeShapes)
 
   const selectedLayer = selection.length === 1 ? (layers[selection[0]] ?? null) : null
+
+  // Context follows what you're doing: shape editing while something is
+  // selected, project-level settings otherwise — but either stays a click
+  // away.
+  const hasSelection = selection.length > 0
+  const [tab, setTab] = useState<'shape' | 'project'>(hasSelection ? 'shape' : 'project')
+  useEffect(() => setTab(hasSelection ? 'shape' : 'project'), [hasSelection])
 
   return (
     <div className="inspector-panel">
@@ -67,17 +74,46 @@ export function InspectorPanel() {
         <UnitToggle />
       </div>
 
+      <div className="inspector-panel__tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === 'shape'} className={tab === 'shape' ? 'inspector-panel__tab--active' : ''} onClick={() => setTab('shape')}>
+          Shape
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'project'} className={tab === 'project' ? 'inspector-panel__tab--active' : ''} onClick={() => setTab('project')}>
+          Project
+        </button>
+      </div>
+
       <div className="inspector-panel__body">
-        <CollapsibleGroup title="Design" defaultOpen>
-          {selection.length > 0 && <AlignmentSection ids={selection} />}
-          <DesignTab layer={selectedLayer} multiCount={selection.length} />
-        </CollapsibleGroup>
-        <CollapsibleGroup title="3D" defaultOpen>
-          <ThreeDTab layer={selectedLayer} multiCount={selection.length} />
-        </CollapsibleGroup>
-        <CollapsibleGroup title="Export">
-          <ExportTab />
-        </CollapsibleGroup>
+        {tab === 'project' ? (
+          <>
+            <CollapsibleGroup title="Printer" defaultOpen>
+              <BedPresetsSection />
+            </CollapsibleGroup>
+            <CollapsibleGroup title="Print Settings" defaultOpen>
+              <PrintSettingsSection />
+            </CollapsibleGroup>
+            <CollapsibleGroup title="Export" defaultOpen>
+              <ExportTab />
+            </CollapsibleGroup>
+          </>
+        ) : selection.length === 0 ? (
+          <EmptyState text="Select a shape (or draw one) to edit it here. Printer, print settings and export live under Project." />
+        ) : (
+          <>
+            <CollapsibleGroup title="Design" defaultOpen>
+              <AlignmentSection ids={selection} />
+              <DesignTab layer={selectedLayer} multiCount={selection.length} />
+            </CollapsibleGroup>
+            <CollapsibleGroup title="3D" defaultOpen>
+              <ThreeDTab layer={selectedLayer} multiCount={selection.length} />
+            </CollapsibleGroup>
+            {selection.length === 2 && (
+              <CollapsibleGroup title="Carve" defaultOpen>
+                <CarveSection ids={selection} />
+              </CollapsibleGroup>
+            )}
+          </>
+        )}
       </div>
     </div>
   )
@@ -202,13 +238,7 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
   const setLayerZ = useDocumentStore((s) => s.setLayerZ)
 
   if (!layer) {
-    return (
-      <>
-        <BedPresetsSection />
-        <PrintSettingsSection />
-        {multiCount > 1 && <EmptyState text={`${multiCount} shapes selected — position & size editing needs just one.`} />}
-      </>
-    )
+    return <EmptyState text={`${multiCount} shapes selected — position & size editing needs just one.`} />
   }
 
   const bounds = shapeWorldBounds(layer)
@@ -442,6 +472,155 @@ function ShellSection({ layer }: { layer: ShapeLayer }) {
         Rounded corners and polish carry into the cavity; the outer bevel stays on the rim.
       </p>
     </Section>
+  )
+}
+
+/** Printable relief on the shape's surfaces — grooves cut into the
+ * material so outer dimensions and fits stay exact. On a cutter it
+ * decorates the cavity walls it leaves. */
+function TextureSection({ layer }: { layer: ShapeLayer }) {
+  const setTexture = useDocumentStore((s) => s.setTexture)
+  const texture = layer.texture ?? null
+  const supported = layer.regions.length === 1 && layer.regions[0].holes.length === 0
+  const patch = (p: Partial<SurfaceTexture>) => setTexture(layer.id, { ...(texture ?? DEFAULT_TEXTURE), ...p })
+
+  if (!supported) {
+    return (
+      <Section title="Surface Texture">
+        <p className="inspector-note">Textures need an outline without holes in it — apply them to the shapes before combining, or to a cutter.</p>
+      </Section>
+    )
+  }
+  return (
+    <Section
+      title="Surface Texture"
+      action={
+        texture ? (
+          <button type="button" className="inspector-section__hint inspector-section__hint--button" onClick={() => setTexture(layer.id, null)}>
+            Remove
+          </button>
+        ) : undefined
+      }
+    >
+      <div className="inspector-preset-chips">
+        <button type="button" className={`inspector-preset-chip ${!texture ? 'inspector-preset-chip--active' : ''}`} onClick={() => setTexture(layer.id, null)}>
+          None
+        </button>
+        {TEXTURE_PATTERNS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`inspector-preset-chip ${texture?.pattern === p.id ? 'inspector-preset-chip--active' : ''}`}
+            title={p.hint}
+            onClick={() => patch({ pattern: p.id, target: layer.isHole ? 'walls' : (texture?.target ?? 'walls') })}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {texture && (
+        <>
+          {!layer.isHole && (
+            <>
+              <p className="inspector-field__label">Apply to</p>
+              <div className="inspector-preset-chips">
+                {(
+                  [
+                    ['walls', 'Side walls'],
+                    ['top', 'Top face'],
+                    ['both', 'Both'],
+                  ] as const
+                ).map(([t, label]) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={`inspector-preset-chip ${texture.target === t ? 'inspector-preset-chip--active' : ''}`}
+                    onClick={() => patch({ target: t })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <div className="inspector-grid-2">
+            <Field label="Pattern size" value={texture.size} suffix="mm" onChange={(v) => patch({ size: v })} />
+            <Field label="Groove depth" value={texture.depth} suffix="mm" onChange={(v) => patch({ depth: v })} />
+          </div>
+          <p className="inspector-note">
+            {layer.isHole
+              ? 'Cut into the walls of the cavity this cutter leaves. Outer dimensions of the part stay exact.'
+              : 'Cut into the surface, so the outer dimensions stay exact. Keep depth under about half the wall thickness; 0.4–1 mm reads well when printed.'}
+          </p>
+        </>
+      )}
+    </Section>
+  )
+}
+
+/** Carve: one of two selected shapes becomes the cutter for the other, and
+ * the pair is grouped — one object, the way a hand-drawn hole would be. */
+function CarveSection({ ids }: { ids: string[] }) {
+  const layers = useDocumentStore((s) => s.layers)
+  const order = useDocumentStore((s) => s.order)
+  const carveWith = useDocumentStore((s) => s.carveWith)
+  const setNotice = useViewStore((s) => s.setNotice)
+  const a = layers[ids[0]]
+  const b = layers[ids[1]]
+  // Default tool: an existing hole, else whichever was drawn later.
+  const defaultTool = a?.isHole ? a.id : b?.isHole ? b.id : order.indexOf(a?.id ?? '') > order.indexOf(b?.id ?? '') ? a?.id : b?.id
+  const [toolId, setToolId] = useState<string | undefined>(defaultTool)
+  const [mode, setMode] = useState<'top' | 'bottom' | 'through'>('top')
+  useEffect(() => setToolId(defaultTool), [defaultTool])
+  if (!a || !b) return null
+  const tool = layers[toolId ?? ''] ?? b
+  const base = tool.id === a.id ? b : a
+  if (base.isHole) return <p className="inspector-note">Pick a solid shape to carve into.</p>
+
+  return (
+    <div className="inspector-section">
+      <p className="inspector-field__label">Cut with</p>
+      <div className="inspector-preset-chips">
+        {[a, b].map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            className={`inspector-preset-chip ${tool.id === l.id ? 'inspector-preset-chip--active' : ''}`}
+            disabled={l.isHole && (l.id === a.id ? b : a).isHole}
+            onClick={() => setToolId(l.id)}
+          >
+            {l.name}
+          </button>
+        ))}
+      </div>
+      <p className="inspector-field__label">Into {base.name}</p>
+      <div className="inspector-preset-chips">
+        {(
+          [
+            ['top', `From the top, ${round(tool.extrusionDepth)} mm deep`],
+            ['bottom', `From the bottom, ${round(tool.extrusionDepth)} mm deep`],
+            ['through', 'Right through'],
+          ] as const
+        ).map(([m, label]) => (
+          <button key={m} type="button" className={`inspector-preset-chip ${mode === m ? 'inspector-preset-chip--active' : ''}`} onClick={() => setMode(m)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="inspector-export-btn inspector-export-btn--primary"
+        onClick={() => {
+          carveWith(base.id, tool.id, mode)
+          setNotice(`${tool.name} now carves ${base.name} — the two are grouped as one object. Its rim bevel and texture shape the cut.`)
+        }}
+      >
+        Carve {base.name} with {tool.name}
+      </button>
+      <p className="inspector-note">
+        {tool.name} becomes the negative: it keeps its outline, bevel (as a rim bevel) and texture, and is grouped with {base.name} so they move together. Export cuts it out.
+      </p>
+    </div>
   )
 }
 
@@ -685,19 +864,24 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
         <p className="inspector-note">Softens sharp corners only — gentle curves are left alone.</p>
       </Section>
 
-      <Section title="Edge Bevel">
+      <Section title={layer.isHole ? 'Rim Bevel' : 'Edge Bevel'}>
         <div className="inspector-grid-2">
-          <Field label="Top" value={layer.bevelTop} suffix="mm" onChange={(v) => setBevelTop(layer.id, v)} />
+          <Field label={layer.isHole ? 'Mouth (top)' : 'Top'} value={layer.bevelTop} suffix="mm" onChange={(v) => setBevelTop(layer.id, v)} />
           <Field label="Bottom" value={layer.bevelBottom} suffix="mm" onChange={(v) => setBevelBottom(layer.id, v)} />
         </div>
-        {(safeTop < layer.bevelTop - 0.05 || safeBottom < layer.bevelBottom - 0.05) && (
-          <p className="inspector-note inspector-note--warning">
-            Clamped to what this shape can safely support: top {round(safeTop / UNIT_FACTORS[displayUnit])}
-            {displayUnit}, bottom {round(safeBottom / UNIT_FACTORS[displayUnit])}
-            {displayUnit}.
-          </p>
+        {layer.isHole ? (
+          <p className="inspector-note">Rounds the rim of the hole this cutter makes — a countersunk mouth, or a rounded pocket floor edge.</p>
+        ) : (
+          (safeTop < layer.bevelTop - 0.05 || safeBottom < layer.bevelBottom - 0.05) && (
+            <p className="inspector-note inspector-note--warning">
+              Clamped to what this shape can safely support: top {round(safeTop / UNIT_FACTORS[displayUnit])}
+              {displayUnit}, bottom {round(safeBottom / UNIT_FACTORS[displayUnit])}
+              {displayUnit}.
+            </p>
+          )
         )}
       </Section>
+      <TextureSection layer={layer} />
     </>
   )
 }

@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Point2 } from '../../types/document'
-import { computeSafeBevel, erodePolygon, signedArea } from './offset'
+import { computeSafeBevel, dilatePolygon, erodePolygon, signedArea } from './offset'
+import type { SurfaceTexture } from '../../types/document'
+import { buildTexturedCap, buildTexturedWall } from './surfaceTexture'
 
 // Below this angle between adjacent faces, normals blend smoothly (a
 // rounded fillet reads as glossy-smooth); at or above it, the edge stays
@@ -28,12 +30,25 @@ const BEVEL_SEGMENTS = 8
  * SAME units passed in (mm) — callers scale the resulting geometry, not
  * the inputs, so this stays reusable for STL export later too.
  */
+export interface BeveledGeometryOptions {
+  /** Hole cutters bevel OUTWARD (the rings widen toward the open face),
+   * which rounds/countersinks the rim of the hole they cut. */
+  flare?: boolean
+  /** Printable relief on the straight wall and/or the top cap. */
+  texture?: SurfaceTexture | null
+  /** -1 cuts grooves into a solid; +1 pushes a cutter out (grooves in the
+   * cavity walls it leaves). */
+  textureSign?: 1 | -1
+}
+
 export function buildBeveledGeometry(
   inputContour: Point2[],
   depth: number,
   bevelBottomRequested: number,
   bevelTopRequested: number,
+  options: BeveledGeometryOptions = {},
 ): THREE.BufferGeometry {
+  const { flare = false, texture = null, textureSign = -1 } = options
   // Wall and cap triangle winding below assumes the same orientation every
   // primitive shape has (positive signed area). A pen path clicked in the
   // other direction arrives reversed and would build inside-out — every
@@ -42,8 +57,10 @@ export function buildBeveledGeometry(
   const n = contour.length
   if (n < 3 || depth <= 0) return new THREE.BufferGeometry()
 
-  let safeBottom = Math.max(0, computeSafeBevel(contour, bevelBottomRequested))
-  let safeTop = Math.max(0, computeSafeBevel(contour, bevelTopRequested))
+  // Erosion has a geometric limit (a narrow neck pinching shut); dilation
+  // does not, so a flared cutter takes the requested amounts as-is.
+  let safeBottom = Math.max(0, flare ? bevelBottomRequested : computeSafeBevel(contour, bevelBottomRequested))
+  let safeTop = Math.max(0, flare ? bevelTopRequested : computeSafeBevel(contour, bevelTopRequested))
 
   // Leave at least a hair of straight wall so the two bevels never cross
   // over into a negative-height middle section.
@@ -104,7 +121,7 @@ export function buildBeveledGeometry(
       const theta = (i / BEVEL_SEGMENTS) * (Math.PI / 2)
       const erosion = mode === 'bottom' ? r * (1 - Math.sin(theta)) : r * (1 - Math.cos(theta))
       const z = mode === 'bottom' ? zStart + r * (1 - Math.cos(theta)) : zStart + r * Math.sin(theta)
-      const ring = erosion <= 1e-9 ? contour : (erodePolygon(contour, erosion) ?? lastRing)
+      const ring = erosion <= 1e-9 ? contour : ((flare ? dilatePolygon(contour, erosion) : erodePolygon(contour, erosion)) ?? lastRing)
       lastRing = ring
       rings.push({ ring, z })
     }
@@ -122,7 +139,17 @@ export function buildBeveledGeometry(
       addWall(bottomRings[i].ring, bottomRings[i].z, bottomRings[i + 1].ring, bottomRings[i + 1].z)
     }
   }
-  if (depth - safeTop > safeBottom + 1e-6) addWall(contour, safeBottom, contour, depth - safeTop)
+  const appendPart = (part: { positions: number[]; indices: number[] }) => {
+    const base = positions.length / 3
+    for (const v of part.positions) positions.push(v)
+    for (const i of part.indices) indices.push(base + i)
+  }
+  const textureWalls = texture && texture.depth > 0 && (texture.target === 'walls' || texture.target === 'both')
+  const textureTop = texture && texture.depth > 0 && (texture.target === 'top' || texture.target === 'both')
+  if (depth - safeTop > safeBottom + 1e-6) {
+    if (textureWalls) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, texture, textureSign))
+    else addWall(contour, safeBottom, contour, depth - safeTop)
+  }
   if (topRings) {
     for (let i = 0; i < topRings.length - 1; i++) {
       addWall(topRings[i].ring, topRings[i].z, topRings[i + 1].ring, topRings[i + 1].z)
@@ -141,9 +168,13 @@ export function buildBeveledGeometry(
   for (const [a, b, c] of bottomTriangles) indices.push(bottomStart + a, bottomStart + b, bottomStart + c)
 
   const topCapRing = dedupeRing(topCap)
-  const topTriangles = THREE.ShapeUtils.triangulateShape(toVector2(topCapRing), [])
-  const topStart = addRingPoints(topCapRing, depth)
-  for (const [a, b, c] of topTriangles) indices.push(topStart + a, topStart + c, topStart + b)
+  if (textureTop && textureSign < 0) {
+    appendPart(buildTexturedCap(topCapRing, depth, texture))
+  } else {
+    const topTriangles = THREE.ShapeUtils.triangulateShape(toVector2(topCapRing), [])
+    const topStart = addRingPoints(topCapRing, depth)
+    for (const [a, b, c] of topTriangles) indices.push(topStart + a, topStart + c, topStart + b)
+  }
 
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))

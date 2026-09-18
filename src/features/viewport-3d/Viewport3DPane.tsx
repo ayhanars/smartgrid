@@ -248,6 +248,16 @@ export function Viewport3DPane() {
     })
   }, [printPreview, order, layers, zRanges, cutGeometriesById, artboardWidth, artboardHeight])
 
+  // OrbitControls.dollyIn(k) multiplies the orbit radius by k — so k < 1
+  // brings the camera closer. (Its naming is the wheel handler's, where
+  // the scale it gets is already < 1 for "in".)
+  const zoomBy = (radiusFactor: number) => {
+    const controls = controlsRef.current
+    if (!controls) return
+    controls.dollyIn(radiusFactor)
+    controls.update()
+  }
+
   const t = primary?.transform
 
   return (
@@ -433,11 +443,11 @@ export function Viewport3DPane() {
       )}
 
       <div className="viewport-3d__zoom">
-        <IconButton size="sm" aria-label="Zoom out" onClick={() => controlsRef.current?.dollyOut(1.2)}>
+        <IconButton size="sm" aria-label="Zoom out" onClick={() => zoomBy(1.2)}>
           <ZoomOut size={14} />
         </IconButton>
         <span>{order.length} shapes</span>
-        <IconButton size="sm" aria-label="Zoom in" onClick={() => controlsRef.current?.dollyIn(1.2)}>
+        <IconButton size="sm" aria-label="Zoom in" onClick={() => zoomBy(1 / 1.2)}>
           <ZoomIn size={14} />
         </IconButton>
       </div>

@@ -75,6 +75,33 @@ export const INFILL_PATTERNS: { id: InfillPattern; label: string }[] = [
   { id: 'cubic', label: 'Cubic' },
 ]
 
+export type TexturePattern = 'ripples' | 'flutes' | 'grid' | 'bricks' | 'diamonds' | 'honeycomb' | 'dots' | 'wood'
+
+/** Printable relief cut INTO a shape's surfaces (outer dimensions stay
+ * exact): grooves on the side walls and/or the top face. On a hole
+ * cutter it decorates the cavity walls instead. */
+export interface SurfaceTexture {
+  pattern: TexturePattern
+  target: 'walls' | 'top' | 'both'
+  /** Pattern repeat, mm. */
+  size: number
+  /** Groove depth, mm. */
+  depth: number
+}
+
+export const TEXTURE_PATTERNS: { id: TexturePattern; label: string; hint: string }[] = [
+  { id: 'ripples', label: 'Ripples', hint: 'horizontal waves' },
+  { id: 'flutes', label: 'Flutes', hint: 'vertical waves' },
+  { id: 'grid', label: 'Grid', hint: 'crossed grooves' },
+  { id: 'bricks', label: 'Bricks', hint: 'running bond' },
+  { id: 'diamonds', label: 'Diamonds', hint: 'diagonal knurl' },
+  { id: 'honeycomb', label: 'Honeycomb', hint: 'hex cells' },
+  { id: 'dots', label: 'Dimples', hint: 'rounded pits' },
+  { id: 'wood', label: 'Wood grain', hint: 'wavy grain' },
+]
+
+export const DEFAULT_TEXTURE: SurfaceTexture = { pattern: 'grid', target: 'walls', size: 4, depth: 0.6 }
+
 export interface ShapeLayer {
   id: string
   kind: ShapeKind
@@ -98,6 +125,8 @@ export interface ShapeLayer {
    * user asked for, not necessarily what gets built. 0 = sharp edge. */
   bevelBottom: number
   bevelTop: number
+  /** Optional printable surface relief (see SurfaceTexture). */
+  texture?: SurfaceTexture
   /** True for a shape drawn with the Hole tool: never rendered as its own
    * solid, instead subtracted from whatever it overlaps in the 3D scene. */
   isHole: boolean

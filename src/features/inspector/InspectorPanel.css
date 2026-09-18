@@ -523,3 +523,29 @@
   background: var(--accent-bg);
   color: var(--accent-text);
 }
+
+.inspector-panel__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.inspector-panel__tabs button {
+  flex: 1;
+  padding: 8px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.inspector-panel__tabs button:hover {
+  color: var(--text);
+}
+
+.inspector-panel__tab--active {
+  color: var(--text) !important;
+  border-bottom-color: var(--accent) !important;
+}

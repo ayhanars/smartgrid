@@ -64,7 +64,11 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number): THREE.Bu
   if (isSimple) {
     const rounded = roundPolygonCorners(layer.regions[0].outer.points, layer.cornerRadius)
     const contour = smartPolishCorners(rounded, layer.smartPolish)
-    const geo = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop)
+    const geo = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop, {
+      flare: layer.isHole,
+      texture: layer.texture ?? null,
+      textureSign: layer.isHole ? 1 : -1,
+    })
     geo.scale(scale, scale, scale)
     geometries = [geo]
   } else {

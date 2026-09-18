@@ -1,12 +1,13 @@
 import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
-import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type ShapeLayer } from '../types/document'
+import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type ShapeLayer, type SurfaceTexture } from '../types/document'
 import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking'
 import { buildShellCavity, type ShellOptions } from '../lib/geometry/shell'
+import { buildLayerGeometries } from '../lib/geometry/layerGeometry'
 
 export { rotatedLocalPoints, shapeWorldBounds }
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
@@ -105,6 +106,12 @@ interface DocumentActions {
    * given thickness (floor rounded up to whole print layers), grouped with
    * it. Returns the new cavity's id, or null if the outline is too narrow. */
   hollowOut: (id: string, options: ShellOptions) => { cavityId: string; wall: number } | null
+  /** Surface relief on a shape; null removes it. */
+  setTexture: (id: string, texture: SurfaceTexture | null) => void
+  /** Carve: turns `toolId` into a hole cutter positioned against `baseId`
+   * (from its top, from its bottom, or right through) and groups the two,
+   * so the pair reads and moves as one object. */
+  carveWith: (baseId: string, toolId: string, mode: 'top' | 'bottom' | 'through') => void
   setBedPreset: (id: string) => void
   togglePinnedBedPreset: (id: string) => void
   setCustomBedSize: (width: number, height: number) => void
@@ -707,6 +714,62 @@ export const useDocumentStore = create<DocumentStore>()(
         return { cavityId, wall: cavity.wall }
       },
 
+      setTexture: (id, texture) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          if (!texture) {
+            const { texture: _dropped, ...rest } = layer
+            return { layers: { ...state.layers, [id]: rest } }
+          }
+          const clean: SurfaceTexture = {
+            ...texture,
+            size: Math.min(50, Math.max(0.5, texture.size)),
+            depth: Math.min(5, Math.max(0, texture.depth)),
+          }
+          return { layers: { ...state.layers, [id]: { ...layer, texture: clean } } }
+        }),
+
+      carveWith: (baseId, toolId, mode) =>
+        set((state) => {
+          const base = state.layers[baseId]
+          const tool = state.layers[toolId]
+          if (!base || !tool || base.isHole || baseId === toolId) return {}
+          const OVERSHOOT = 1
+          const baseTop = base.transform.z + base.extrusionDepth
+          const d = tool.extrusionDepth
+          let z: number
+          let depth: number
+          if (mode === 'through') {
+            z = base.transform.z - OVERSHOOT
+            depth = base.extrusionDepth + 2 * OVERSHOOT
+          } else if (mode === 'top') {
+            z = baseTop - d
+            depth = d + OVERSHOOT
+          } else {
+            z = base.transform.z - OVERSHOOT
+            depth = d + OVERSHOOT
+          }
+          const layers = { ...state.layers }
+          let groups = state.groups
+          let groupId = base.groupId
+          if (!groupId) {
+            groupId = generateId()
+            groups = { ...groups, [groupId]: { id: groupId, name: `${base.name} carved` } }
+            layers[baseId] = { ...base, groupId }
+          }
+          layers[toolId] = {
+            ...tool,
+            kind: 'hole',
+            isHole: true,
+            name: tool.isHole ? tool.name : `${tool.name} cutter`,
+            transform: { ...tool.transform, z: Math.round(z * 1e6) / 1e6 },
+            extrusionDepth: Math.round(depth * 1e6) / 1e6,
+            groupId,
+          }
+          return { layers, groups, selection: [baseId, toolId] }
+        }),
+
       setBedPreset: (id) => set({ bedPresetId: id }),
 
       togglePinnedBedPreset: (id) =>
@@ -876,5 +939,5 @@ export function emptyDocument(name = 'Untitled project'): DocumentSnapshot {
 // Dev-only handle so browser automation/debugging can reach the live store
 // (stripped from production builds by the DEV guard).
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore; shapeWorldBounds: typeof shapeWorldBounds } }).__smartgrid = { useDocumentStore, shapeWorldBounds }
+  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore; shapeWorldBounds: typeof shapeWorldBounds; buildLayerGeometries: typeof buildLayerGeometries } }).__smartgrid = { useDocumentStore, shapeWorldBounds, buildLayerGeometries }
 }
