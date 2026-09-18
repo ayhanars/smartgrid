@@ -25,6 +25,9 @@ interface ExtrudedShapeMeshProps {
    * via real CSG (see Viewport3DPane) — bypasses the normal per-shape
    * build when this shape has any holes cutting into it. */
   cutGeometries?: THREE.BufferGeometry[]
+  /** What the selection/warning outline is traced on when `cutGeometries`
+   * is set: the same shapes before the cut, whose edges are clean. */
+  outlineGeometries?: THREE.BufferGeometry[]
   /** Support analysis result: outlines the shape red (floating) or amber
    * (partially supported) so the problem is visible in the scene itself. */
   warning?: 'critical' | 'partial'
@@ -44,6 +47,7 @@ export function ExtrudedShapeMesh({
   artboardWidth,
   artboardHeight,
   cutGeometries,
+  outlineGeometries,
   warning,
   clippingPlanes,
   onGroupRef,
@@ -93,18 +97,23 @@ export function ExtrudedShapeMesh({
       <group position={[-center.x, -center.y, -center.z]}>
         {geometries.map((geo, i) => (
           <mesh key={i} geometry={geo}>
-            <meshStandardMaterial
+            <meshPhysicalMaterial
               color={layer.isHole ? '#ff5c5c' : layer.color}
               wireframe={wireframe}
               transparent={opacity < 1}
               opacity={opacity}
               side={preview ? THREE.DoubleSide : THREE.FrontSide}
               clippingPlanes={clippingPlanes ?? null}
+              roughness={0.42}
+              metalness={0.02}
+              clearcoat={0.12}
+              clearcoatRoughness={0.5}
+              envMapIntensity={0.9}
             />
             {warning ? (
-              <Edges color={warning === 'critical' ? '#ff5c5c' : '#ffb648'} lineWidth={2} threshold={OUTLINE_CREASE_DEG} />
+              <Edges geometry={outlineGeometries?.[i]} color={warning === 'critical' ? '#ff5c5c' : '#ffb648'} lineWidth={2} threshold={OUTLINE_CREASE_DEG} />
             ) : (
-              isSelected && <Edges color="#4d8dff" lineWidth={2} threshold={OUTLINE_CREASE_DEG} />
+              isSelected && <Edges geometry={outlineGeometries?.[i]} color="#4d8dff" lineWidth={2} threshold={OUTLINE_CREASE_DEG} />
             )}
           </mesh>
         ))}

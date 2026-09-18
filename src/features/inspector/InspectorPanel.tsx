@@ -19,7 +19,7 @@ import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
 import { IconButton } from '../../components/IconButton'
-import { DEFAULT_TEXTURE, INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type ShapeLayer, type SurfaceTexture, type WallSide } from '../../types/document'
+import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
 import { TexturePreview } from './TexturePreview'
 import { prepareTile } from '../../lib/geometry/customTile'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
@@ -464,6 +464,95 @@ function ShellSection({ layer }: { layer: ShapeLayer }) {
 
 const MAX_TILE_BYTES = 400 * 1024
 
+/** Compact pattern chooser: the current pattern as one row, and a popover
+ * with big previews to change it — Figma's style-picker idea, so the
+ * panel stays short while the previews stay legible. */
+function TexturePicker({
+  texture,
+  onPick,
+  onNone,
+  onUpload,
+}: {
+  texture: SurfaceTexture | null
+  onPick: (id: TexturePattern) => void
+  onNone: () => void
+  onUpload: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    // Escape closes the popover and nothing else: capture it before the
+    // app-wide handler that would otherwise also clear the selection.
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      setOpen(false)
+    }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', key, true)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', key, true)
+    }
+  }, [open])
+  const current = texture ? TEXTURE_PATTERNS.find((p) => p.id === texture.pattern) : null
+  return (
+    <div className="texture-picker" ref={ref}>
+      <button type="button" className="texture-picker__current" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {texture && (texture.pattern !== 'custom' || texture.tile) ? (
+          <TexturePreview texture={texture} width={60} height={40} />
+        ) : (
+          <span className="texture-choice__none" style={{ width: 60, height: 40 }}>
+            {texture ? 'image' : 'None'}
+          </span>
+        )}
+        <span className="texture-picker__label">
+          <strong>{current?.label ?? 'No texture'}</strong>
+          <span>{current?.hint ?? 'plain surfaces'}</span>
+        </span>
+        <span className="texture-picker__change">Change</span>
+      </button>
+      {open && (
+        <div className="texture-popover" role="dialog" aria-label="Choose a texture">
+          <div className="texture-grid">
+            <button type="button" className={`texture-choice ${!texture ? 'texture-choice--active' : ''}`} onClick={() => { onNone(); setOpen(false) }}>
+              <span className="texture-choice__none">None</span>
+              <span>Plain</span>
+            </button>
+            {TEXTURE_PATTERNS.filter((p) => p.id !== 'custom').map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`texture-choice ${texture?.pattern === p.id ? 'texture-choice--active' : ''}`}
+                title={p.hint}
+                aria-label={p.label}
+                onClick={() => { onPick(p.id); setOpen(false) }}
+              >
+                <TexturePreview texture={{ ...DEFAULT_TEXTURE, ...texture, pattern: p.id }} width={96} height={64} patterns={3} />
+                <span>{p.label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`texture-choice ${texture?.pattern === 'custom' ? 'texture-choice--active' : ''}`}
+              title="Upload an SVG or PNG: dark = groove, white/transparent = flat"
+              aria-label="Upload image texture"
+              onClick={() => { setOpen(false); if (texture?.tile) onPick('custom'); else onUpload() }}
+            >
+              {texture?.tile ? <TexturePreview texture={{ ...texture, pattern: 'custom' }} width={96} height={64} patterns={3} /> : <span className="texture-choice__none">SVG / PNG</span>}
+              <span>Your image</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Printable relief on the shape's surfaces — grooves cut into the
  * material so outer dimensions and fits stay exact. On a cutter it
  * decorates the cavity walls it leaves. */
@@ -520,35 +609,12 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
         ) : undefined
       }
     >
-      <div className="texture-grid">
-        <button type="button" className={`texture-choice ${!texture ? 'texture-choice--active' : ''}`} onClick={() => setTexture(layer.id, null)}>
-          <span className="texture-choice__none">None</span>
-          <span>Plain</span>
-        </button>
-        {TEXTURE_PATTERNS.filter((p) => p.id !== 'custom').map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`texture-choice ${texture?.pattern === p.id ? 'texture-choice--active' : ''}`}
-            title={p.hint}
-            aria-label={p.label}
-            onClick={() => patch({ pattern: p.id, target: layer.isHole ? 'walls' : (texture?.target ?? 'walls') })}
-          >
-            <TexturePreview texture={{ ...DEFAULT_TEXTURE, ...texture, pattern: p.id }} />
-            <span>{p.label}</span>
-          </button>
-        ))}
-        <button
-          type="button"
-          className={`texture-choice ${texture?.pattern === 'custom' ? 'texture-choice--active' : ''}`}
-          title="Upload an SVG or PNG: dark = groove, white/transparent = flat"
-          aria-label="Upload image texture"
-          onClick={() => (texture?.tile ? patch({ pattern: 'custom' }) : fileRef.current?.click())}
-        >
-          {texture?.tile ? <TexturePreview texture={{ ...texture, pattern: 'custom' }} /> : <span className="texture-choice__none">SVG / PNG</span>}
-          <span>Your image</span>
-        </button>
-      </div>
+      <TexturePicker
+        texture={texture}
+        onPick={(id) => patch({ pattern: id, target: layer.isHole ? 'walls' : (texture?.target ?? 'walls') })}
+        onNone={() => setTexture(layer.id, null)}
+        onUpload={() => fileRef.current?.click()}
+      />
       <input
         ref={fileRef}
         type="file"
@@ -631,6 +697,125 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
             {layer.isHole
               ? 'Cut into the walls of the cavity this cutter leaves. Outer dimensions of the part stay exact.'
               : 'Cut into the surface, so the outer dimensions stay exact. Keep depth under about half the wall thickness; 0.4–1 mm reads well when printed.'}
+          </p>
+        </>
+      )}
+    </Section>
+  )
+}
+
+/** Real holes drilled in a regular pattern through the walls and/or the
+ * top face — cut with CSG so they print as holes, not dents. */
+function PerforationSection({ layer }: { layer: ShapeLayer }) {
+  const setPerforation = useDocumentStore((s) => s.setPerforation)
+  const perf = layer.perforation ?? null
+  const supported = layer.regions.length === 1 && layer.regions[0].holes.length === 0
+  const patch = (p: Partial<Perforation>) => setPerforation(layer.id, { ...(perf ?? DEFAULT_PERFORATION), ...p })
+  const sides = perf?.sides ?? []
+  const toggleSide = (side: WallSide) => {
+    const next = sides.includes(side) ? sides.filter((x) => x !== side) : [...sides, side]
+    patch({ sides: next.length === 0 || next.length === 4 ? undefined : next })
+  }
+  if (!supported) return null
+  return (
+    <Section
+      title="Perforation"
+      action={
+        perf ? (
+          <button type="button" className="inspector-section__hint inspector-section__hint--button" onClick={() => setPerforation(layer.id, null)}>
+            Remove
+          </button>
+        ) : (
+          <span className="inspector-section__hint">holes</span>
+        )
+      }
+    >
+      {!perf ? (
+        <>
+          <button type="button" className="inspector-export-btn" onClick={() => patch({})}>
+            Drill a pattern of holes
+          </button>
+          <p className="inspector-note">Evenly spaced real holes through the walls or the top — a basket, a speaker grille, a soap dish.</p>
+        </>
+      ) : (
+        <>
+          <p className="inspector-field__label">Hole shape</p>
+          <div className="inspector-preset-chips">
+            {(
+              [
+                ['round', 'Round'],
+                ['square', 'Square'],
+                ['hex', 'Hexagon'],
+              ] as const
+            ).map(([id, label]) => (
+              <button key={id} type="button" className={`inspector-preset-chip ${perf.shape === id ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ shape: id })}>
+                {label}
+              </button>
+            ))}
+            <button type="button" className={`inspector-preset-chip ${perf.pattern === 'grid' ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ pattern: 'grid' })}>
+              Grid
+            </button>
+            <button type="button" className={`inspector-preset-chip ${perf.pattern === 'staggered' ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ pattern: 'staggered' })}>
+              Staggered
+            </button>
+          </div>
+          <div className="inspector-grid-2">
+            <Field label="Hole size" value={perf.size} suffix="mm" onChange={(v) => patch({ size: v })} />
+            <Field label="Spacing (center to center)" value={perf.spacing} suffix="mm" onChange={(v) => patch({ spacing: v })} />
+          </div>
+          <p className="inspector-field__label">Drill into</p>
+          <div className="inspector-preset-chips">
+            {(
+              [
+                ['walls', 'Side walls'],
+                ['top', 'Top face'],
+                ['both', 'Both'],
+              ] as const
+            ).map(([t, label]) => (
+              <button key={t} type="button" className={`inspector-preset-chip ${perf.target === t ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ target: t })}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="inspector-preset-chips">
+            <button type="button" className={`inspector-preset-chip ${perf.depth == null ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ depth: null })}>
+              Right through
+            </button>
+            <button type="button" className={`inspector-preset-chip ${perf.depth != null ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ depth: perf.depth ?? 2 })}>
+              To a depth
+            </button>
+          </div>
+          {perf.depth != null && (
+            <div className="inspector-grid-2">
+              <Field label="Hole depth" value={perf.depth} suffix="mm" onChange={(v) => patch({ depth: v })} />
+            </div>
+          )}
+          {perf.target !== 'top' && (
+            <>
+              <p className="inspector-field__label">Which walls</p>
+              <div className="inspector-preset-chips">
+                <button type="button" className={`inspector-preset-chip ${sides.length === 0 ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ sides: undefined })}>
+                  All
+                </button>
+                {(['front', 'back', 'left', 'right'] as const).map((side) => (
+                  <button key={side} type="button" className={`inspector-preset-chip ${sides.includes(side) ? 'inspector-preset-chip--active' : ''}`} onClick={() => toggleSide(side)}>
+                    {side[0].toUpperCase() + side.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <div className="inspector-grid-2">
+                <Field label="Band from (bottom)" value={perf.wallFrom ?? 0} suffix="mm" onChange={(v) => patch({ wallFrom: Math.max(0, v) })} />
+                <Field label="Band to" value={perf.wallTo ?? layer.extrusionDepth} suffix="mm" onChange={(v) => patch({ wallTo: Math.max(0, v) })} />
+              </div>
+            </>
+          )}
+          {perf.target !== 'walls' && (
+            <div className="inspector-grid-2" style={{ marginTop: 8 }}>
+              <Field label="Top margin kept plain" value={perf.topInset ?? 0} suffix="mm" onChange={(v) => patch({ topInset: Math.max(0, v) })} />
+            </div>
+          )}
+          <p className="inspector-note">
+            Holes never straddle a corner; on a hollowed shape "right through" opens the walls into the cavity. Keep spacing at least a nozzle width or two above the hole size.
           </p>
         </>
       )}
@@ -931,6 +1116,7 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
   const setSmartPolish = useDocumentStore((s) => s.setSmartPolish)
   const setBevelBottom = useDocumentStore((s) => s.setBevelBottom)
   const setBevelTop = useDocumentStore((s) => s.setBevelTop)
+  const setBevelMode = useDocumentStore((s) => s.setBevelMode)
 
   // The same contour the 3D mesh is actually built from, so the "clamped
   // to" hint below reflects the real geometry-safety limit for this shape,
@@ -977,7 +1163,21 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
           <Field label="Bottom" value={layer.bevelBottom} suffix="mm" onChange={(v) => setBevelBottom(layer.id, v)} />
         </div>
         {layer.isHole ? (
-          <p className="inspector-note">Rounds the rim of the hole this cutter makes — a countersunk mouth, or a rounded pocket floor edge.</p>
+          <>
+            <div className="inspector-preset-chips">
+              <button type="button" className={`inspector-preset-chip ${(layer.bevelMode ?? 'rim') === 'rim' ? 'inspector-preset-chip--active' : ''}`} onClick={() => setBevelMode(layer.id, 'rim')}>
+                Round the rim
+              </button>
+              <button type="button" className={`inspector-preset-chip ${layer.bevelMode === 'shape' ? 'inspector-preset-chip--active' : ''}`} onClick={() => setBevelMode(layer.id, 'shape')}>
+                Cutter's own edges
+              </button>
+            </div>
+            <p className="inspector-note">
+              {(layer.bevelMode ?? 'rim') === 'rim'
+                ? 'Flares the cutter outward: a countersunk mouth at the top, a rounded floor edge at the bottom.'
+                : 'The cut keeps this cutter\'s exact shape — its own rounded edges become the pocket\'s.'}
+            </p>
+          </>
         ) : (
           (safeTop < layer.bevelTop - 0.05 || safeBottom < layer.bevelBottom - 0.05) && (
             <p className="inspector-note inspector-note--warning">
@@ -989,6 +1189,7 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
         )}
       </Section>
       <TextureSection layer={layer} />
+      {!layer.isHole && <PerforationSection layer={layer} />}
     </>
   )
 }

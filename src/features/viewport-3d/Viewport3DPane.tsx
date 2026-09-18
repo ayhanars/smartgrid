@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { Canvas } from '@react-three/fiber'
-import { GizmoHelper, GizmoViewcube, Grid, OrbitControls, TransformControls } from '@react-three/drei'
+import { Canvas, useThree } from '@react-three/fiber'
+import { ContactShadows, Environment, GizmoHelper, GizmoViewcube, Grid, Lightformer, OrbitControls, TransformControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib'
 import { ArrowDownToLine, Box, Layers2, Maximize, Move3d, Rotate3d, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
@@ -9,6 +9,7 @@ import { expandToGroup, shapeWorldBounds, useDocumentStore } from '../../state/d
 import type { Bounds } from '../../types/document'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
 import {
+  buildLayerCutters,
   buildLayerGeometries,
   layerPrintQuaternion,
   layerZRange,
@@ -34,6 +35,13 @@ function rectsOverlap(a: Bounds, b: Bounds): boolean {
 interface GizmoDrag {
   startPosition: THREE.Vector3
   starts: Record<string, { x: number; y: number; z: number; q: THREE.Quaternion }>
+}
+
+/** Dev-only: hands the live three.js state to the test harness. */
+function DevExpose() {
+  const state = useThree()
+  if (import.meta.env.DEV) Object.assign(window as unknown as Record<string, unknown>, { __three: state, __THREE: THREE })
+  return null
 }
 
 export function Viewport3DPane() {
@@ -184,10 +192,15 @@ export function Viewport3DPane() {
   // via a real 3D boolean (see holeCut.ts), independent of the hole's own
   // Z/depth. Solids with nothing overlapping skip this entirely and render
   // through ExtrudedShapeMesh's normal (uncut) path.
-  const cutGeometriesById = useMemo(() => {
+  const { cutGeometriesById, uncutGeometriesById } = useMemo(() => {
     const result: Record<string, THREE.BufferGeometry[]> = {}
+    // The same shapes before the cut: the selection outline is traced on
+    // these, because a boolean result is full of split edges that an edge
+    // finder mistakes for creases (a web of stray lines across the faces).
+    const uncut: Record<string, THREE.BufferGeometry[]> = {}
+    const empty = { cutGeometriesById: result, uncutGeometriesById: uncut }
     const holeIds = order.filter((id) => layers[id]?.isHole && layers[id]?.visible)
-    if (holeIds.length === 0) return result
+    if (holeIds.length === 0 && !order.some((id) => layers[id]?.perforation && !layers[id]?.isHole)) return empty
 
     const toWorld = (layer: (typeof layers)[string]) => ({
       worldX: (layer.transform.x - artboardWidth / 2) * SCENE_SCALE,
@@ -200,19 +213,24 @@ export function Viewport3DPane() {
       if (!layer || layer.isHole || !layer.visible) continue
       const solidBounds = shapeWorldBounds(layer)
       const overlappingHoles = holeIds.filter((hid) => hid !== id && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
-      if (overlappingHoles.length === 0) continue
-
       const solidWorld = toWorld(layer)
-      const holeGeoms = overlappingHoles.flatMap((hid) => {
-        const holeLayer = layers[hid]
-        const holeWorld = toWorld(holeLayer)
-        return buildLayerGeometries(holeLayer, SCENE_SCALE).map((geometry) => ({ geometry, ...holeWorld }))
-      })
+      // The shape's own perforation is just another cutter, at its own place.
+      const ownCutters = buildLayerCutters(layer, SCENE_SCALE).map((geometry) => ({ geometry, ...solidWorld }))
+      if (overlappingHoles.length === 0 && ownCutters.length === 0) continue
+
+      const holeGeoms = [
+        ...ownCutters,
+        ...overlappingHoles.flatMap((hid) => {
+          const holeLayer = layers[hid]
+          const holeWorld = toWorld(holeLayer)
+          return buildLayerGeometries(holeLayer, SCENE_SCALE).map((geometry) => ({ geometry, ...holeWorld }))
+        }),
+      ]
 
       try {
-        result[id] = buildLayerGeometries(layer, SCENE_SCALE).map((geo) =>
-          cutHolesFromSolid({ geometry: geo, ...solidWorld }, holeGeoms),
-        )
+        const bodies = buildLayerGeometries(layer, SCENE_SCALE)
+        result[id] = bodies.map((geo) => cutHolesFromSolid({ geometry: geo, ...solidWorld }, holeGeoms))
+        uncut[id] = bodies
       } catch (err) {
         // CSG on arbitrary/degenerate geometry is inherently best-effort —
         // fall back to rendering this one shape uncut rather than taking
@@ -220,7 +238,7 @@ export function Viewport3DPane() {
         console.error(`Hole cut failed for shape ${id}, rendering it uncut instead:`, err)
       }
     }
-    return result
+    return empty
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layers, order, artboardWidth, artboardHeight, tileVersion])
 
@@ -260,20 +278,41 @@ export function Viewport3DPane() {
     controls.update()
   }
 
+  // Contact shadows are rendered once per document change (not every
+  // frame), which keeps heavy textured meshes cheap to orbit.
+  const shadowKey = useMemo(() => Math.random(), [layers, order])
+
   const t = primary?.transform
 
   return (
     <div className="viewport-3d">
       <Canvas
+        // Render only when something changed (a document edit, an orbit, a
+        // gizmo drag): an idle viewport then costs no GPU time at all, which
+        // is what keeps a heavy textured or perforated scene from dragging
+        // the whole app down.
+        frameloop="demand"
         camera={{ position: [bedWidth * 1.4, bedWidth * 1.1, bedWidth * 1.4], fov: 40 }}
-        gl={{ localClippingEnabled: true, stencil: true }}
+        gl={{ localClippingEnabled: true, stencil: true, antialias: true }}
+        dpr={[1, 2]}
         onPointerMissed={() => {
           if (!gizmoBusy()) setSelection([])
         }}
       >
         <color attach="background" args={['#0a0a0b']} />
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[bedWidth * 2, bedWidth * 3, bedWidth]} intensity={1.1} castShadow />
+        {/* Studio lighting: a procedural environment (rendered once, no
+            downloads) gives the PBR material soft reflections and
+            gradients, plus a key light for crisp shading. */}
+        <ambientLight intensity={0.25} />
+        <directionalLight position={[bedWidth * 2, bedWidth * 3, bedWidth]} intensity={1.4} />
+        <directionalLight position={[-bedWidth * 2, bedWidth * 1.5, -bedWidth * 2]} intensity={0.35} />
+        <Environment resolution={128} frames={1}>
+          <Lightformer form="rect" intensity={2.5} position={[0, 6, 0]} rotation-x={Math.PI / 2} scale={[8, 8, 1]} />
+          <Lightformer form="rect" intensity={1.2} position={[6, 3, 2]} rotation-y={-Math.PI / 2} scale={[6, 3, 1]} />
+          <Lightformer form="rect" intensity={0.8} position={[-6, 2, -2]} rotation-y={Math.PI / 2} scale={[6, 3, 1]} />
+          <Lightformer form="ring" intensity={1.5} position={[0, 2, -8]} scale={4} color="#b9c6ff" />
+        </Environment>
+        <ContactShadows position={[0, 0.0015, 0]} opacity={0.55} scale={bedWidth * 1.6} blur={2.2} far={bedWidth * 0.6} resolution={512} frames={1} key={shadowKey} />
 
         <PrinterPlate width={bedWidth} depth={bedDepth} widthMM={artboardWidth} depthMM={artboardHeight} />
 
@@ -292,6 +331,7 @@ export function Viewport3DPane() {
               artboardWidth={artboardWidth}
               artboardHeight={artboardHeight}
               cutGeometries={cutGeometriesById[id]}
+              outlineGeometries={uncutGeometriesById[id]}
               warning={warningById.get(id)}
               clippingPlanes={clippingPlanes}
               onGroupRef={primary?.id === id ? setGizmoTarget : undefined}
@@ -354,6 +394,7 @@ export function Viewport3DPane() {
             />
           </group>
         </GizmoHelper>
+        {import.meta.env.DEV && <DevExpose />}
       </Canvas>
 
       {activeWarnings.length > 0 && (

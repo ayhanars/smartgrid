@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { ShapeLayer } from '../../types/document'
 import { shapeWorldBounds } from '../../state/documentStore'
-import { buildLayerGeometries } from '../geometry/layerGeometry'
+import { buildLayerCutters, buildLayerGeometries } from '../geometry/layerGeometry'
 import { cutHolesFromSolid } from '../geometry/holeCut'
 
 export interface ExportMesh {
@@ -36,12 +36,15 @@ export function buildExportMeshes(layers: Record<string, ShapeLayer>, order: str
 
     const solidBounds = shapeWorldBounds(layer)
     const overlapping = holeIds.filter((hid) => rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
-    const holeGeoms = overlapping.flatMap((hid) => {
-      const hole = layers[hid]
-      const w = toWorld(hole)
-      return buildLayerGeometries(hole, 1).map((geometry) => ({ geometry, ...w }))
-    })
     const solidWorld = toWorld(layer)
+    const holeGeoms = [
+      ...buildLayerCutters(layer, 1).map((geometry) => ({ geometry, ...solidWorld })),
+      ...overlapping.flatMap((hid) => {
+        const hole = layers[hid]
+        const w = toWorld(hole)
+        return buildLayerGeometries(hole, 1).map((geometry) => ({ geometry, ...w }))
+      }),
+    ]
 
     for (const geo of buildLayerGeometries(layer, 1)) {
       let finalGeo: THREE.BufferGeometry = geo

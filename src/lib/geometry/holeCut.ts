@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg'
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 // A single Evaluator is reusable across calls (it just holds scratch state
 // for the operation), so we don't pay setup cost per shape per frame.
@@ -49,5 +50,11 @@ export function cutHolesFromSolid(solid: PositionedGeometry, holes: PositionedGe
     brush = evaluator.evaluate(brush, holeBrush, SUBTRACTION)
     brush.updateMatrixWorld()
   }
-  return brush.geometry
+  // The evaluator emits three unshared vertices per triangle; welding the
+  // ones that coincide (same position and normal) cuts the vertex count
+  // several-fold, which is what the vertex stage, the outline pass and
+  // the exported file all pay for.
+  const welded = mergeVertices(brush.geometry, 1e-6)
+  welded.clearGroups()
+  return welded
 }

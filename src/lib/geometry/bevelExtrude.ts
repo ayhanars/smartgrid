@@ -39,6 +39,11 @@ export interface BeveledGeometryOptions {
   /** -1 cuts grooves into a solid; +1 pushes a cutter out (grooves in the
    * cavity walls it leaves). */
   textureSign?: 1 | -1
+  /** Subdivide every face at about this step (mm) even without a texture.
+   * A body about to be perforated needs this: CSG against a handful of
+   * huge triangles cascades into thousands of splits (a 200-hole plate
+   * took 6 s; pre-tessellated at 2 mm it takes 0.7 s). */
+  tessellate?: number
 }
 
 export function buildBeveledGeometry(
@@ -48,7 +53,7 @@ export function buildBeveledGeometry(
   bevelTopRequested: number,
   options: BeveledGeometryOptions = {},
 ): THREE.BufferGeometry {
-  const { flare = false, texture = null, textureSign = -1 } = options
+  const { flare = false, texture = null, textureSign = -1, tessellate } = options
   // Wall and cap triangle winding below assumes the same orientation every
   // primitive shape has (positive signed area). A pen path clicked in the
   // other direction arrives reversed and would build inside-out — every
@@ -146,8 +151,11 @@ export function buildBeveledGeometry(
   }
   const textureWalls = texture && texture.depth > 0 && (texture.target === 'walls' || texture.target === 'both')
   const textureTop = texture && texture.depth > 0 && (texture.target === 'top' || texture.target === 'both')
+  // A zero-depth "texture" is just a tessellation.
+  const flat: SurfaceTexture = { pattern: 'grid', target: 'both', size: 6, depth: 0 }
   if (depth - safeTop > safeBottom + 1e-6) {
     if (textureWalls) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, texture, textureSign))
+    else if (tessellate) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, flat, textureSign, tessellate))
     else addWall(contour, safeBottom, contour, depth - safeTop)
   }
   if (topRings) {
@@ -163,13 +171,26 @@ export function buildBeveledGeometry(
   // cross product, not just eyeballed, since getting this backwards is
   // exactly what silently back-face-culls a cap and looks like a hole.
   const bottomCapRing = dedupeRing(bottomCap)
-  const bottomTriangles = THREE.ShapeUtils.triangulateShape(toVector2(bottomCapRing), [])
-  const bottomStart = addRingPoints(bottomCapRing, 0)
-  for (const [a, b, c] of bottomTriangles) indices.push(bottomStart + a, bottomStart + b, bottomStart + c)
+  if (tessellate) {
+    // Same grid as the top, flipped to face down.
+    const part = buildTexturedCap(bottomCapRing, 0, flat, tessellate)
+    for (let i = 0; i < part.indices.length; i += 3) {
+      const b = part.indices[i + 1]
+      part.indices[i + 1] = part.indices[i + 2]
+      part.indices[i + 2] = b
+    }
+    appendPart(part)
+  } else {
+    const bottomTriangles = THREE.ShapeUtils.triangulateShape(toVector2(bottomCapRing), [])
+    const bottomStart = addRingPoints(bottomCapRing, 0)
+    for (const [a, b, c] of bottomTriangles) indices.push(bottomStart + a, bottomStart + b, bottomStart + c)
+  }
 
   const topCapRing = dedupeRing(topCap)
   if (textureTop && textureSign < 0) {
     appendPart(buildTexturedCap(topCapRing, depth, texture))
+  } else if (tessellate) {
+    appendPart(buildTexturedCap(topCapRing, depth, flat, tessellate))
   } else {
     const topTriangles = THREE.ShapeUtils.triangulateShape(toVector2(topCapRing), [])
     const topStart = addRingPoints(topCapRing, depth)

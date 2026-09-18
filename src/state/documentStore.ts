@@ -1,13 +1,14 @@
 import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
-import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type ShapeLayer, type SurfaceTexture } from '../types/document'
+import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type Perforation, type ShapeLayer, type SurfaceTexture } from '../types/document'
 import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking'
 import { buildShellCavity, type ShellOptions } from '../lib/geometry/shell'
-import { buildLayerGeometries } from '../lib/geometry/layerGeometry'
+import { buildLayerCutters, buildLayerGeometries } from '../lib/geometry/layerGeometry'
+import { cutHolesFromSolid } from '../lib/geometry/holeCut'
 
 export { rotatedLocalPoints, shapeWorldBounds }
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
@@ -115,6 +116,10 @@ interface DocumentActions {
   hollowOut: (id: string, options: ShellOptions) => { cavityId: string; wall: number } | null
   /** Surface relief on a shape; null removes it. */
   setTexture: (id: string, texture: SurfaceTexture | null) => void
+  /** Pattern of real holes on a shape; null removes it. */
+  setPerforation: (id: string, perforation: Perforation | null) => void
+  /** How a cutter's bevels are read (see ShapeLayer.bevelMode). */
+  setBevelMode: (id: string, mode: 'rim' | 'shape') => void
   /** Carve: turns `toolId` into a hole cutter positioned against `baseId`
    * (from its top, from its bottom, or right through) and groups the two,
    * so the pair reads and moves as one object. */
@@ -737,6 +742,31 @@ export const useDocumentStore = create<DocumentStore>()(
           return { layers: { ...state.layers, [id]: { ...layer, texture: clean } } }
         }),
 
+      setPerforation: (id, perforation) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          if (!perforation) {
+            const { perforation: _dropped, ...rest } = layer
+            return { layers: { ...state.layers, [id]: rest } }
+          }
+          const size = Math.min(50, Math.max(0.3, perforation.size))
+          const clean: Perforation = {
+            ...perforation,
+            size,
+            spacing: Math.max(size + 0.4, perforation.spacing),
+            depth: perforation.depth == null ? null : Math.max(0.1, perforation.depth),
+          }
+          return { layers: { ...state.layers, [id]: { ...layer, perforation: clean } } }
+        }),
+
+      setBevelMode: (id, mode) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          return { layers: { ...state.layers, [id]: { ...layer, bevelMode: mode } } }
+        }),
+
       carveWith: (baseId, toolId, options) =>
         set((state) => {
           const base = state.layers[baseId]
@@ -765,10 +795,14 @@ export const useDocumentStore = create<DocumentStore>()(
             groups = { ...groups, [groupId]: { id: groupId, name: `${base.name} carved` } }
             layers[baseId] = { ...base, groupId }
           }
+          const { perforation: _noPerforation, ...toolRest } = tool
           layers[toolId] = {
-            ...tool,
+            ...toolRest,
             kind: 'hole',
             isHole: true,
+            // The cut has the tool's exact shape — its bevels stay edges of
+            // the cut, not a flared rim.
+            bevelMode: 'shape',
             name: tool.isHole ? tool.name : `${tool.name} cutter`,
             transform: { ...tool.transform, z: Math.round(z * 1e6) / 1e6 },
             extrusionDepth: Math.round(depth * 1e6) / 1e6,
@@ -946,5 +980,5 @@ export function emptyDocument(name = 'Untitled project'): DocumentSnapshot {
 // Dev-only handle so browser automation/debugging can reach the live store
 // (stripped from production builds by the DEV guard).
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore; shapeWorldBounds: typeof shapeWorldBounds; buildLayerGeometries: typeof buildLayerGeometries } }).__smartgrid = { useDocumentStore, shapeWorldBounds, buildLayerGeometries }
+  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore; shapeWorldBounds: typeof shapeWorldBounds; buildLayerGeometries: typeof buildLayerGeometries; buildLayerCutters: typeof buildLayerCutters; cutHolesFromSolid: typeof cutHolesFromSolid } }).__smartgrid = { useDocumentStore, shapeWorldBounds, buildLayerGeometries, buildLayerCutters, cutHolesFromSolid }
 }

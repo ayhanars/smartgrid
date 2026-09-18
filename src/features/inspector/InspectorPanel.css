@@ -598,3 +598,69 @@
   font-size: 10px;
   color: var(--text-faint);
 }
+
+.texture-picker {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.texture-picker__current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-field);
+  color: var(--text);
+  text-align: left;
+}
+
+.texture-picker__current:hover {
+  border-color: var(--border-strong);
+}
+
+.texture-picker__current .texture-preview,
+.texture-picker__current .texture-choice__none {
+  width: 60px;
+  height: 40px;
+  aspect-ratio: auto;
+  flex-shrink: 0;
+}
+
+.texture-picker__label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+}
+
+.texture-picker__label span {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.texture-picker__change {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.texture-popover {
+  position: absolute;
+  z-index: 40;
+  right: 0;
+  top: calc(100% + 6px);
+  width: 330px;
+  max-width: calc(100vw - 40px);
+  padding: 8px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.texture-popover .texture-grid {
+  margin-bottom: 0;
+}

@@ -150,7 +150,8 @@ function sideOf(nx: number, ny: number): WallSide {
 
 /** Subdivision step for a pattern: fine enough to resolve it, capped so a
  * big plate stays a reasonable triangle count. */
-export function textureStep(texture: SurfaceTexture): number {
+export function textureStep(texture: SurfaceTexture, override?: number): number {
+  if (override) return override
   return Math.min(2, Math.max(0.35, texture.size / 6))
 }
 
@@ -161,9 +162,9 @@ export function textureStep(texture: SurfaceTexture): number {
  * outward (grooves in the cavity wall). The first and last rows stay
  * undisplaced so the wall still meets the caps/bevel rings exactly.
  */
-export function buildTexturedWall(ring: Point2[], zA: number, zB: number, texture: SurfaceTexture, sign: 1 | -1): MeshPart {
+export function buildTexturedWall(ring: Point2[], zA: number, zB: number, texture: SurfaceTexture, sign: 1 | -1, stepOverride?: number): MeshPart {
   const n = ring.length
-  const step = textureStep(texture)
+  const step = textureStep(texture, stepOverride)
   const height = zB - zA
   const rows = Math.max(2, Math.ceil(height / step))
   const positions: number[] = []
@@ -274,8 +275,8 @@ function distanceToRing(p: Point2, ring: Point2[]): number {
  * flat (so the walls still meet it) and makes the clipped cells and
  * their full neighbours agree along shared edges.
  */
-export function buildTexturedCap(ring: Point2[], z: number, texture: SurfaceTexture): MeshPart {
-  const step = textureStep(texture)
+export function buildTexturedCap(ring: Point2[], z: number, texture: SurfaceTexture, stepOverride?: number): MeshPart {
+  const step = textureStep(texture, stepOverride)
   let minX = Infinity
   let minY = Infinity
   let maxX = -Infinity

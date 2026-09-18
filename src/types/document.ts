@@ -118,6 +118,28 @@ export const TEXTURE_PATTERNS: { id: TexturePattern; label: string; hint: string
 
 export const DEFAULT_TEXTURE: SurfaceTexture = { pattern: 'grid', target: 'walls', size: 4, depth: 0.6 }
 
+/** Real holes drilled through a shape's walls and/or top face in a
+ * regular pattern — cut with CSG, so they go right through (or to a set
+ * depth) and show up in the print. */
+export interface Perforation {
+  shape: 'round' | 'square' | 'hex'
+  pattern: 'grid' | 'staggered'
+  /** Hole diameter / side, mm. */
+  size: number
+  /** Center-to-center spacing, mm. */
+  spacing: number
+  target: 'walls' | 'top' | 'both'
+  /** Hole depth from the surface, mm; null = right through. */
+  depth: number | null
+  sides?: WallSide[]
+  wallFrom?: number
+  wallTo?: number
+  /** Plain margin kept around the top-face holes, mm. */
+  topInset?: number
+}
+
+export const DEFAULT_PERFORATION: Perforation = { shape: 'round', pattern: 'grid', size: 3, spacing: 6, target: 'walls', depth: null }
+
 export interface ShapeLayer {
   id: string
   kind: ShapeKind
@@ -143,6 +165,13 @@ export interface ShapeLayer {
   bevelTop: number
   /** Optional printable surface relief (see SurfaceTexture). */
   texture?: SurfaceTexture
+  /** Optional pattern of real holes (see Perforation). */
+  perforation?: Perforation
+  /** For hole cutters only: 'rim' (default) flares the bevels outward so
+   * they round/countersink the mouth of the cut; 'shape' keeps the
+   * cutter's own beveled edges, so a carved pocket has the tool's exact
+   * shape (rounded floor edges from a bottom bevel, etc.). */
+  bevelMode?: 'rim' | 'shape'
   /** True for a shape drawn with the Hole tool: never rendered as its own
    * solid, instead subtracted from whatever it overlaps in the 3D scene. */
   isHole: boolean
