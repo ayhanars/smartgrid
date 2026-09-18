@@ -1,6 +1,6 @@
 import { difference, intersection, union, type MultiPolygon, type Polygon, type Ring } from 'polygon-clipping'
 import type { ShapeLayer } from '../../types/document'
-import { rotatedLocalPoints } from '../../state/documentStore'
+import { rotatedLocalPoints } from './layerBounds'
 import { layerZRange } from './layerGeometry'
 
 export type SupportSeverity = 'critical' | 'partial'
@@ -27,7 +27,7 @@ function ringArea(ring: Ring): number {
   return Math.abs(sum) / 2
 }
 
-function area(mp: MultiPolygon): number {
+export function area(mp: MultiPolygon): number {
   let total = 0
   for (const poly of mp) {
     total += ringArea(poly[0])
@@ -37,7 +37,7 @@ function area(mp: MultiPolygon): number {
 }
 
 /** World-space 2D outline of a shape (with its Z-spin applied). */
-function footprint(layer: ShapeLayer): MultiPolygon {
+export function footprint(layer: ShapeLayer): MultiPolygon {
   const { x, y } = layer.transform
   const toRing = (pts: { x: number; y: number }[]): Ring => {
     const ring: Ring = rotatedLocalPoints(layer, pts).map((p) => [p.x + x, p.y + y])

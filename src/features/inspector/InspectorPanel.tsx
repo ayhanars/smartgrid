@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
+  ArrowDownToLine,
+  Layers2,
   AlignCenterHorizontal,
   AlignCenterVertical,
   AlignEndHorizontal,
@@ -24,6 +26,7 @@ import { bedPresets, CUSTOM_BED_ID, CUSTOM_BED_MAX_Z, getBedPreset } from '../..
 import { RotationDial } from './RotationDial'
 import { HeightSlider } from './HeightSlider'
 import { useAnalysisStore, visibleWarning } from '../../state/analysisStore'
+import { shapesBelow } from '../../lib/geometry/stacking'
 import './InspectorPanel.css'
 
 const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
@@ -514,7 +517,7 @@ function BedPresetsSection() {
       </button>
       {expanded && (
         <div className="inspector-preset-list">
-          {bedPresets.map((preset) => (
+          {[...bedPresets].sort((a, b) => Number(b.id === pinnedBedPresetId) - Number(a.id === pinnedBedPresetId)).map((preset) => (
             <div
               key={preset.id}
               className="inspector-preset-row"
@@ -524,7 +527,10 @@ function BedPresetsSection() {
             >
               <input type="radio" checked={bedPresetId === preset.id} readOnly />
               <div className="inspector-preset-row__text">
-                <span>{preset.label}</span>
+                <span>
+                  {preset.label}
+                  {pinnedBedPresetId === preset.id && <em className="inspector-preset-row__default">Default</em>}
+                </span>
                 <span className="inspector-preset-row__size">
                   {preset.width} × {preset.height} mm
                 </span>
@@ -532,7 +538,8 @@ function BedPresetsSection() {
               <button
                 type="button"
                 className="inspector-preset-row__pin"
-                aria-label="Pin as default"
+                aria-label={pinnedBedPresetId === preset.id ? 'Unpin default printer' : 'Pin as default printer'}
+                title={pinnedBedPresetId === preset.id ? 'Default for new projects — click to unpin' : 'Make this the default printer for new projects'}
                 aria-pressed={pinnedBedPresetId === preset.id}
                 onClick={(e) => {
                   e.stopPropagation()
@@ -662,6 +669,7 @@ function OrientationSection({ layer }: { layer: ShapeLayer }) {
 
       <Section title="Height">
         <HeightSlider layer={layer} selectionIds={selection.includes(layer.id) ? selection : [layer.id]} bedMaxZ={bedMaxZ} />
+        {!layer.isHole && <PerfectFitRow layer={layer} ids={selection.includes(layer.id) ? selection : [layer.id]} />}
         {!layer.isHole && warning && (
           <div className={`support-note support-note--${warning.severity}`}>
             <span>
@@ -684,6 +692,49 @@ function OrientationSection({ layer }: { layer: ShapeLayer }) {
         )}
       </Section>
     </>
+  )
+}
+
+/** Perfect Fit: one click to sit a shape exactly on whatever is under it
+ * (so a part drawn over a base is visible on top instead of buried in it),
+ * or to put it back on the bed. */
+function PerfectFitRow({ layer, ids }: { layer: ShapeLayer; ids: string[] }) {
+  const layers = useDocumentStore((s) => s.layers)
+  const order = useDocumentStore((s) => s.order)
+  const restOnShapeBelow = useDocumentStore((s) => s.restOnShapeBelow)
+  const dropToBed = useDocumentStore((s) => s.dropToBed)
+  const below = useMemo(() => shapesBelow(layer, layers, order, ids)[0], [layer, layers, order, ids])
+  const belowName = below ? layers[below.id]?.name : null
+  const alreadyResting = below ? Math.abs(layer.transform.z - below.topZ) < 0.01 : false
+  return (
+    <div className="inspector-fit">
+      <span className="inspector-field__label">Perfect Fit</span>
+      <div className="inspector-fit__row">
+        <button
+          type="button"
+          className="inspector-export-btn"
+          disabled={!below || alreadyResting || layer.locked}
+          title={below ? `Sit exactly on top of ${belowName} (${round(below.topZ)} mm)` : 'Nothing under this shape'}
+          onClick={() => restOnShapeBelow(ids)}
+        >
+          <Layers2 size={13} />
+          {below ? `Rest on ${belowName}` : 'Rest on shape below'}
+        </button>
+        <button
+          type="button"
+          className="inspector-export-btn"
+          disabled={layer.transform.z === 0 || layer.locked}
+          title="Put the bottom of this shape on the print bed"
+          onClick={() => dropToBed(ids)}
+        >
+          <ArrowDownToLine size={13} />
+          Drop to bed
+        </button>
+      </div>
+      <p className="inspector-note">
+        A shape drawn inside a bigger one starts resting on it automatically; use these to move it back down or up again.
+      </p>
+    </div>
   )
 }
 

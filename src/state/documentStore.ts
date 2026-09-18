@@ -4,6 +4,10 @@ import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, t
 import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
+import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
+import { restingHeight } from '../lib/geometry/stacking'
+
+export { rotatedLocalPoints, shapeWorldBounds }
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
 import { applyBooleanOp, type BooleanOp } from '../lib/geometry/boolean'
 
@@ -83,6 +87,12 @@ interface DocumentActions {
   setBevelBottom: (id: string, amount: number) => void
   setBevelTop: (id: string, amount: number) => void
   setLayerZ: (id: string, z: number) => void
+  /** Perfect Fit: lift each shape so its bottom sits exactly on the top of
+   * whatever solid lies under its footprint (no-op for a shape with
+   * nothing under it). */
+  restOnShapeBelow: (ids: string[]) => void
+  /** Perfect Fit: put each shape's bottom on the bed. */
+  dropToBed: (ids: string[]) => void
   setRotation: (id: string, rotation: { x?: number; y?: number; z?: number }) => void
   /** Wraps a continuous drag (dial, slider) so it lands in undo history as
    * ONE step instead of hundreds — begin on pointer-down, commit on
@@ -124,7 +134,38 @@ export function artboardSize(state: Pick<DocumentState, 'bedPresetId' | 'customB
 
 export type DocumentStore = DocumentState & DocumentActions
 
+/** A solid drawn inside a bigger one is almost always meant to sit ON it
+ * (a logo on a plate, a boss on a base) — starting it at Z=0 would bury it
+ * invisibly inside the bigger solid. Only near-complete containment
+ * triggers this; a big plate drawn over small parts stays on the bed. */
+const AUTO_REST_MIN_CONTAINMENT = 0.9
+function perfectFitOnCreate(layer: ShapeLayer, state: Pick<DocumentState, 'layers' | 'order'>): ShapeLayer {
+  if (layer.isHole) return layer
+  const z = restingHeight(layer, state.layers, state.order, AUTO_REST_MIN_CONTAINMENT)
+  return z == null ? layer : { ...layer, transform: { ...layer.transform, z } }
+}
+
 let transientSnapshot: Pick<DocumentState, 'layers' | 'order' | 'groups'> | null = null
+
+// The pinned ("default") bed preset is a user preference, not part of any
+// one document: it survives reloads and seeds every new project.
+const PINNED_BED_KEY = 'smartgrid:pinnedBed'
+function readPinnedBedPreset(): string | null {
+  try {
+    const v = localStorage.getItem(PINNED_BED_KEY)
+    if (v === null) return DEFAULT_BED_ID
+    return v === '' ? null : v
+  } catch {
+    return DEFAULT_BED_ID
+  }
+}
+function writePinnedBedPreset(id: string | null) {
+  try {
+    localStorage.setItem(PINNED_BED_KEY, id ?? '')
+  } catch {
+    /* preference just won't persist */
+  }
+}
 
 export const useDocumentStore = create<DocumentStore>()(
   temporal(
@@ -134,7 +175,7 @@ export const useDocumentStore = create<DocumentStore>()(
       order: [],
       selection: [],
       bedPresetId: DEFAULT_BED_ID,
-      pinnedBedPresetId: DEFAULT_BED_ID,
+      pinnedBedPresetId: readPinnedBedPreset(),
       customBedWidth: 256,
       customBedHeight: 256,
       guides: [],
@@ -198,7 +239,7 @@ export const useDocumentStore = create<DocumentStore>()(
           ...(kind === 'star' ? { starPoints: 5, starInnerRatio: 0.45 } : {}),
         }
         set((state) => ({
-          layers: { ...state.layers, [id]: layer },
+          layers: { ...state.layers, [id]: perfectFitOnCreate(layer, state) },
           order: [...state.order, id],
           selection: [id],
         }))
@@ -265,7 +306,7 @@ export const useDocumentStore = create<DocumentStore>()(
           isHole: false,
         }
         set((state) => ({
-          layers: { ...state.layers, [id]: layer },
+          layers: { ...state.layers, [id]: perfectFitOnCreate(layer, state) },
           order: [...state.order, id],
           selection: [id],
         }))
@@ -499,6 +540,34 @@ export const useDocumentStore = create<DocumentStore>()(
           return { layers: { ...state.layers, [id]: { ...layer, transform: { ...layer.transform, z: Math.max(0, z) } } } }
         }),
 
+      restOnShapeBelow: (ids) =>
+        set((state) => {
+          const layers = { ...state.layers }
+          let changed = false
+          for (const id of ids) {
+            const layer = layers[id]
+            if (!layer || layer.locked) continue
+            const z = restingHeight(layer, state.layers, state.order, 0, ids)
+            if (z == null || Math.abs(z - layer.transform.z) < 1e-6) continue
+            layers[id] = { ...layer, transform: { ...layer.transform, z } }
+            changed = true
+          }
+          return changed ? { layers } : {}
+        }),
+
+      dropToBed: (ids) =>
+        set((state) => {
+          const layers = { ...state.layers }
+          let changed = false
+          for (const id of ids) {
+            const layer = layers[id]
+            if (!layer || layer.locked || layer.transform.z === 0) continue
+            layers[id] = { ...layer, transform: { ...layer.transform, z: 0 } }
+            changed = true
+          }
+          return changed ? { layers } : {}
+        }),
+
       setRotation: (id, rotation) =>
         set((state) => {
           const layer = state.layers[id]
@@ -590,7 +659,11 @@ export const useDocumentStore = create<DocumentStore>()(
       setBedPreset: (id) => set({ bedPresetId: id }),
 
       togglePinnedBedPreset: (id) =>
-        set((state) => ({ pinnedBedPresetId: state.pinnedBedPresetId === id ? null : id })),
+        set((state) => {
+          const next = state.pinnedBedPresetId === id ? null : id
+          writePinnedBedPreset(next)
+          return { pinnedBedPresetId: next }
+        }),
 
       setCustomBedSize: (width, height) =>
         set({ customBedWidth: Math.max(10, width), customBedHeight: Math.max(10, height) }),
@@ -714,33 +787,6 @@ export function useTemporalStore() {
 /** The shape's local points with its Z-spin (`rotation`) applied about the
  * footprint center — the outline the 2D canvas actually shows. Tilts
  * (rotationX/Y) can't be drawn in 2D and are left to the 3D geometry. */
-export function rotatedLocalPoints(layer: ShapeLayer, points: Point2[]): Point2[] {
-  const deg = layer.transform.rotation
-  if (!deg) return points
-  const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
-  const local = contourBounds(allPoints)
-  const cx = local.x + local.width / 2
-  const cy = local.y + local.height / 2
-  const rad = (deg * Math.PI) / 180
-  const cos = Math.cos(rad)
-  const sin = Math.sin(rad)
-  return points.map((p) => ({
-    x: cx + (p.x - cx) * cos - (p.y - cy) * sin,
-    y: cy + (p.x - cx) * sin + (p.y - cy) * cos,
-  }))
-}
-
-export function shapeWorldBounds(layer: ShapeLayer): Bounds {
-  const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
-  const local = contourBounds(rotatedLocalPoints(layer, allPoints))
-  return {
-    x: layer.transform.x + local.x,
-    y: layer.transform.y + local.y,
-    width: local.width,
-    height: local.height,
-  }
-}
-
 /** The saveable part of the document (see localProjects.ts). */
 export function serializeDocument(state: DocumentState): DocumentSnapshot {
   return {

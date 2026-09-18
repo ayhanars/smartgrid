@@ -240,3 +240,30 @@
   font-size: 10px;
   line-height: 1.3;
 }
+
+.viewport-3d__alert {
+  flex-wrap: wrap;
+}
+
+.viewport-3d__alert-actions {
+  display: flex;
+  gap: 4px;
+  flex-basis: 100%;
+}
+
+.viewport-3d__alert-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-field);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.viewport-3d__alert-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}

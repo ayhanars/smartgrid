@@ -2,8 +2,8 @@ import { useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Canvas } from '@react-three/fiber'
 import { GizmoHelper, GizmoViewcube, Grid, OrbitControls, TransformControls } from '@react-three/drei'
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
-import { Box, Maximize, Move3d, Rotate3d, ZoomIn, ZoomOut } from 'lucide-react'
+import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib'
+import { ArrowDownToLine, Box, Layers2, Maximize, Move3d, Rotate3d, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
 import { expandToGroup, shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
 import type { Bounds } from '../../types/document'
@@ -16,6 +16,7 @@ import {
   sceneRotationToPrint,
 } from '../../lib/geometry/layerGeometry'
 import { cutHolesFromSolid } from '../../lib/geometry/holeCut'
+import { shapesBelow } from '../../lib/geometry/stacking'
 import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import { PrinterPlate } from './PrinterPlate'
@@ -40,12 +41,16 @@ export function Viewport3DPane() {
   const controlsRef = useRef<OrbitControlsImpl>(null)
   const [gizmoTarget, setGizmoTarget] = useState<THREE.Group | null>(null)
   const dragRef = useRef<GizmoDrag | null>(null)
+  const transformRef = useRef<TransformControlsImpl>(null)
+  const lastGizmoDragEnd = useRef(0)
 
   const layers = useDocumentStore((s) => s.layers)
   const order = useDocumentStore((s) => s.order)
   const selection = useDocumentStore((s) => s.selection)
   const setSelection = useDocumentStore((s) => s.setSelection)
   const setRotation = useDocumentStore((s) => s.setRotation)
+  const restOnShapeBelow = useDocumentStore((s) => s.restOnShapeBelow)
+  const dropToBed = useDocumentStore((s) => s.dropToBed)
   const beginTransientEdit = useDocumentStore((s) => s.beginTransientEdit)
   const commitTransientEdit = useDocumentStore((s) => s.commitTransientEdit)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
@@ -70,10 +75,27 @@ export function Viewport3DPane() {
   const gizmoMode = useViewStore((s) => s.gizmoMode)
   const setGizmoMode = useViewStore((s) => s.setGizmoMode)
 
+  // A pointer that is on (or has just used) a gizmo handle must never
+  // re-select whatever mesh happens to sit under it — otherwise a bigger
+  // shape around the selected one steals the selection mid-drag.
+  const gizmoBusy = () => {
+    // `axis` (hovered handle) and `dragging` are typed private in three-stdlib
+    // but are the documented runtime state of TransformControls.
+    const tc = transformRef.current as unknown as { axis: string | null; dragging: boolean } | null
+    return !!tc?.axis || !!tc?.dragging || performance.now() - lastGizmoDragEnd.current < 300
+  }
+
   // Group-aware like the 2D canvas: clicking one member picks the whole
-  // group; Cmd/Ctrl-click digs into a single member.
+  // group; clicking a member of the already-selected group (or Cmd/Ctrl-
+  // clicking) digs into that single member.
   const handleSelect = (id: string, additive: boolean, single = false) => {
-    const targets = single ? [id] : expandToGroup(layers, order, id)
+    if (gizmoBusy()) return
+    const group = expandToGroup(layers, order, id)
+    const groupIsTheSelection = group.length > 1 && group.every((t) => selection.includes(t)) && selection.every((s) => group.includes(s))
+    const targets = single || (groupIsTheSelection && !additive) ? [id] : group
+    // Clicking something already selected keeps the selection as it is (so
+    // a drilled-in member stays the selection).
+    if (!additive && !single && !groupIsTheSelection && selection.includes(id)) return
     if (additive) {
       const has = targets.every((t) => selection.includes(t))
       setSelection(has ? selection.filter((sid) => !targets.includes(sid)) : [...selection, ...targets.filter((t) => !selection.includes(t))])
@@ -150,6 +172,7 @@ export function Viewport3DPane() {
   }
 
   const onGizmoUp = () => {
+    lastGizmoDragEnd.current = performance.now()
     if (!dragRef.current) return
     dragRef.current = null
     commitTransientEdit()
@@ -232,7 +255,9 @@ export function Viewport3DPane() {
       <Canvas
         camera={{ position: [bedWidth * 1.4, bedWidth * 1.1, bedWidth * 1.4], fov: 40 }}
         gl={{ localClippingEnabled: true, stencil: true }}
-        onPointerMissed={() => setSelection([])}
+        onPointerMissed={() => {
+          if (!gizmoBusy()) setSelection([])
+        }}
       >
         <color attach="background" args={['#0a0a0b']} />
         <ambientLight intensity={0.6} />
@@ -281,6 +306,7 @@ export function Viewport3DPane() {
 
         {primary && gizmoTarget && !printPreview && (
           <TransformControls
+            ref={transformRef}
             object={gizmoTarget}
             mode={gizmoMode}
             space="world"
@@ -304,14 +330,17 @@ export function Viewport3DPane() {
         <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
           {/* Face order is +X, −X, +Y, −Y, +Z, −Z in the scene frame: Y is
               up, and document Y (toward the printer's door) runs along +Z. */}
-          <GizmoViewcube
-            faces={['Right', 'Left', 'Top', 'Bottom', 'Front', 'Back']}
-            color="#2a2a32"
-            hoverColor="#4d8dff"
-            textColor="#e7e7ea"
-            strokeColor="#6a6a76"
-            opacity={1}
-          />
+          <group scale={1.25}>
+            <GizmoViewcube
+              faces={['Right', 'Left', 'Top', 'Bottom', 'Front', 'Back']}
+              color="#3b3c48"
+              hoverColor="#4d8dff"
+              textColor="#ffffff"
+              strokeColor="#c4c6d4"
+              opacity={1}
+              font="26px Inter, system-ui, sans-serif"
+            />
+          </group>
         </GizmoHelper>
       </Canvas>
 
@@ -328,6 +357,19 @@ export function Viewport3DPane() {
                     ? 'is floating'
                     : `barely touches what's under it (${Math.round(w.supportedFraction * 100)}%)`
                   : `rests on only ${Math.round(w.supportedFraction * 100)}%`}
+              </span>
+              <span className="viewport-3d__alert-actions">
+                {(() => {
+                  const below = shapesBelow(layers[w.id], layers, order)[0]
+                  return below ? (
+                    <button type="button" title={`Rest on ${layers[below.id]?.name}`} onClick={() => restOnShapeBelow([w.id])}>
+                      <Layers2 size={12} /> Rest on {layers[below.id]?.name}
+                    </button>
+                  ) : null
+                })()}
+                <button type="button" title="Drop to bed" onClick={() => dropToBed([w.id])}>
+                  <ArrowDownToLine size={12} /> Drop to bed
+                </button>
               </span>
               {w.severity === 'partial' && (
                 <button type="button" className="viewport-3d__alert-dismiss" aria-label="Dismiss warning" onClick={() => dismiss(w.id)}>

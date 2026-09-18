@@ -485,3 +485,41 @@
   background: var(--bg-active);
   color: var(--text);
 }
+
+.inspector-fit {
+  margin-top: 12px;
+}
+
+.inspector-fit__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.inspector-fit__row .inspector-export-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-fit__row .inspector-export-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.inspector-preset-row__default {
+  margin-left: 6px;
+  font-style: normal;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}

@@ -361,9 +361,23 @@ export function Canvas2DPane() {
     svgRef.current?.setPointerCapture(e.pointerId)
     const doc = screenToDoc(local.x, local.y)
     // Clicking a grouped shape grabs the whole group; Cmd/Ctrl-click drills
-    // into the single member, like Figma.
-    const clickTargets = e.metaKey || e.ctrlKey ? [id] : expandToGroup(layers, order, id)
-    const wasAlreadySelected = clickTargets.every((tid) => selection.includes(tid))
+    // straight into the single member. Clicking anything already selected
+    // keeps the selection so a drag moves it as a whole — and if that
+    // click ends without moving, pointer-up drills one level deeper into
+    // the clicked member (Figma's "click again to go deeper").
+    const group = expandToGroup(layers, order, id)
+    let clickTargets: string[]
+    let wasAlreadySelected: boolean
+    if (e.metaKey || e.ctrlKey || e.shiftKey) {
+      clickTargets = e.shiftKey && !(e.metaKey || e.ctrlKey) ? group : [id]
+      wasAlreadySelected = clickTargets.every((tid) => selection.includes(tid))
+    } else if (selection.includes(id)) {
+      clickTargets = selection
+      wasAlreadySelected = true
+    } else {
+      clickTargets = group
+      wasAlreadySelected = false
+    }
 
     if (e.shiftKey) {
       setSelection(

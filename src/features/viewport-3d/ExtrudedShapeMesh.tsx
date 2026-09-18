@@ -17,7 +17,7 @@ interface ExtrudedShapeMeshProps {
   layer: ShapeLayer
   isSelected: boolean
   wireframe: boolean
-  onSelect: (id: string, additive: boolean) => void
+  onSelect: (id: string, additive: boolean, single: boolean) => void
   artboardWidth: number
   artboardHeight: number
   /** Precomputed geometry with every overlapping hole already subtracted
@@ -74,7 +74,7 @@ export function ExtrudedShapeMesh({
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
-    onSelect(layer.id, e.shiftKey)
+    onSelect(layer.id, e.shiftKey, e.metaKey || e.ctrlKey)
   }
 
   const opacity = layer.isHole ? 0.35 : (layer.opacity ?? 100) / 100
