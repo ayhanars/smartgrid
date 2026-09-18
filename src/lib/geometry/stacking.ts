@@ -56,3 +56,42 @@ export function restingHeight(
   const lift = own.bottomZ - layer.transform.z
   return Math.round((below[0].topZ - lift) * 1e6) / 1e6
 }
+
+export interface UnitRest {
+  /** Z change to apply to every shape in the unit. */
+  delta: number
+  /** The shape the unit ends up resting on. */
+  supporterId: string
+}
+
+/**
+ * How far a selection has to move, as one rigid unit, so that it rests on
+ * whatever lies under it: the member that needs the biggest lift decides
+ * (any smaller move would leave that member inside its supporter). Only
+ * shapes outside the unit count as support. Null when nothing is under
+ * any member.
+ */
+export function unitRest(ids: string[], layers: Record<string, ShapeLayer>, order: string[]): UnitRest | null {
+  let best: UnitRest | null = null
+  for (const id of ids) {
+    const layer = layers[id]
+    if (!layer || layer.isHole || !layer.visible) continue
+    const below = shapesBelow(layer, layers, order, ids)[0]
+    if (!below) continue
+    const own = layerZRange(layer)
+    const delta = below.topZ - own.bottomZ
+    if (!best || delta > best.delta) best = { delta, supporterId: below.id }
+  }
+  return best
+}
+
+/** Z change that puts the lowest point of the unit on the bed. */
+export function unitDropDelta(ids: string[], layers: Record<string, ShapeLayer>): number {
+  let lowest = Infinity
+  for (const id of ids) {
+    const layer = layers[id]
+    if (!layer || !layer.visible) continue
+    lowest = Math.min(lowest, layer.isHole ? layer.transform.z : layerZRange(layer).bottomZ)
+  }
+  return Number.isFinite(lowest) ? -lowest : 0
+}

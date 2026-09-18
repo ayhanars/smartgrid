@@ -16,7 +16,7 @@ import {
   sceneRotationToPrint,
 } from '../../lib/geometry/layerGeometry'
 import { cutHolesFromSolid } from '../../lib/geometry/holeCut'
-import { shapesBelow } from '../../lib/geometry/stacking'
+import { unitRest } from '../../lib/geometry/stacking'
 import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import { PrinterPlate } from './PrinterPlate'
@@ -360,16 +360,24 @@ export function Viewport3DPane() {
               </span>
               <span className="viewport-3d__alert-actions">
                 {(() => {
-                  const below = shapesBelow(layers[w.id], layers, order)[0]
-                  return below ? (
-                    <button type="button" title={`Rest on ${layers[below.id]?.name}`} onClick={() => restOnShapeBelow([w.id])}>
-                      <Layers2 size={12} /> Rest on {layers[below.id]?.name}
-                    </button>
-                  ) : null
+                  // A grouped shape moves with its whole group.
+                  const unit = expandToGroup(layers, order, w.id)
+                  const rest = unitRest(unit, layers, order)
+                  const label = unit.length > 1 ? ' (group)' : ''
+                  return (
+                    <>
+                      {rest && (
+                        <button type="button" title={`Rest on ${layers[rest.supporterId]?.name}${label}`} onClick={() => restOnShapeBelow(unit)}>
+                          <Layers2 size={12} /> Rest on {layers[rest.supporterId]?.name}
+                          {label}
+                        </button>
+                      )}
+                      <button type="button" title={`Drop to bed${label}`} onClick={() => dropToBed(unit)}>
+                        <ArrowDownToLine size={12} /> Drop to bed{label}
+                      </button>
+                    </>
+                  )
                 })()}
-                <button type="button" title="Drop to bed" onClick={() => dropToBed([w.id])}>
-                  <ArrowDownToLine size={12} /> Drop to bed
-                </button>
               </span>
               {w.severity === 'partial' && (
                 <button type="button" className="viewport-3d__alert-dismiss" aria-label="Dismiss warning" onClick={() => dismiss(w.id)}>

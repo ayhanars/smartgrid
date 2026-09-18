@@ -5,7 +5,7 @@ import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
-import { restingHeight } from '../lib/geometry/stacking'
+import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking'
 
 export { rotatedLocalPoints, shapeWorldBounds }
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
@@ -540,32 +540,34 @@ export const useDocumentStore = create<DocumentStore>()(
           return { layers: { ...state.layers, [id]: { ...layer, transform: { ...layer.transform, z: Math.max(0, z) } } } }
         }),
 
+      // Several shapes (a group) move as ONE rigid unit: the same Z change
+      // for all of them, so their arrangement is preserved.
       restOnShapeBelow: (ids) =>
         set((state) => {
+          const movable = ids.filter((id) => state.layers[id] && !state.layers[id].locked)
+          if (movable.length === 0) return {}
+          const rest = unitRest(movable, state.layers, state.order)
+          if (!rest || Math.abs(rest.delta) < 1e-6) return {}
           const layers = { ...state.layers }
-          let changed = false
-          for (const id of ids) {
+          for (const id of movable) {
             const layer = layers[id]
-            if (!layer || layer.locked) continue
-            const z = restingHeight(layer, state.layers, state.order, 0, ids)
-            if (z == null || Math.abs(z - layer.transform.z) < 1e-6) continue
-            layers[id] = { ...layer, transform: { ...layer.transform, z } }
-            changed = true
+            layers[id] = { ...layer, transform: { ...layer.transform, z: Math.round((layer.transform.z + rest.delta) * 1e6) / 1e6 } }
           }
-          return changed ? { layers } : {}
+          return { layers }
         }),
 
       dropToBed: (ids) =>
         set((state) => {
+          const movable = ids.filter((id) => state.layers[id] && !state.layers[id].locked)
+          if (movable.length === 0) return {}
+          const delta = unitDropDelta(movable, state.layers)
+          if (Math.abs(delta) < 1e-6) return {}
           const layers = { ...state.layers }
-          let changed = false
-          for (const id of ids) {
+          for (const id of movable) {
             const layer = layers[id]
-            if (!layer || layer.locked || layer.transform.z === 0) continue
-            layers[id] = { ...layer, transform: { ...layer.transform, z: 0 } }
-            changed = true
+            layers[id] = { ...layer, transform: { ...layer.transform, z: Math.max(0, Math.round((layer.transform.z + delta) * 1e6) / 1e6) } }
           }
-          return changed ? { layers } : {}
+          return { layers }
         }),
 
       setRotation: (id, rotation) =>

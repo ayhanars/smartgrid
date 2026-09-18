@@ -247,3 +247,28 @@
   color: var(--text-faint);
   cursor: not-allowed;
 }
+
+.home__thumb {
+  position: relative;
+}
+
+.home__thumb-3d {
+  position: absolute;
+  inset: 0;
+  animation: home-thumb-fade 0.18s ease-out;
+}
+
+.home__thumb-3d canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+@keyframes home-thumb-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

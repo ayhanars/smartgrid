@@ -26,7 +26,7 @@ import { bedPresets, CUSTOM_BED_ID, CUSTOM_BED_MAX_Z, getBedPreset } from '../..
 import { RotationDial } from './RotationDial'
 import { HeightSlider } from './HeightSlider'
 import { useAnalysisStore, visibleWarning } from '../../state/analysisStore'
-import { shapesBelow } from '../../lib/geometry/stacking'
+import { unitDropDelta, unitRest } from '../../lib/geometry/stacking'
 import './InspectorPanel.css'
 
 const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
@@ -578,6 +578,7 @@ function BedPresetsSection() {
 
 function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount: number }) {
   const displayUnit = useDocumentStore((s) => s.displayUnit)
+  const selection = useDocumentStore((s) => s.selection)
   const setExtrusionDepth = useDocumentStore((s) => s.setExtrusionDepth)
   const setCornerRadius = useDocumentStore((s) => s.setCornerRadius)
   const setSmartPolish = useDocumentStore((s) => s.setSmartPolish)
@@ -594,7 +595,15 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
   }, [layer])
 
   if (!layer || !effectiveContour) {
-    return <EmptyState text={multiCount > 1 ? 'Select a single shape to edit its 3D properties.' : 'Select a shape to edit its 3D properties.'} />
+    if (multiCount > 1) {
+      return (
+        <>
+          <MultiHeightSection ids={selection} />
+          <EmptyState text="Select a single shape to edit its extrusion, polish and bevel." />
+        </>
+      )
+    }
+    return <EmptyState text="Select a shape to edit its 3D properties." />
   }
 
   const safeBottom = computeSafeBevel(effectiveContour, layer.bevelBottom)
@@ -703,28 +712,31 @@ function PerfectFitRow({ layer, ids }: { layer: ShapeLayer; ids: string[] }) {
   const order = useDocumentStore((s) => s.order)
   const restOnShapeBelow = useDocumentStore((s) => s.restOnShapeBelow)
   const dropToBed = useDocumentStore((s) => s.dropToBed)
-  const below = useMemo(() => shapesBelow(layer, layers, order, ids)[0], [layer, layers, order, ids])
-  const belowName = below ? layers[below.id]?.name : null
-  const alreadyResting = below ? Math.abs(layer.transform.z - below.topZ) < 0.01 : false
+  const rest = useMemo(() => unitRest(ids, layers, order), [ids, layers, order])
+  const dropDelta = useMemo(() => unitDropDelta(ids, layers), [ids, layers])
+  const supporterName = rest ? layers[rest.supporterId]?.name : null
+  const alreadyResting = rest ? Math.abs(rest.delta) < 0.01 : false
+  const unit = ids.length > 1 ? `these ${ids.length} shapes` : 'this shape'
+  const locked = ids.some((id) => layers[id]?.locked)
   return (
     <div className="inspector-fit">
-      <span className="inspector-field__label">Perfect Fit</span>
+      <span className="inspector-field__label">Perfect Fit{ids.length > 1 ? ' · moves the group together' : ''}</span>
       <div className="inspector-fit__row">
         <button
           type="button"
           className="inspector-export-btn"
-          disabled={!below || alreadyResting || layer.locked}
-          title={below ? `Sit exactly on top of ${belowName} (${round(below.topZ)} mm)` : 'Nothing under this shape'}
+          disabled={!rest || alreadyResting || locked}
+          title={rest ? `Sit ${unit} exactly on top of ${supporterName}` : `Nothing under ${unit}`}
           onClick={() => restOnShapeBelow(ids)}
         >
           <Layers2 size={13} />
-          {below ? `Rest on ${belowName}` : 'Rest on shape below'}
+          {rest ? `Rest on ${supporterName}` : 'Rest on shape below'}
         </button>
         <button
           type="button"
           className="inspector-export-btn"
-          disabled={layer.transform.z === 0 || layer.locked}
-          title="Put the bottom of this shape on the print bed"
+          disabled={Math.abs(dropDelta) < 0.01 || locked}
+          title={`Put the lowest point of ${unit} on the print bed`}
           onClick={() => dropToBed(ids)}
         >
           <ArrowDownToLine size={13} />
@@ -732,9 +744,28 @@ function PerfectFitRow({ layer, ids }: { layer: ShapeLayer; ids: string[] }) {
         </button>
       </div>
       <p className="inspector-note">
-        A shape drawn inside a bigger one starts resting on it automatically; use these to move it back down or up again.
+        {ids.length > 1
+          ? 'The whole selection moves as one piece, keeping how the shapes sit relative to each other.'
+          : 'A shape drawn inside a bigger one starts resting on it automatically; use these to move it back down or up again.'}
       </p>
+      {ids.length > 1 && layer.locked && <p className="inspector-note inspector-note--warning">Unlock every shape in the selection first.</p>}
     </div>
+  )
+}
+
+/** Height controls for a multi-selection (typically a group): the slider
+ * and Perfect Fit act on all of them as a unit. */
+function MultiHeightSection({ ids }: { ids: string[] }) {
+  const layers = useDocumentStore((s) => s.layers)
+  const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const bedMaxZ = getBedPreset(bedPresetId)?.maxZ ?? CUSTOM_BED_MAX_Z
+  const first = ids.map((id) => layers[id]).find((l) => l && !l.isHole) ?? layers[ids[0]]
+  if (!first) return null
+  return (
+    <Section title="Height" action={<span className="inspector-section__hint">{ids.length} shapes</span>}>
+      <HeightSlider layer={first} selectionIds={ids} bedMaxZ={bedMaxZ} />
+      <PerfectFitRow layer={first} ids={ids} />
+    </Section>
   )
 }
 

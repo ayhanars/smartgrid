@@ -14,6 +14,7 @@ import {
 import { emptyDocument } from '../state/documentStore'
 import { getBedPreset } from '../lib/geometry/bedPresets'
 import { contourBounds, regionsToSvgPath } from '../lib/geometry/primitives'
+import { ProjectPreview3D } from './ProjectPreview3D'
 import '../features/layers/LayerContextMenu.css'
 import './HomePage.css'
 
@@ -154,12 +155,31 @@ function ProjectCard({
   onCancelRename: () => void
 }) {
   const [draft, setDraft] = useState(meta.name)
+  const [hovered, setHovered] = useState(false)
   useEffect(() => setDraft(meta.name), [meta.name, renaming])
   const snapshot = useMemo(() => loadLocalProject(meta.id), [meta.id, meta.updatedAt])
 
   return (
-    <div className="home__card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === 'Enter' && onOpen()}>
-      <div className="home__thumb">{snapshot && <Thumbnail snapshot={snapshot} />}</div>
+    <div
+      className="home__card"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => e.key === 'Enter' && onOpen()}
+      onPointerEnter={(e) => e.pointerType === 'mouse' && setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+    >
+      <div className="home__thumb">
+        {snapshot && <Thumbnail snapshot={snapshot} />}
+        {/* Hover: the same project as a live 3D turntable, over the 2D thumbnail. */}
+        {snapshot && hovered && (
+          <div className="home__thumb-3d" aria-hidden>
+            <ProjectPreview3D snapshot={snapshot} />
+          </div>
+        )}
+      </div>
       <div className="home__card-body">
         {renaming ? (
           <input
