@@ -289,12 +289,38 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
     const rowSpacing = Math.max(spacing, ext.v + MIN_GAP_MM)
     const colSpacing = Math.max(spacing, ext.u + MIN_GAP_MM)
     const rows = centersAlong(to - from, ext.v, rowSpacing, false).map((v) => from + v)
+    // How sharply the outline turns at each vertex (0 along a curve, π/2
+    // at a box corner), only where it turns the convex way — tunnels from
+    // the two walls of a concave corner diverge and never meet.
+    const dirs = contour.map((a, i) => {
+      const b = contour[(i + 1) % n]
+      const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+      return { x: (b.x - a.x) / len, y: (b.y - a.y) / len }
+    })
+    let area2 = 0
+    for (let i = 0; i < n; i++) {
+      const a = contour[i]
+      const b = contour[(i + 1) % n]
+      area2 += a.x * b.y - b.x * a.y
+    }
+    const turnAt = (i: number) => {
+      const prev = dirs[(i - 1 + n) % n]
+      const next = dirs[i]
+      const cross = prev.x * next.y - prev.y * next.x
+      if (cross * area2 <= 0) return 0
+      const dot = Math.max(-1, Math.min(1, prev.x * next.x + prev.y * next.y))
+      return Math.min(Math.PI / 2, Math.acos(dot))
+    }
     for (let i = 0; i < n; i++) {
       const a = contour[i]
       const b = contour[(i + 1) % n]
       const len = Math.hypot(b.x - a.x, b.y - a.y)
       if (len < ext.u) continue
-      const dir = { x: (b.x - a.x) / len, y: (b.y - a.y) / len }
+      const dir = dirs[i]
+      // Along-wall clearance a tunnel of this reach needs from each end so
+      // it can't meet the next wall's tunnels inside the corner.
+      const clearStart = Math.tan(turnAt(i) / 2)
+      const clearEnd = Math.tan(turnAt((i + 1) % n) / 2)
       // outward normal for a positive-area (screen-space) contour
       const nrm = { x: dir.y, y: -dir.x }
       if (sides && !sides.has(sideOf(nrm.x, nrm.y))) continue
@@ -319,9 +345,7 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
             const blind = Math.min(BLIND_DEPTH_FACTOR * size, exit != null ? exit / 2 : Infinity)
             reach = cavity != null ? cavity + OVERSHOOT_MM : blind
           }
-          // Near a corner, this wall's tunnel and the next wall's would meet
-          // inside the corner: keep a hole its own reach away from the ends.
-          if (u - ext.u / 2 < reach || u + ext.u / 2 > len - reach) continue
+          if (u - ext.u / 2 < reach * clearStart || u + ext.u / 2 > len - reach * clearEnd) continue
           if (obstacles.length) {
             // Plan view of the tunnel, padded by the clearance.
             const hw = ext.u / 2 + POCKET_CLEARANCE_MM
