@@ -663,3 +663,76 @@
 .texture-popover .texture-grid {
   margin-bottom: 0;
 }
+
+/* Export + Publish, pinned under the scrolling body. */
+.inspector-footer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.inspector-footer__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-field);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.inspector-footer__btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.inspector-footer__btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.inspector-footer__btn--primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
+.inspector-footer__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.inspector-footer__chevron {
+  margin-left: auto;
+  opacity: 0.8;
+}
+
+.inspector-footer__menu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% - 4px);
+  min-width: 0;
+}
+
+.inspector-footer__menu-hint {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+.inspector-footer__menu-note {
+  padding: 6px 10px 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}

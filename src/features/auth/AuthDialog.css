@@ -325,3 +325,17 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+.user-menu__chevron {
+  color: var(--text-faint);
+  margin-left: -2px;
+}
+
+.user-menu__button {
+  border: 1px solid transparent;
+}
+
+.user-menu__button[aria-expanded='true'],
+.user-menu__button:hover {
+  border-color: var(--border);
+}

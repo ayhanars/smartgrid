@@ -269,3 +269,117 @@
 button.assets-section__sync:hover {
   background: var(--bg-hover);
 }
+
+/* Grid / list switch in the header. */
+.assets-panel__view {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+}
+
+.assets-panel__view button {
+  display: inline-flex;
+  padding: 3px 5px;
+  border-radius: 4px;
+  color: var(--text-faint);
+}
+
+.assets-panel__view button[aria-pressed='true'] {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.asset-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.asset-card__rename {
+  width: 100%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.asset-card__rename:focus {
+  outline: none;
+}
+
+.asset-card__actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: none;
+  gap: 2px;
+}
+
+.asset-card:hover .asset-card__actions,
+.asset-card:focus-within .asset-card__actions {
+  display: inline-flex;
+}
+
+.asset-card__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel-raised);
+  color: var(--text-muted);
+}
+
+.asset-card__action:hover {
+  color: var(--text);
+}
+
+.asset-card__action--danger:hover {
+  color: var(--danger);
+}
+
+/* List view: one row per asset with a small thumbnail. */
+.assets-grid--list {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.asset-card--row {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+}
+
+.asset-card--row .asset-card__thumb {
+  width: 40px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.asset-card--row .asset-card__text {
+  flex: 1;
+}
+
+.asset-card--row .asset-card__actions {
+  position: static;
+  margin-left: auto;
+}
+
+.asset-card {
+  user-select: none;
+}
+
+.asset-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

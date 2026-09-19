@@ -75,10 +75,23 @@ export function EditorPage() {
       useViewStore.getState().setSaveStatus('saved')
     }
     // A fresh picture from the 3D view, kept locally and queued for the
-    // next cloud save. No-op while the 3D pane is closed.
+    // next cloud save. No-op while the 3D pane is closed; while its hole
+    // cuts are still computing, tries again shortly.
+    let thumbRetries = 0
     const refreshThumbnail = () => {
       if (!stillExists()) return
       const dataUrl = captureThumbnail()
+      if (dataUrl === 'busy') {
+        if (thumbRetries++ < 40) {
+          window.clearTimeout(thumbTimer)
+          thumbTimer = window.setTimeout(() => {
+            thumbTimer = undefined
+            refreshThumbnail()
+          }, 750)
+        }
+        return
+      }
+      thumbRetries = 0
       if (!dataUrl) return
       saveLocalThumbnail(id, dataUrl)
       thumbPending = dataUrl

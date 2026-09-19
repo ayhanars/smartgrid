@@ -15,9 +15,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { shapeWorldBounds, useDocumentStore, type AlignMode } from '../../state/documentStore'
-import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
-import { writeBinaryStl } from '../../lib/export/stl'
-import { write3mf } from '../../lib/export/threeMf'
+import { InspectorFooter } from './InspectorFooter'
 import { IconButton } from '../../components/IconButton'
 import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, HOLE_SHAPES, INFILL_PATTERNS, defaultWallMargin, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
 import { TexturePreview } from './TexturePreview'
@@ -78,9 +76,6 @@ export function InspectorPanel() {
             <CollapsibleGroup title="Print Settings" defaultOpen>
               <PrintSettingsSection />
             </CollapsibleGroup>
-            <CollapsibleGroup title="Export" defaultOpen>
-              <ExportTab />
-            </CollapsibleGroup>
           </>
         ) : (
           <>
@@ -96,12 +91,10 @@ export function InspectorPanel() {
                 <CarveSection ids={selection} />
               </CollapsibleGroup>
             )}
-            <CollapsibleGroup title="Export">
-              <ExportTab />
-            </CollapsibleGroup>
           </>
         )}
       </div>
+      <InspectorFooter />
     </div>
   )
 }
@@ -1395,51 +1388,5 @@ function MultiHeightSection({ ids }: { ids: string[] }) {
       <HeightSlider layer={first} selectionIds={ids} bedMaxZ={bedMaxZ} />
       <PerfectFitRow layer={first} ids={ids} />
     </Section>
-  )
-}
-
-function ExportTab() {
-  const layers = useDocumentStore((s) => s.layers)
-  const order = useDocumentStore((s) => s.order)
-  const solidCount = order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible).length
-  const colorCount = new Set(order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible).map((id) => layers[id].color)).size
-
-  const [preparing, setPreparing] = useState(false)
-  const exportAs = async (format: '3mf' | 'stl') => {
-    if (preparing) return
-    setPreparing(true)
-    try {
-      const meshes = await buildExportMeshes(layers, order)
-      if (meshes.length === 0) return
-      if (format === '3mf') downloadBlob(write3mf(meshes), 'smartgrid.3mf', 'model/3mf')
-      else downloadBlob(writeBinaryStl(meshes), 'smartgrid.stl', 'model/stl')
-    } finally {
-      setPreparing(false)
-    }
-  }
-
-  return (
-    <>
-      <Section title="Format">
-        <div className="inspector-export-buttons">
-          <button
-            type="button"
-            className="inspector-export-btn inspector-export-btn--primary"
-            disabled={solidCount === 0 || preparing}
-            onClick={() => exportAs('3mf')}
-          >
-            {preparing ? 'Preparing…' : 'Export 3MF'}
-          </button>
-          <button type="button" className="inspector-export-btn" disabled={solidCount === 0 || preparing} onClick={() => exportAs('stl')}>
-            Export STL
-          </button>
-        </div>
-        <p className="inspector-note">
-          {solidCount === 0
-            ? 'Draw a solid shape to export.'
-            : `${solidCount} solid${solidCount === 1 ? '' : 's'}, ${colorCount} color${colorCount === 1 ? '' : 's'} — holes are already cut. 3MF keeps each shape's color as its own filament for Bambu Studio; STL is geometry only.`}
-        </p>
-      </Section>
-    </>
   )
 }

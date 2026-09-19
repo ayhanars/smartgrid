@@ -20,6 +20,7 @@ import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import { activeHoleIds, useCutGeometries } from './useCutGeometries'
 import { PrinterPlate } from './PrinterPlate'
 import { ThumbnailCapture, THUMBNAIL_HIDE } from './ThumbnailCapture'
+import { LayerContextMenu, type ContextMenuState } from '../layers/LayerContextMenu'
 import { PrintPreviewSlider } from './PrintPreviewSlider'
 import { PreviewCaps, type PreviewCapItem } from './PreviewCaps'
 import { RotationDial } from '../inspector/RotationDial'
@@ -93,6 +94,16 @@ export function Viewport3DPane() {
   // Group-aware like the 2D canvas: clicking one member picks the whole
   // group; clicking a member of the already-selected group (or Cmd/Ctrl-
   // clicking) digs into that single member.
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const handleContextMenu = (id: string, x: number, y: number) => {
+    // Only a drag in progress blocks the menu: the gizmo sits on the shape,
+    // so a right-click near its middle also "hovers" a handle.
+    const tc = transformRef.current as unknown as { dragging: boolean } | null
+    if (tc?.dragging) return
+    if (!selection.includes(id)) setSelection(expandToGroup(layers, order, id))
+    setContextMenu({ x, y, layerId: id })
+  }
+
   const handleSelect = (id: string, additive: boolean, single = false) => {
     if (gizmoBusy()) return
     const group = expandToGroup(layers, order, id)
@@ -233,7 +244,7 @@ export function Viewport3DPane() {
   const t = primary?.transform
 
   return (
-    <div className="viewport-3d">
+    <div className="viewport-3d" onContextMenu={(e) => e.preventDefault()}>
       <Canvas
         // Render only when something changed (a document edit, an orbit, a
         // gizmo drag): an idle viewport then costs no GPU time at all, which
@@ -277,6 +288,7 @@ export function Viewport3DPane() {
               isSelected={selection.includes(id)}
               wireframe={wireframe}
               onSelect={handleSelect}
+              onContextMenu={handleContextMenu}
               artboardWidth={artboardWidth}
               artboardHeight={artboardHeight}
               cutGeometries={cutGeometriesById[id]}
@@ -328,7 +340,7 @@ export function Viewport3DPane() {
             infiniteGrid
           />
         </group>
-        <ThumbnailCapture />
+        <ThumbnailCapture ready={cutsPending === 0} />
 
         <OrbitControls ref={controlsRef} makeDefault />
         <GizmoHelper alignment="bottom-right" margin={[64, 64]}>
@@ -452,6 +464,7 @@ export function Viewport3DPane() {
           <ZoomIn size={14} />
         </IconButton>
       </div>
+      {contextMenu && <LayerContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
     </div>
   )
 }

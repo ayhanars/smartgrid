@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, ShieldCheck, UserRound, UserRoundCog } from 'lucide-react'
+import { ChevronDown, LogOut, ShieldCheck, UserRound, UserRoundCog } from 'lucide-react'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import { isStaffRole, useAuthStore } from './useAuthStore'
 import { AuthDialog } from './AuthDialog'
@@ -75,6 +75,7 @@ export function UserMenu({ compact }: UserMenuProps) {
       >
         <span className="user-menu__avatar">{avatarUrl ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer" /> : initial}</span>
         {!compact && <span className="user-menu__email">{label}</span>}
+        <ChevronDown size={12} className="user-menu__chevron" />
       </button>
       {open && (
         <div className="layer-context-menu user-menu__popover" role="menu">

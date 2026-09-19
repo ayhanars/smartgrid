@@ -17,6 +17,7 @@ interface UserAssetsState {
   /** off: guest / no Supabase. Otherwise the last cloud round trip. */
   status: 'off' | 'syncing' | 'synced' | 'offline' | 'error'
   add: (asset: AssetDefinition) => void
+  rename: (id: string, name: string) => void
   remove: (id: string) => void
   /** Pull the cloud set, merge with local, push anything local-only. */
   sync: () => Promise<void>
@@ -61,6 +62,21 @@ export const useUserAssets = create<UserAssetsState>((set, get) => ({
         console.warn('Asset upload failed', err)
         set({ status: isNetworkError(err) ? 'offline' : 'error' })
       })
+  },
+
+  rename: (id, name) => {
+    const trimmed = name.trim()
+    const current = get().assets.find((a) => a.id === id)
+    if (!current || !trimmed || trimmed === current.name) return
+    const renamed = { ...current, name: trimmed }
+    const assets = get().assets.map((a) => (a.id === id ? renamed : a))
+    set({ assets })
+    saveUserAssets(assets)
+    if (!signedIn()) return
+    upsertCloudAssets([renamed]).catch((err) => {
+      console.warn('Asset rename upload failed', err)
+      set({ status: isNetworkError(err) ? 'offline' : 'error' })
+    })
   },
 
   remove: (id) => {

@@ -25,6 +25,7 @@ import type { BooleanOp } from '../../lib/geometry/boolean'
 import { isTextEntryTarget } from '../../lib/dom/isTextEntryTarget'
 import { importSvgFiles } from '../../lib/import/importSvgFiles'
 import { ShapeElement } from './ShapeElement'
+import { LayerContextMenu, type ContextMenuState } from '../layers/LayerContextMenu'
 import {
   clamp,
   computeResizedBounds,
@@ -345,6 +346,20 @@ export function Canvas2DPane() {
     setGesture({ type: 'draft', kind: tool, startDoc: doc, currentDoc: doc, shift: e.shiftKey })
   }
 
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  // Right-click on a shape: the same menu as the layers panel, for the
+  // shape (or its group, or the whole selection when it is part of one).
+  // Handled on the svg because the pointer capture taken on pointerdown
+  // retargets the contextmenu event there; the shape is found by position.
+  const handleContextMenu = (e: React.MouseEvent<SVGSVGElement>) => {
+    e.preventDefault()
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<SVGGElement>('[data-shape-id]')
+    const id = el?.dataset.shapeId
+    if (!id || !layers[id]) return
+    if (!selection.includes(id)) setSelection(expandToGroup(layers, order, id))
+    setContextMenu({ x: e.clientX, y: e.clientY, layerId: id })
+  }
+
   const handleShapePointerDown = (e: React.PointerEvent<SVGGElement>, id: string) => {
     blurActiveInput()
     if (isSpaceDown || tool === 'pan') {
@@ -357,6 +372,8 @@ export function Canvas2DPane() {
     // shape can still be drawn on top of one that's already there.
     if (tool !== 'select') return
     e.stopPropagation()
+    // Right button: the contextmenu handler takes it from here.
+    if (e.button === 2) return
     const layer = layers[id]
     if (!layer) return
     const local = getLocalPoint(e)
@@ -723,6 +740,7 @@ export function Canvas2DPane() {
   return (
     <div
       className={`canvas-2d ${isDropTarget ? 'canvas-2d--drop-target' : ''}`}
+      onContextMenu={(e) => e.preventDefault()}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -744,6 +762,7 @@ export function Canvas2DPane() {
       <svg
         ref={svgRef}
         className="canvas-2d__svg"
+        onContextMenu={handleContextMenu}
         style={{
           cursor,
           top: rulerSize,
@@ -905,6 +924,7 @@ export function Canvas2DPane() {
         <span>Layers: {order.length}</span>
         <span>Selected: {selection.length}</span>
       </div>
+      {contextMenu && <LayerContextMenu menu={contextMenu} onClose={() => setContextMenu(null)} />}
     </div>
   )
 }
