@@ -22,6 +22,8 @@ layout is intentionally on hold pending a layout benchmark.
 - three-bvh-csg for real boolean mesh subtraction (holes)
 - polygon-clipping for 2D boolean ops (union/subtract/intersect/exclude)
 - Supabase for auth + cloud project storage (see `supabase/schema.sql`)
+- Claude (Anthropic API) design assistant, proxied through a Supabase Edge
+  Function so the API key never reaches the browser (`supabase/functions/claude`)
 - Deployed to GitHub Pages via GitHub Actions on push to `main`
 
 ## Project structure
@@ -34,10 +36,12 @@ src/
     inspector/     per-shape geometry controls
     layers/        layer tree panel
     export/        STL / 3MF export
-    auth/          Supabase auth store
+    auth/          Supabase auth store, sign-in dialog, user menu
+    assistant/     Claude chat panel + streaming client for the Edge Function
   lib/
     geometry/      bevel/CSG/polygon-boolean helpers
-    supabase/      Supabase client + data access
+    supabase/      Supabase client + cloud project data access
+    persistence/   localStorage projects + cloud sync helpers
     units/         mm/cm/in conversion
   state/           shared zustand stores
 ```
@@ -50,15 +54,45 @@ cp .env.example .env.local   # fill in your Supabase project URL + anon key
 npm run dev
 ```
 
-## Cloud storage setup
+## Cloud setup (Supabase, free tier)
 
-Create a Supabase project (free tier), then run `supabase/schema.sql` in its
-SQL editor to create the `projects` table with row-level security scoped to
-each signed-in user.
+Everything server-side runs on one free Supabase project: sign-in (magic
+link or Google), the `projects` table, and the `claude` Edge Function that
+fronts the Anthropic API. Without the Supabase env vars the app still works
+in local-only mode (no sign-in, no sync, no assistant).
 
-For deploys, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as repo
-secrets (Settings → Secrets and variables → Actions) so the GitHub Actions
-build step can inject them.
+1. **Create a project** at https://supabase.com/dashboard (free tier).
+2. **Run the schema**: open SQL Editor and run `supabase/schema.sql`. It
+   creates `projects` (row-level security per user) and `assistant_usage`
+   (a per-user daily token ledger).
+3. **Auth URLs**: Authentication → URL Configuration. Set *Site URL* to
+   where the app is served (`https://<you>.github.io/smartgrid/`, or your
+   domain) and add the same URL, plus `http://localhost:5173/smartgrid/`
+   for local dev, under *Redirect URLs*. Enable Google under *Providers* if
+   you want it (needs a Google OAuth client id/secret).
+4. **Frontend env**: copy Project URL and anon key from Settings → API into
+   `.env.local` (dev) and into the repo's Actions secrets
+   `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (deploys).
+5. **Assistant secrets** (Edge Functions → Secrets, or the CLI):
+   `ANTHROPIC_API_KEY` from https://console.anthropic.com/settings/keys.
+   Optional: `ASSISTANT_DAILY_TOKENS` (output tokens per user per UTC day,
+   default 40000) and `ASSISTANT_MODEL` (default `claude-opus-5`).
+6. **Deploy the function**: either `npx supabase functions deploy claude --project-ref <ref>`
+   locally after `npx supabase login`, or add the repo secrets
+   `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` so
+   `.github/workflows/supabase-functions.yml` deploys it on push.
+
+How sync works: projects always autosave to the browser. While signed in
+they also autosave to the cloud a couple of seconds later, and the home
+page lists cloud-only projects so you can open them on another device.
+Deleting a project removes both copies.
+
+## Custom domain
+
+Point the domain at GitHub Pages (Settings → Pages → Custom domain; add a
+`public/CNAME` file so deploys keep it), set the repo variable/secret
+`VITE_BASE=/` so the build stops assuming the `/smartgrid/` sub-path, and
+update the Supabase auth URLs above.
 
 ## Known issue carried over from the original app
 

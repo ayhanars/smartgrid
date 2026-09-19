@@ -12,12 +12,18 @@ interface ViewState {
   gizmoMode: 'translate' | 'rotate'
   /** Local autosave state shown in the top bar. */
   saveStatus: 'idle' | 'saving' | 'saved'
+  /** Cloud copy of the open project: off when signed out. */
+  cloudStatus: 'off' | 'syncing' | 'synced' | 'error'
+  /** Whether the design assistant column is open in the editor. */
+  assistantOpen: boolean
   /** One-line transient message (import results etc.), shown as a toast. */
   notice: { id: number; text: string } | null
   setPrintPreview: (on: boolean) => void
   setPreviewHeight: (height: number | null) => void
   setGizmoMode: (mode: 'translate' | 'rotate') => void
   setSaveStatus: (status: 'idle' | 'saving' | 'saved') => void
+  setCloudStatus: (status: ViewState['cloudStatus']) => void
+  setAssistantOpen: (open: boolean) => void
   setNotice: (text: string | null) => void
   /** Bumped when a custom texture tile finishes decoding, so meshes that
    * sampled it too early rebuild. */
@@ -32,11 +38,15 @@ export const useViewStore = create<ViewState>()((set) => ({
   previewHeight: null,
   gizmoMode: 'translate',
   saveStatus: 'idle',
+  cloudStatus: 'off',
+  assistantOpen: false,
   notice: null,
   setPrintPreview: (on) => set({ printPreview: on, previewHeight: null }),
   setPreviewHeight: (height) => set({ previewHeight: height }),
   setGizmoMode: (mode) => set({ gizmoMode: mode }),
   setSaveStatus: (status) => set({ saveStatus: status }),
+  setCloudStatus: (status) => set({ cloudStatus: status }),
+  setAssistantOpen: (open) => set({ assistantOpen: open }),
   setNotice: (text) => set({ notice: text ? { id: ++noticeCounter, text } : null }),
   tileVersion: 0,
   bumpTileVersion: () => set((s) => ({ tileVersion: s.tileVersion + 1 })),

@@ -244,8 +244,11 @@
   padding: 8px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
-  color: var(--text-faint);
-  cursor: not-allowed;
+  color: var(--text);
+}
+
+.home__cloud-btn:hover {
+  background: var(--bg-hover);
 }
 
 .home__thumb {
@@ -271,4 +274,25 @@
   to {
     opacity: 1;
   }
+}
+
+.home__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.home__card-cloud {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  color: var(--accent);
+  vertical-align: -1px;
+}
+
+.home__thumb--cloud {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
 }
