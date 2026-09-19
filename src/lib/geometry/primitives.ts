@@ -49,7 +49,13 @@ const DEFAULT_POLYGON_SIDES = 6
 const DEFAULT_STAR_POINTS = 5
 const DEFAULT_STAR_INNER_RATIO = 0.45
 
-export function createShapeRegions(kind: ShapeKind, width: number, height: number): ShapeRegion[] {
+export interface ShapeRegionOptions {
+  sides?: number
+  starPoints?: number
+  starInnerRatio?: number
+}
+
+export function createShapeRegions(kind: ShapeKind, width: number, height: number, options: ShapeRegionOptions = {}): ShapeRegion[] {
   let points: Point2[]
 
   if (kind === 'rect') {
@@ -60,9 +66,9 @@ export function createShapeRegions(kind: ShapeKind, width: number, height: numbe
       { x: 0, y: height },
     ]
   } else if (kind === 'polygon') {
-    points = normalizeToBounds(regularPolygonPoints(DEFAULT_POLYGON_SIDES), width, height)
+    points = normalizeToBounds(regularPolygonPoints(options.sides ?? DEFAULT_POLYGON_SIDES), width, height)
   } else if (kind === 'star') {
-    points = normalizeToBounds(starPolygonPoints(DEFAULT_STAR_POINTS, DEFAULT_STAR_INNER_RATIO), width, height)
+    points = normalizeToBounds(starPolygonPoints(options.starPoints ?? DEFAULT_STAR_POINTS, options.starInnerRatio ?? DEFAULT_STAR_INNER_RATIO), width, height)
   } else {
     // circle / hole: an ellipse inscribed in width x height so a
     // Shift-constrained (square) drag still gives a perfect circle.

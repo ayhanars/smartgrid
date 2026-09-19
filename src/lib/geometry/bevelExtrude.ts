@@ -37,8 +37,11 @@ export interface BeveledGeometryOptions {
   /** Printable relief on the straight wall and/or the top cap. */
   texture?: SurfaceTexture | null
   /** -1 cuts grooves into a solid; +1 pushes a cutter out (grooves in the
-   * cavity walls it leaves). */
+   * cavity walls it leaves) — or, for a raised relief on a solid, stands
+   * the pattern proud of the surface. */
   textureSign?: 1 | -1
+  /** Whether the top cap takes the texture (a cutter's top never does). */
+  textureTopCap?: boolean
   /** Subdivide every face at about this step (mm) even without a texture.
    * A body about to be perforated needs this: CSG against a handful of
    * huge triangles cascades into thousands of splits (a 200-hole plate
@@ -53,7 +56,7 @@ export function buildBeveledGeometry(
   bevelTopRequested: number,
   options: BeveledGeometryOptions = {},
 ): THREE.BufferGeometry {
-  const { flare = false, texture = null, textureSign = -1, tessellate } = options
+  const { flare = false, texture = null, textureSign = -1, textureTopCap = true, tessellate } = options
   // Wall and cap triangle winding below assumes the same orientation every
   // primitive shape has (positive signed area). A pen path clicked in the
   // other direction arrives reversed and would build inside-out — every
@@ -187,8 +190,8 @@ export function buildBeveledGeometry(
   }
 
   const topCapRing = dedupeRing(topCap)
-  if (textureTop && textureSign < 0) {
-    appendPart(buildTexturedCap(topCapRing, depth, texture))
+  if (textureTop && textureTopCap) {
+    appendPart(buildTexturedCap(topCapRing, depth, texture, undefined, textureSign))
   } else if (tessellate) {
     appendPart(buildTexturedCap(topCapRing, depth, flat, tessellate))
   } else {

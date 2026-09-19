@@ -91,7 +91,8 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
     const geo = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop, {
       flare: layer.isHole && (layer.bevelMode ?? 'rim') === 'rim',
       texture: layer.texture ?? null,
-      textureSign: layer.isHole ? 1 : -1,
+      textureSign: ((layer.isHole ? 1 : -1) * (layer.texture?.relief === 'raised' ? -1 : 1)) as 1 | -1,
+      textureTopCap: !layer.isHole,
       tessellate: options.tessellate ?? perforationTessellation(layer),
     })
     geo.scale(scale, scale, scale)

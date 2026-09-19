@@ -119,7 +119,9 @@
 }
 
 .layer-row:hover .layer-row__actions,
-.layer-row--hidden .layer-row__actions {
+.layer-group:hover .layer-row__actions,
+.layer-row--hidden .layer-row__actions,
+.layer-row__actions--pinned {
   display: flex;
 }
 

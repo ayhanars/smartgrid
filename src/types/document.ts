@@ -75,7 +75,26 @@ export const INFILL_PATTERNS: { id: InfillPattern; label: string }[] = [
   { id: 'cubic', label: 'Cubic' },
 ]
 
-export type TexturePattern = 'ripples' | 'flutes' | 'grid' | 'bricks' | 'diamonds' | 'honeycomb' | 'dots' | 'wood' | 'custom'
+export type TexturePattern =
+  | 'ripples'
+  | 'flutes'
+  | 'waves'
+  | 'stripes'
+  | 'chevron'
+  | 'grid'
+  | 'checker'
+  | 'bricks'
+  | 'weave'
+  | 'diamonds'
+  | 'knurl'
+  | 'honeycomb'
+  | 'scales'
+  | 'dots'
+  | 'rings'
+  | 'pebble'
+  | 'carbon'
+  | 'wood'
+  | 'custom'
 
 export type WallSide = 'front' | 'back' | 'left' | 'right'
 
@@ -102,16 +121,29 @@ export interface SurfaceTexture {
   tile?: string
   /** Custom pattern repeats (true) or is placed once, centered (false). */
   repeat?: boolean
+  /** 'cut' (default) sinks the pattern into the surface; 'raised' stands
+   * it proud of the surface by the same depth. */
+  relief?: 'cut' | 'raised'
 }
 
 export const TEXTURE_PATTERNS: { id: TexturePattern; label: string; hint: string }[] = [
   { id: 'ripples', label: 'Ripples', hint: 'horizontal waves' },
   { id: 'flutes', label: 'Flutes', hint: 'vertical waves' },
+  { id: 'waves', label: 'Waves', hint: 'wavy lines' },
+  { id: 'stripes', label: 'Stripes', hint: 'diagonal bands' },
+  { id: 'chevron', label: 'Chevron', hint: 'zigzag lines' },
   { id: 'grid', label: 'Grid', hint: 'crossed grooves' },
+  { id: 'checker', label: 'Checker', hint: 'raised squares' },
   { id: 'bricks', label: 'Bricks', hint: 'running bond' },
-  { id: 'diamonds', label: 'Diamonds', hint: 'diagonal knurl' },
+  { id: 'weave', label: 'Basket weave', hint: 'woven strips' },
+  { id: 'diamonds', label: 'Diamonds', hint: 'diagonal grooves' },
+  { id: 'knurl', label: 'Knurl', hint: 'fine grip pyramids' },
   { id: 'honeycomb', label: 'Honeycomb', hint: 'hex cells' },
+  { id: 'scales', label: 'Scales', hint: 'overlapping arcs' },
   { id: 'dots', label: 'Dimples', hint: 'rounded pits' },
+  { id: 'rings', label: 'Rings', hint: 'concentric circles' },
+  { id: 'pebble', label: 'Leather', hint: 'pebbled grain' },
+  { id: 'carbon', label: 'Carbon', hint: 'twill weave' },
   { id: 'wood', label: 'Wood grain', hint: 'wavy grain' },
   { id: 'custom', label: 'Your image', hint: 'uploaded SVG/PNG, dark = groove' },
 ]

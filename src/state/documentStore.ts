@@ -4,6 +4,7 @@ import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, t
 import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
+import type { AssetDefinition } from '../lib/assets/types'
 import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking'
 import { buildShellCavity, type ShellCavity, type ShellOptions } from '../lib/geometry/shell'
@@ -90,6 +91,9 @@ interface DocumentActions {
   setSelection: (ids: string[]) => void
   toggleVisibility: (id: string) => void
   toggleLocked: (id: string) => void
+  /** Show/hide or lock/unlock several layers at once (a whole group). */
+  setVisible: (ids: string[], visible: boolean) => void
+  setLocked: (ids: string[], locked: boolean) => void
   setColor: (id: string, color: string) => void
   setOpacity: (id: string, opacity: number) => void
   setExtrusionDepth: (id: string, depth: number) => void
@@ -115,6 +119,9 @@ interface DocumentActions {
    * given thickness (floor rounded up to whole print layers), grouped with
    * it. Returns the new cavity's id, or null if the outline is too narrow. */
   hollowOut: (id: string, options: ShellOptions) => { cavityId: string; wall: number } | null
+  /** Places an asset (see lib/assets) with its top-left at `origin`,
+   * grouped under the asset's name, cavities included. Returns the ids. */
+  addAsset: (asset: AssetDefinition, origin: Point2) => string[]
   /** Changes the wall/floor of an existing cavity (see ShapeLayer.shellOf)
    * and rebuilds it. */
   updateShell: (cavityId: string, options: Partial<ShellOptions>) => void
@@ -217,6 +224,36 @@ function writePinnedBedPreset(id: string | null) {
 }
 
 type Patch = Partial<DocumentStore>
+
+/** The hole layer that hollows `solid` out (see hollowOut), or null when
+ * the outline is too narrow for the wall. The floor is rounded UP to
+ * whole print layers — a floor thinner than a layer can't be printed. */
+function makeCavityLayer(solid: ShapeLayer, options: ShellOptions, layerHeight: number, groupId: string | undefined): ShapeLayer | null {
+  const floorLayers = Math.max(1, Math.ceil(Math.max(0, options.floor) / layerHeight - 1e-6))
+  const floor = floorLayers * layerHeight
+  const cavity = buildShellCavity(solid, { ...options, floor })
+  if (!cavity) return null
+  const cavityId = generateId()
+  return {
+    id: cavityId,
+    kind: 'hole',
+    name: `${solid.name} cavity`,
+    visible: true,
+    locked: false,
+    color: solid.color,
+    transform: { x: cavity.x, y: cavity.y, z: cavity.z, rotationX: 0, rotationY: 0, rotation: 0 },
+    regions: cavity.regions,
+    extrusionDepth: cavity.depth,
+    cornerRadius: 0,
+    smartPolish: 0,
+    bevelBottom: cavity.bevelBottom,
+    bevelTop: cavity.bevelTop,
+    bevelMode: 'shape',
+    isHole: true,
+    ...(groupId ? { groupId } : {}),
+    shellOf: { solidId: solid.id, wall: options.wall, floor, openFrom: options.openFrom },
+  }
+}
 
 /** A cavity layer updated to a freshly built shell cavity. */
 function applyCavity(cavity: ShapeLayer, built: ShellCavity): ShapeLayer {
@@ -608,6 +645,20 @@ export const useDocumentStore = create<DocumentStore>()(
           return { layers: { ...state.layers, [id]: { ...layer, locked: !layer.locked } } }
         }),
 
+      setVisible: (ids, visible) =>
+        set((state) => {
+          const layers = { ...state.layers }
+          for (const id of ids) if (layers[id]) layers[id] = { ...layers[id], visible }
+          return { layers }
+        }),
+
+      setLocked: (ids, locked) =>
+        set((state) => {
+          const layers = { ...state.layers }
+          for (const id of ids) if (layers[id]) layers[id] = { ...layers[id], locked }
+          return { layers }
+        }),
+
       setColor: (id, color) =>
         set((state) => {
           const layer = state.layers[id]
@@ -786,46 +837,75 @@ export const useDocumentStore = create<DocumentStore>()(
         const state = get()
         const solid = state.layers[id]
         if (!solid || solid.isHole) return null
-        const layerHeight = state.printSettings.layerHeight
-        const floorLayers = Math.max(1, Math.ceil(Math.max(0, options.floor) / layerHeight - 1e-6))
-        const cavity = buildShellCavity(solid, { ...options, floor: floorLayers * layerHeight })
+        // The cavity belongs with its solid: join its group, or start one.
+        const groupId = solid.groupId ?? generateId()
+        const cavity = makeCavityLayer({ ...solid, groupId }, options, state.printSettings.layerHeight, groupId)
         if (!cavity) return null
-        const cavityId = generateId()
         set((s) => {
           const layers = { ...s.layers }
           let groups = s.groups
-          // The cavity belongs with its solid: join its group, or start one.
-          let groupId = solid.groupId
-          if (!groupId) {
-            groupId = generateId()
+          if (!solid.groupId) {
             groups = { ...groups, [groupId]: { id: groupId, name: `${solid.name} shell` } }
             layers[id] = { ...solid, groupId }
           }
-          layers[cavityId] = {
-            id: cavityId,
-            kind: 'hole',
-            name: `${solid.name} cavity`,
-            visible: true,
-            locked: false,
-            color: solid.color,
-            transform: { x: cavity.x, y: cavity.y, z: cavity.z, rotationX: 0, rotationY: 0, rotation: 0 },
-            regions: cavity.regions,
-            extrusionDepth: cavity.depth,
-            cornerRadius: 0,
-            smartPolish: 0,
-            bevelBottom: cavity.bevelBottom,
-            bevelTop: cavity.bevelTop,
-            bevelMode: 'shape',
-            isHole: true,
-            groupId,
-            shellOf: { solidId: id, wall: options.wall, floor: floorLayers * layerHeight, openFrom: options.openFrom },
-          }
+          layers[cavity.id] = cavity
           const at = s.order.indexOf(id)
           const order = [...s.order]
-          order.splice(at + 1, 0, cavityId)
-          return { layers, groups, order, selection: [cavityId] }
+          order.splice(at + 1, 0, cavity.id)
+          return { layers, groups, order, selection: [cavity.id] }
         })
-        return { cavityId, wall: cavity.wall }
+        return { cavityId: cavity.id, wall: cavity.shellOf!.wall }
+      },
+
+      addAsset: (asset, origin) => {
+        const ids: string[] = []
+        set((state) => {
+          const layers = { ...state.layers }
+          const order = [...state.order]
+          let groups = state.groups
+          const needsGroup = asset.parts.length > 1 || asset.parts.some((p) => p.hollow)
+          const groupId = needsGroup ? generateId() : undefined
+          if (groupId) groups = { ...groups, [groupId]: { id: groupId, name: asset.name } }
+          for (const part of asset.parts) {
+            const id = generateId()
+            const regions = part.regions ?? createShapeRegions(part.kind, part.width, part.height, { sides: part.polygonSides, starPoints: part.starPoints, starInnerRatio: part.starInnerRatio })
+            const layer: ShapeLayer = {
+              id,
+              kind: part.kind,
+              name: part.name,
+              visible: true,
+              locked: false,
+              color: part.color ?? '#4d8dff',
+              transform: { x: origin.x + part.x, y: origin.y + part.y, z: part.z ?? 0, rotationX: 0, rotationY: 0, rotation: part.rotation ?? 0 },
+              regions,
+              extrusionDepth: part.depth,
+              cornerRadius: part.cornerRadius ?? 0,
+              smartPolish: part.smartPolish ?? 0,
+              bevelBottom: part.bevelBottom ?? 0,
+              bevelTop: part.bevelTop ?? 0,
+              isHole: !!part.isHole,
+              ...(part.bevelMode ? { bevelMode: part.bevelMode } : {}),
+              ...(part.texture ? { texture: part.texture } : {}),
+              ...(part.perforation ? { perforation: part.perforation } : {}),
+              ...(part.polygonSides ? { polygonSides: part.polygonSides } : {}),
+              ...(part.starPoints ? { starPoints: part.starPoints, starInnerRatio: part.starInnerRatio ?? 0.45 } : {}),
+              ...(groupId ? { groupId } : {}),
+            }
+            layers[id] = layer
+            order.push(id)
+            ids.push(id)
+            if (part.hollow && !layer.isHole) {
+              const cavity = makeCavityLayer(layer, part.hollow, state.printSettings.layerHeight, groupId)
+              if (cavity) {
+                layers[cavity.id] = cavity
+                order.push(cavity.id)
+                ids.push(cavity.id)
+              }
+            }
+          }
+          return { layers, order, groups, selection: ids }
+        })
+        return ids
       },
 
       updateShell: (cavityId, options) =>

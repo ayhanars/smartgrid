@@ -12,12 +12,11 @@
 }
 
 .app-shell__left {
-  width: 260px;
+  width: 312px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .app-shell__right {

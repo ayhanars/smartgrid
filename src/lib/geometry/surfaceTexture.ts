@@ -63,8 +63,84 @@ export function patternStrength(texture: SurfaceTexture, u: number, v: number, e
       return 0.5 - 0.5 * Math.cos((TWO_PI * v) / s)
     case 'flutes':
       return 0.5 - 0.5 * Math.cos((TWO_PI * u) / s)
+    case 'waves':
+      // Horizontal lines that meander sideways.
+      return groove((v + 0.3 * s * Math.sin((TWO_PI * u) / (2.6 * s))) / s, 0.34)
+    case 'stripes':
+      return 0.5 - 0.5 * Math.cos((TWO_PI * (u + v)) / (s * Math.SQRT2))
+    case 'chevron': {
+      // Zigzag: the line shifts sideways by a triangle wave of v.
+      const zig = Math.abs(frac(v / (2 * s)) - 0.5) * 2
+      return groove((u + zig * s) / s, 0.3)
+    }
     case 'grid':
       return Math.max(groove(u / s, 0.3), groove(v / s, 0.3))
+    case 'checker': {
+      // Alternate squares lowered, with a soft chamfer at every edge.
+      const cu = Math.floor(u / s)
+      const cv = Math.floor(v / s)
+      const low = (cu + cv) % 2 === 0
+      const eu = Math.min(frac(u / s), 1 - frac(u / s))
+      const ev = Math.min(frac(v / s), 1 - frac(v / s))
+      const edge = smoothstep(0, 0.12, Math.min(eu, ev))
+      return low ? edge : 1 - edge
+    }
+    case 'weave': {
+      // Basket weave: 2s squares of ripples that alternate direction, with
+      // a groove between the strips.
+      const cell = 2 * s
+      const cu = Math.floor(u / cell)
+      const cv = Math.floor(v / cell)
+      const horizontal = (cu + cv) % 2 === 0
+      const along = horizontal ? v : u
+      const strips = 0.5 - 0.5 * Math.cos((TWO_PI * along) / (cell / 3))
+      const seam = Math.max(groove(u / cell, 0.12), groove(v / cell, 0.12))
+      return Math.max(seam, strips * 0.55)
+    }
+    case 'knurl': {
+      // Fine pyramids: a diamond grid at a quarter of the size.
+      const k = s / 2.5
+      const a = Math.min(frac((u + v) / k), 1 - frac((u + v) / k))
+      const b = Math.min(frac((u - v) / k), 1 - frac((u - v) / k))
+      return 1 - Math.min(1, 2 * Math.min(a, b) * 2)
+    }
+    case 'scales': {
+      // Fish scales: staggered rows of arcs, each row overlapping the last.
+      let best = 0
+      const row0 = Math.floor(v / s)
+      for (const row of [row0, row0 + 1]) {
+        const shift = row % 2 === 0 ? 0 : 0.5
+        const cx = (Math.round(u / s - shift) + shift) * s
+        const cy = row * s
+        const dx = u - cx
+        const dy = v - cy
+        if (dy > 0) continue
+        const dist = Math.hypot(dx, dy)
+        const r = 0.5 * s
+        if (dist > r) continue
+        best = Math.max(best, 1 - smoothstep(0, 0.16 * s, r - dist))
+      }
+      return best
+    }
+    case 'rings': {
+      const r = Math.hypot(u - extent.width / 2, v - extent.height / 2)
+      return 0.5 - 0.5 * Math.cos((TWO_PI * r) / s)
+    }
+    case 'pebble': {
+      // Leather grain: layered noise with a pinched contrast.
+      const n = 0.55 * noise2(u / s, v / s, 11) + 0.3 * noise2((2.1 * u) / s, (2.1 * v) / s, 12) + 0.15 * noise2((4.3 * u) / s, (4.3 * v) / s, 13)
+      return smoothstep(0.35, 0.75, n)
+    }
+    case 'carbon': {
+      // 2x2 twill: blocks of fine fibres alternating direction.
+      const block = s / 2
+      const bu = Math.floor(u / block)
+      const bv = Math.floor(v / block)
+      const horizontal = (bu + bv) % 2 === 0
+      const fibre = 0.5 - 0.5 * Math.cos((TWO_PI * (horizontal ? v : u)) / (block / 3))
+      const seam = Math.max(groove(u / block, 0.1), groove(v / block, 0.1))
+      return Math.max(seam * 0.8, fibre * 0.5)
+    }
     case 'bricks': {
       // Running bond, 2:1 bricks. Mortar joints are the grooves; every
       // brick also sits at a slightly different depth with a soft
@@ -275,7 +351,7 @@ function distanceToRing(p: Point2, ring: Point2[]): number {
  * flat (so the walls still meet it) and makes the clipped cells and
  * their full neighbours agree along shared edges.
  */
-export function buildTexturedCap(ring: Point2[], z: number, texture: SurfaceTexture, stepOverride?: number): MeshPart {
+export function buildTexturedCap(ring: Point2[], z: number, texture: SurfaceTexture, stepOverride?: number, sign: 1 | -1 = -1): MeshPart {
   const step = textureStep(texture, stepOverride)
   let minX = Infinity
   let minY = Infinity
@@ -311,7 +387,7 @@ export function buildTexturedCap(ring: Point2[], z: number, texture: SurfaceText
   const inset = Math.max(1.5 * step, texture.topInset ?? 0)
   const heightAt = (x: number, y: number) => {
     const fade = smoothstep(inset, inset + step, distanceToRing({ x, y }, ring))
-    return z - texture.depth * patternStrength(texture, x - minX, y - minY, { width: maxX - minX, height: maxY - minY }) * fade
+    return z + sign * texture.depth * patternStrength(texture, x - minX, y - minY, { width: maxX - minX, height: maxY - minY }) * fade
   }
   const vertex = (x: number, y: number) => {
     const key = `${x.toFixed(5)},${y.toFixed(5)}`

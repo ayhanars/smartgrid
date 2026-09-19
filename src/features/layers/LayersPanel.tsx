@@ -58,6 +58,8 @@ export function LayersPanel() {
   const setSelection = useDocumentStore((s) => s.setSelection)
   const toggleVisibility = useDocumentStore((s) => s.toggleVisibility)
   const toggleLocked = useDocumentStore((s) => s.toggleLocked)
+  const setVisible = useDocumentStore((s) => s.setVisible)
+  const setLocked = useDocumentStore((s) => s.setLocked)
   const moveLayersTo = useDocumentStore((s) => s.moveLayersTo)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
@@ -216,6 +218,8 @@ export function LayersPanel() {
     renderedGroups.add(groupId)
     const members = rows.filter((mid) => layers[mid]?.groupId === groupId)
     const allSelected = members.every((mid) => selection.includes(mid))
+    const anyHidden = members.some((mid) => !layers[mid]?.visible)
+    const anyLocked = members.some((mid) => layers[mid]?.locked)
     const collapsed = !!collapsedGroups[groupId]
     // Dropping on the group header: above it = above the whole group,
     // below it = first inside the group.
@@ -251,6 +255,30 @@ export function LayersPanel() {
         <Folder size={13} />
         <span className="layer-group__name">{groups[groupId].name}</span>
         <span className="layer-group__count">{members.length}</span>
+        <div className={`layer-row__actions ${anyHidden || anyLocked ? 'layer-row__actions--pinned' : ''}`}>
+          <button
+            type="button"
+            className="layer-row__toggle"
+            aria-label={anyLocked ? 'Unlock group' : 'Lock group'}
+            onClick={(e) => {
+              e.stopPropagation()
+              setLocked(members, !anyLocked)
+            }}
+          >
+            {anyLocked ? <Lock size={12} /> : <Unlock size={12} />}
+          </button>
+          <button
+            type="button"
+            className="layer-row__toggle"
+            aria-label={anyHidden ? 'Show group' : 'Hide group'}
+            onClick={(e) => {
+              e.stopPropagation()
+              setVisible(members, anyHidden)
+            }}
+          >
+            {anyHidden ? <EyeOff size={12} /> : <Eye size={12} />}
+          </button>
+        </div>
       </div>,
     )
     if (!collapsed) for (const mid of members) tree.push(renderLayerRow(mid, true))

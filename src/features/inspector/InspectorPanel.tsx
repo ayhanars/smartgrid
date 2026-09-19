@@ -722,9 +722,22 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
               </div>
             </>
           )}
+          <p className="inspector-field__label">Relief</p>
+          <div className="inspector-preset-chips">
+            {(
+              [
+                ['cut', 'Cut in'],
+                ['raised', 'Raised'],
+              ] as const
+            ).map(([id, label]) => (
+              <button key={id} type="button" className={`inspector-preset-chip ${(texture.relief ?? 'cut') === id ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ relief: id })}>
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="inspector-grid-2">
             <Field label={texture.pattern === 'custom' && texture.repeat === false ? 'Image width' : 'Pattern size'} value={texture.size} suffix="mm" onChange={(v) => patch({ size: v })} />
-            <Field label="Groove depth" value={texture.depth} suffix="mm" onChange={(v) => patch({ depth: v })} />
+            <Field label={texture.relief === 'raised' ? 'Relief height' : 'Groove depth'} value={texture.depth} suffix="mm" onChange={(v) => patch({ depth: v })} />
           </div>
           {texture.target !== 'top' && (
             <>

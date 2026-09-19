@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TopBar } from './TopBar'
-import { LayersPanel } from '../features/layers/LayersPanel'
+import { LeftPanel } from './LeftPanel'
 import { InspectorPanel } from '../features/inspector/InspectorPanel'
 import { Canvas2DPane } from '../features/canvas-2d/Canvas2DPane'
 import { Viewport3DPane } from '../features/viewport-3d/Viewport3DPane'
@@ -113,7 +113,7 @@ export function AppShell() {
       <div className="app-shell__body">
         {leftPanelOpen && (
           <aside className="app-shell__left">
-            <LayersPanel />
+            <LeftPanel />
           </aside>
         )}
         <main className="app-shell__center">

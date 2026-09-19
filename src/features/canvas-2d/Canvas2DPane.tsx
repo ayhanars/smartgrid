@@ -37,6 +37,8 @@ import { createShapeRegions, pointsToSvgPath } from '../../lib/geometry/primitiv
 import { getBedPreset } from '../../lib/geometry/bedPresets'
 import { flattenPenAnchors, type PenAnchor } from '../../lib/geometry/pen'
 import { RulerTicks } from './RulerTicks'
+import { ASSET_MIME } from '../assets/assetDrag'
+import type { AssetDefinition } from '../../lib/assets/types'
 import './Canvas2DPane.css'
 
 /** Screen pixels per document mm at "100%": real size on a 96 dpi
@@ -673,7 +675,7 @@ export function Canvas2DPane() {
   // Drag-and-drop SVG import: dropped files land centered on the pointer.
   const [isDropTarget, setIsDropTarget] = useState(false)
   const dragDepth = useRef(0)
-  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files')
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files') || Array.from(e.dataTransfer.types).includes(ASSET_MIME)
   const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     if (!hasFiles(e)) return
     e.preventDefault()
@@ -699,6 +701,19 @@ export function Canvas2DPane() {
     if (svg) {
       const rect = svg.getBoundingClientRect()
       at = screenToDoc(e.clientX - rect.left, e.clientY - rect.top)
+    }
+    const assetJson = e.dataTransfer.getData(ASSET_MIME)
+    if (assetJson) {
+      // An asset dragged from the Assets panel lands centered on the pointer.
+      try {
+        const asset = JSON.parse(assetJson) as AssetDefinition
+        const center = at ?? { x: 0, y: 0 }
+        useDocumentStore.getState().addAsset(asset, { x: center.x - asset.width / 2, y: center.y - asset.height / 2 })
+        setTool('select')
+      } catch (err) {
+        console.error('Dropped asset could not be read:', err)
+      }
+      return
     }
     void importSvgFiles(e.dataTransfer.files, at).then((ids) => {
       if (ids.length) setTool('select')
