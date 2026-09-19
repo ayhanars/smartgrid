@@ -296,3 +296,40 @@
   justify-content: center;
   color: var(--text-faint);
 }
+
+.home__banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: -16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.home__banner > span {
+  flex: 1;
+}
+
+.home__banner strong {
+  color: var(--text);
+}
+
+.home__banner--warn {
+  border-color: rgba(255, 182, 72, 0.4);
+  color: var(--warning);
+}
+
+.home__banner--warn strong {
+  color: var(--warning);
+}
+
+.home__card-cloud--missing {
+  gap: 3px;
+  color: var(--warning);
+  font-size: 10.5px;
+}

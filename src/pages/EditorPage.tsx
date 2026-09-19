@@ -7,6 +7,7 @@ import { listLocalProjects, saveLocalProject, type DocumentSnapshot } from '../l
 import { isCloudSyncable, loadProjectAnywhere } from '../lib/persistence/cloudSync'
 import { saveCloudProject } from '../lib/supabase/projects'
 import { useAuthStore } from '../features/auth/useAuthStore'
+import { isNetworkError, useConnectivity } from '../lib/connectivity'
 
 const AUTOSAVE_DELAY_MS = 400
 /** Cloud writes are slower and metered, so they trail the local autosave. */
@@ -71,14 +72,28 @@ export function EditorPage() {
       if (!cloudPending || !stillExists()) return
       const snapshot = cloudPending
       cloudPending = null
+      if (!useConnectivity.getState().online) {
+        // Keep the snapshot: it goes up as soon as the network is back.
+        cloudPending = snapshot
+        useViewStore.getState().setCloudStatus('offline')
+        return
+      }
       useViewStore.getState().setCloudStatus('syncing')
       saveCloudProject(id, snapshot)
         .then(() => useViewStore.getState().setCloudStatus('synced'))
         .catch((err) => {
           console.warn('Cloud save failed', err)
-          useViewStore.getState().setCloudStatus('error')
+          // Nothing newer arrived meanwhile: retry this one later.
+          if (!cloudPending) cloudPending = snapshot
+          useViewStore.getState().setCloudStatus(isNetworkError(err) ? 'offline' : 'error')
         })
     }
+    // Back online: push whatever the last failed / deferred save held.
+    const unsubscribeNet = cloud
+      ? useConnectivity.subscribe((s, prev) => {
+          if (s.online && !prev.online && cloudPending) flushCloud()
+        })
+      : () => {}
 
     const unsubscribe = useDocumentStore.subscribe((state) => {
       const next = serializeDocument(state)
@@ -102,6 +117,7 @@ export function EditorPage() {
     window.addEventListener('pagehide', flushAll)
     return () => {
       unsubscribe()
+      unsubscribeNet()
       window.clearTimeout(timer)
       window.clearTimeout(cloudTimer)
       window.removeEventListener('beforeunload', flushAll)

@@ -6,3 +6,6 @@ project_id = "smartgrid"
 # The function verifies the user's JWT itself (it needs the user id for the
 # usage ledger), so the gateway check is redundant but harmless.
 verify_jwt = true
+
+[functions.account]
+verify_jwt = true

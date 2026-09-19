@@ -1,21 +1,32 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Mail, X } from 'lucide-react'
 import { useAuthStore } from './useAuthStore'
+import { friendlyAuthError, MIN_PASSWORD_LENGTH } from './authErrors'
 import './AuthDialog.css'
+
+type Mode = 'signin' | 'signup' | 'reset'
 
 interface AuthDialogProps {
   onClose: () => void
+  /** Why the dialog opened, shown under the title (guest-mode prompts). */
+  reason?: string
+  initialMode?: Mode
 }
 
-/** Sign-in sheet: a magic link by email, or Google. Nothing to remember,
- * no passwords to store. */
-export function AuthDialog({ onClose }: AuthDialogProps) {
-  const signInWithEmail = useAuthStore((s) => s.signInWithEmail)
+/** Sign-in sheet: email + password (create an account, sign in, or reset a
+ * forgotten password), or Google. */
+export function AuthDialog({ onClose, reason, initialMode = 'signin' }: AuthDialogProps) {
+  const signIn = useAuthStore((s) => s.signIn)
+  const signUp = useAuthStore((s) => s.signUp)
+  const requestPasswordReset = useAuthStore((s) => s.requestPasswordReset)
   const signInWithGoogle = useAuthStore((s) => s.signInWithGoogle)
   const user = useAuthStore((s) => s.user)
+  const [mode, setMode] = useState<Mode>(initialMode)
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [sent, setSent] = useState(false)
+  const [sent, setSent] = useState<'confirm' | 'reset' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,17 +39,31 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
     return () => window.removeEventListener('keydown', key)
   }, [onClose])
 
+  const switchMode = (next: Mode) => {
+    setMode(next)
+    setError(null)
+    setSent(null)
+  }
+
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    const trimmed = email.trim()
-    if (!trimmed) return
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail) return
     setBusy(true)
     setError(null)
     try {
-      await signInWithEmail(trimmed)
-      setSent(true)
+      if (mode === 'signin') {
+        await signIn(trimmedEmail, password)
+      } else if (mode === 'signup') {
+        if (password.length < MIN_PASSWORD_LENGTH) throw new Error(`Use at least ${MIN_PASSWORD_LENGTH} characters for the password.`)
+        const { needsConfirmation } = await signUp(trimmedEmail, password, name.trim() || trimmedEmail.split('@')[0])
+        if (needsConfirmation) setSent('confirm')
+      } else {
+        await requestPasswordReset(trimmedEmail)
+        setSent('reset')
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send the link')
+      setError(friendlyAuthError(err))
     } finally {
       setBusy(false)
     }
@@ -50,10 +75,17 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
     try {
       await signInWithGoogle()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google sign-in failed')
+      setError(friendlyAuthError(err))
       setBusy(false)
     }
   }
+
+  const title = mode === 'signup' ? 'Create your smartgrid account' : mode === 'reset' ? 'Reset your password' : 'Sign in to smartgrid'
+  const lead =
+    reason ??
+    (mode === 'reset'
+      ? 'We will email you a link that signs you in and lets you choose a new password.'
+      : 'Keep your projects in the cloud, open them anywhere, share with the community, and use the design assistant.')
 
   return (
     <div className="auth-dialog__backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -61,40 +93,91 @@ export function AuthDialog({ onClose }: AuthDialogProps) {
         <button type="button" className="auth-dialog__close" aria-label="Close" onClick={onClose}>
           <X size={15} />
         </button>
-        <h2 id="auth-dialog-title">Sign in to smartgrid</h2>
-        <p className="auth-dialog__lead">Keep your projects in the cloud, open them anywhere, and use the design assistant.</p>
+        <h2 id="auth-dialog-title">{title}</h2>
+        <p className="auth-dialog__lead">{lead}</p>
 
         {sent ? (
           <div className="auth-dialog__sent">
             <Mail size={20} />
             <strong>Check your inbox</strong>
-            <span>We sent a sign-in link to {email.trim()}. Open it on this device to finish.</span>
+            <span>
+              {sent === 'confirm'
+                ? `We sent a confirmation link to ${email.trim()}. Open it to activate your account, then sign in.`
+                : `We sent a password reset link to ${email.trim()}. Open it on this device to choose a new password.`}
+            </span>
           </div>
         ) : (
           <>
-            <button type="button" className="auth-dialog__google" disabled={busy} onClick={google}>
-              <GoogleMark />
-              Continue with Google
-            </button>
-            <div className="auth-dialog__or">
-              <span>or</span>
-            </div>
+            {mode !== 'reset' && (
+              <>
+                <button type="button" className="auth-dialog__google" disabled={busy} onClick={google}>
+                  <GoogleMark />
+                  Continue with Google
+                </button>
+                <div className="auth-dialog__or">
+                  <span>or</span>
+                </div>
+              </>
+            )}
             <form className="auth-dialog__form" onSubmit={submit}>
+              {mode === 'signup' && (
+                <>
+                  <label htmlFor="auth-name">Name</label>
+                  <input id="auth-name" type="text" autoComplete="name" autoFocus placeholder="How you appear to others" value={name} onChange={(e) => setName(e.target.value)} />
+                </>
+              )}
               <label htmlFor="auth-email">Email</label>
               <input
                 id="auth-email"
                 type="email"
                 autoComplete="email"
-                autoFocus
+                autoFocus={mode !== 'signup'}
                 required
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-              <button type="submit" className="auth-dialog__submit" disabled={busy || !email.trim()}>
-                {busy ? 'Sending…' : 'Email me a sign-in link'}
+              {mode !== 'reset' && (
+                <>
+                  <label htmlFor="auth-password">Password</label>
+                  <input
+                    id="auth-password"
+                    type="password"
+                    autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                    required
+                    minLength={mode === 'signup' ? MIN_PASSWORD_LENGTH : undefined}
+                    placeholder={mode === 'signup' ? `At least ${MIN_PASSWORD_LENGTH} characters` : 'Your password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </>
+              )}
+              <button type="submit" className="auth-dialog__submit" disabled={busy || !email.trim() || (mode !== 'reset' && !password)}>
+                {busy ? 'Working…' : mode === 'signup' ? 'Create account' : mode === 'reset' ? 'Email me a reset link' : 'Sign in'}
               </button>
             </form>
+            <div className="auth-dialog__links">
+              {mode === 'signin' && (
+                <>
+                  <button type="button" onClick={() => switchMode('reset')}>
+                    Forgot password?
+                  </button>
+                  <button type="button" onClick={() => switchMode('signup')}>
+                    Create an account
+                  </button>
+                </>
+              )}
+              {mode === 'signup' && (
+                <button type="button" onClick={() => switchMode('signin')}>
+                  Already have an account? Sign in
+                </button>
+              )}
+              {mode === 'reset' && (
+                <button type="button" onClick={() => switchMode('signin')}>
+                  Back to sign in
+                </button>
+              )}
+            </div>
           </>
         )}
         {error && <p className="auth-dialog__error" role="alert">{error}</p>}

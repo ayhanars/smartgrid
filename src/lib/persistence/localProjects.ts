@@ -110,3 +110,15 @@ export function deleteLocalProject(id: string) {
   }
   writeIndex(readIndex().filter((p) => p.id !== id))
 }
+
+/** Wipes every project (and the index) from this browser. */
+export function deleteAllLocalProjects() {
+  for (const p of readIndex()) {
+    try {
+      localStorage.removeItem(docKey(p.id))
+    } catch {
+      /* nothing to clean up */
+    }
+  }
+  writeIndex([])
+}

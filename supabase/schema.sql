@@ -87,3 +87,143 @@ $$;
 
 revoke all on function public.record_assistant_usage(uuid, integer, integer) from public;
 grant execute on function public.record_assistant_usage(uuid, integer, integer) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- Profiles: one row per auth user with the public bits of an account
+-- (display name, avatar) and its role. Rows are created by a trigger on
+-- sign-up; anyone signed in can read them (community pages show authors),
+-- users edit their own, and only admins change roles.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users (id) on delete cascade,
+  display_name text not null default '',
+  avatar_url text,
+  role text not null default 'user' check (role in ('user', 'moderator', 'admin')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+-- Role checks used by policies. `security definer` so they can read
+-- profiles without recursing into the profiles policies themselves.
+create or replace function public.current_role_name()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select role from public.profiles where id = auth.uid()), 'user');
+$$;
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.current_role_name() = 'admin';
+$$;
+
+create or replace function public.is_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.current_role_name() in ('admin', 'moderator');
+$$;
+
+drop policy if exists "Signed-in users can read profiles" on public.profiles;
+create policy "Signed-in users can read profiles"
+  on public.profiles for select
+  using (auth.role() = 'authenticated');
+
+drop policy if exists "Users can update their own profile" on public.profiles;
+create policy "Users can update their own profile"
+  on public.profiles for update
+  using (auth.uid() = id or public.is_admin())
+  with check (auth.uid() = id or public.is_admin());
+
+-- Only admins may change a role; everyone else keeps whatever they had.
+create or replace function public.guard_profile_role()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.role is distinct from old.role and not public.is_admin() then
+    new.role := old.role;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_guard_role on public.profiles;
+create trigger profiles_guard_role
+  before update on public.profiles
+  for each row
+  execute function public.guard_profile_role();
+
+-- Accounts that become admins the moment they sign up.
+create table if not exists public.bootstrap_admins (
+  email text primary key
+);
+insert into public.bootstrap_admins (email) values ('ayhanars@gmail.com') on conflict do nothing;
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name, avatar_url, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'display_name', new.raw_user_meta_data ->> 'full_name', split_part(coalesce(new.email, ''), '@', 1)),
+    new.raw_user_meta_data ->> 'avatar_url',
+    case when exists (select 1 from public.bootstrap_admins where lower(email) = lower(coalesce(new.email, ''))) then 'admin' else 'user' end
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row
+  execute function public.handle_new_user();
+
+-- Backfill users who signed up before this table existed.
+insert into public.profiles (id, display_name, role)
+select
+  u.id,
+  coalesce(u.raw_user_meta_data ->> 'full_name', split_part(coalesce(u.email, ''), '@', 1)),
+  case when exists (select 1 from public.bootstrap_admins b where lower(b.email) = lower(coalesce(u.email, ''))) then 'admin' else 'user' end
+from auth.users u
+on conflict (id) do nothing;
+
+-- Avatars live in a public bucket under `<user id>/...`; only the owner
+-- writes there.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', true, 2097152, array['image/png', 'image/jpeg', 'image/webp'])
+on conflict (id) do update set public = true, file_size_limit = 2097152, allowed_mime_types = array['image/png', 'image/jpeg', 'image/webp'];
+
+drop policy if exists "Avatars are publicly readable" on storage.objects;
+create policy "Avatars are publicly readable"
+  on storage.objects for select
+  using (bucket_id = 'avatars');
+
+drop policy if exists "Users manage their own avatar" on storage.objects;
+create policy "Users manage their own avatar"
+  on storage.objects for all
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);

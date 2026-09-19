@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { LogOut, UserRound } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { LogOut, ShieldCheck, UserRound, UserRoundCog } from 'lucide-react'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
-import { useAuthStore } from './useAuthStore'
+import { isStaffRole, useAuthStore } from './useAuthStore'
 import { AuthDialog } from './AuthDialog'
 import '../layers/LayerContextMenu.css'
 import './AuthDialog.css'
 
 interface UserMenuProps {
-  /** Hide the email next to the avatar (tight spots like the top bar). */
+  /** Hide the name next to the avatar (tight spots like the top bar). */
   compact?: boolean
 }
 
-/** "Sign in" when logged out; avatar + popover with sign-out when logged in.
- * Renders nothing when the build has no Supabase credentials. */
+/** "Sign in" when logged out; avatar + popover (account, admin, sign out)
+ * when logged in. Renders nothing when the build has no Supabase
+ * credentials. */
 export function UserMenu({ compact }: UserMenuProps) {
+  const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const profile = useAuthStore((s) => s.profile)
   const loading = useAuthStore((s) => s.loading)
   const signOut = useAuthStore((s) => s.signOut)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -51,8 +55,13 @@ export function UserMenu({ compact }: UserMenuProps) {
 
   const email = user.email ?? ''
   const meta = user.user_metadata as { avatar_url?: string; full_name?: string } | undefined
-  const label = meta?.full_name || email
+  const label = profile?.displayName || meta?.full_name || email
+  const avatarUrl = profile?.avatarUrl ?? meta?.avatar_url
   const initial = (label || '?').slice(0, 1)
+  const go = (path: string) => {
+    setOpen(false)
+    navigate(path)
+  }
 
   return (
     <div className="user-menu" ref={ref}>
@@ -64,12 +73,27 @@ export function UserMenu({ compact }: UserMenuProps) {
         title={email}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="user-menu__avatar">{meta?.avatar_url ? <img src={meta.avatar_url} alt="" referrerPolicy="no-referrer" /> : initial}</span>
+        <span className="user-menu__avatar">{avatarUrl ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer" /> : initial}</span>
         {!compact && <span className="user-menu__email">{label}</span>}
       </button>
       {open && (
         <div className="layer-context-menu user-menu__popover" role="menu">
-          <div className="user-menu__popover-header">{email}</div>
+          <div className="user-menu__popover-header">
+            <strong>{label}</strong>
+            <span>{email}</span>
+            {profile && profile.role !== 'user' && <span className="user-menu__role">{profile.role}</span>}
+          </div>
+          <div className="layer-context-menu__divider" />
+          <button type="button" role="menuitem" onClick={() => go('/account')}>
+            <UserRoundCog size={13} />
+            Account
+          </button>
+          {isStaffRole(profile) && (
+            <button type="button" role="menuitem" onClick={() => go('/admin')}>
+              <ShieldCheck size={13} />
+              Admin
+            </button>
+          )}
           <div className="layer-context-menu__divider" />
           <button
             type="button"

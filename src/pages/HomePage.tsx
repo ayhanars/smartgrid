@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Cloud, CloudUpload, Copy, FolderOpen, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Cloud, CloudOff, CloudUpload, Copy, FolderOpen, MoreHorizontal, Pencil, Plus, Trash2, WifiOff } from 'lucide-react'
 import {
   createLocalProject,
   duplicateLocalProject,
@@ -15,6 +15,7 @@ import { listCloudProjects, type CloudProjectMeta } from '../lib/supabase/projec
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { useAuthStore } from '../features/auth/useAuthStore'
 import { AuthDialog } from '../features/auth/AuthDialog'
+import { isNetworkError, useConnectivity } from '../lib/connectivity'
 import { UserMenu } from '../features/auth/UserMenu'
 import { emptyDocument } from '../state/documentStore'
 import { getBedPreset } from '../lib/geometry/bedPresets'
@@ -40,6 +41,8 @@ function relativeTime(ts: number): string {
 export function HomePage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const authLoading = useAuthStore((s) => s.loading)
+  const online = useConnectivity((s) => s.online)
   const [projects, setProjects] = useState<LocalProjectMeta[]>(() => listLocalProjects())
   const [cloudProjects, setCloudProjects] = useState<CloudProjectMeta[] | null>(null)
   const [cloudError, setCloudError] = useState<string | null>(null)
@@ -55,10 +58,16 @@ export function HomePage() {
         setCloudProjects(list)
         setCloudError(null)
       })
-      .catch((err: unknown) => setCloudError(err instanceof Error ? err.message : 'Could not load cloud projects'))
+      .catch((err: unknown) => setCloudError(isNetworkError(err) ? 'No connection. Cloud projects will appear when you are back online.' : err instanceof Error ? err.message : 'Could not load cloud projects'))
   }, [user])
   useEffect(refreshCloud, [refreshCloud])
+  // Back online: reload the cloud list (and clear the offline notice).
+  useEffect(() => {
+    if (online) refreshCloud()
+  }, [online, refreshCloud])
 
+  const guest = isSupabaseConfigured && !authLoading && user === null
+  const cloudKnown = user !== null && cloudProjects !== null && !cloudError
   const localIds = useMemo(() => new Set(projects.map((p) => p.id)), [projects])
   const cloudIds = useMemo(() => new Set((user ? cloudProjects ?? [] : []).map((p) => p.id)), [user, cloudProjects])
   const cloudOnly = (user ? cloudProjects ?? [] : []).filter((p) => !localIds.has(p.id))
@@ -86,7 +95,7 @@ export function HomePage() {
       .then((ok) => {
         if (ok) refreshCloud()
       })
-      .catch((err: unknown) => setCloudError(err instanceof Error ? err.message : 'Upload failed'))
+      .catch((err: unknown) => setCloudError(isNetworkError(err) ? 'No connection: the project was not uploaded. Try again when you are back online.' : err instanceof Error ? err.message : 'Upload failed'))
   }
   const rename = (id: string, name: string) => {
     const trimmed = name.trim()
@@ -112,6 +121,25 @@ export function HomePage() {
       </header>
 
       <main className="home__main">
+        {!online && (
+          <div className="home__banner home__banner--warn" role="status">
+            <WifiOff size={16} />
+            <span>
+              <strong>You are offline.</strong> Projects still save in this browser; cloud sync, sharing and the assistant resume when the connection is back.
+            </span>
+          </div>
+        )}
+        {online && guest && (
+          <div className="home__banner" role="status">
+            <CloudOff size={16} />
+            <span>
+              <strong>Guest mode.</strong> Your projects are saved only in this browser and are lost if its data is cleared.
+            </span>
+            <button type="button" className="home__cloud-btn" onClick={() => setAuthOpen(true)}>
+              Sign in
+            </button>
+          </div>
+        )}
         <section className="home__section">
           <div className="home__section-header">
             <h2>Local versions</h2>
@@ -129,7 +157,7 @@ export function HomePage() {
                 <ProjectCard
                   key={p.id}
                   meta={p}
-                  inCloud={user !== null && cloudIds.has(p.id)}
+                  cloudState={!isSupabaseConfigured ? 'none' : guest ? 'guest' : !cloudKnown ? 'unknown' : cloudIds.has(p.id) ? 'cloud' : isCloudSyncable(p.id) ? 'missing' : 'none'}
                   renaming={renamingId === p.id}
                   onOpen={() => open(p.id)}
                   onMenu={(x, y) => setMenu({ id: p.id, x, y })}
@@ -234,9 +262,11 @@ export function HomePage() {
   )
 }
 
+type CardCloudState = 'none' | 'guest' | 'unknown' | 'cloud' | 'missing'
+
 function ProjectCard({
   meta,
-  inCloud,
+  cloudState,
   renaming,
   onOpen,
   onMenu,
@@ -244,7 +274,7 @@ function ProjectCard({
   onCancelRename,
 }: {
   meta: LocalProjectMeta
-  inCloud: boolean
+  cloudState: CardCloudState
   renaming: boolean
   onOpen: () => void
   onMenu: (x: number, y: number) => void
@@ -297,9 +327,15 @@ function ProjectCard({
         )}
         <span className="home__card-meta">
           Edited {relativeTime(meta.updatedAt)} · {meta.shapeCount} shape{meta.shapeCount === 1 ? '' : 's'}
-          {inCloud && (
+          {cloudState === 'cloud' && (
             <span className="home__card-cloud" title="Synced to the cloud">
               <Cloud size={11} />
+            </span>
+          )}
+          {cloudState === 'missing' && (
+            <span className="home__card-cloud home__card-cloud--missing" title="Not uploaded to the cloud yet. Open it, or use “Upload to cloud” from its menu.">
+              <CloudOff size={11} />
+              not in cloud
             </span>
           )}
         </span>

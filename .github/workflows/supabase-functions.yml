@@ -1,6 +1,6 @@
 name: Deploy Supabase Edge Functions
 
-# Pushes the `claude` Edge Function whenever it changes on main. Needs two
+# Pushes every Edge Function under supabase/functions whenever one changes on main. Needs two
 # repo secrets: SUPABASE_ACCESS_TOKEN (Account → Access Tokens) and
 # SUPABASE_PROJECT_REF (the id in your project's URL). Skips quietly when
 # they are not set, so forks without a Supabase project still build.
@@ -41,4 +41,4 @@ jobs:
 
       - name: Deploy functions
         if: steps.check.outputs.configured == 'true'
-        run: supabase functions deploy claude --project-ref "$SUPABASE_PROJECT_REF"
+        run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
