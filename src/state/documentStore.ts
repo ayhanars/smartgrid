@@ -11,6 +11,7 @@ import { buildShellCavity, type ShellCavity, type ShellOptions } from '../lib/ge
 import { useViewStore } from './viewStore'
 import { buildLayerCutters, buildLayerGeometries } from '../lib/geometry/layerGeometry'
 import { cutHolesFromSolid } from '../lib/geometry/holeCut'
+import { holeOutline, prism } from '../lib/geometry/perforation'
 
 export { rotatedLocalPoints, shapeWorldBounds }
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
@@ -1206,5 +1207,5 @@ export function emptyDocument(name = 'Untitled project'): DocumentSnapshot {
 // Dev-only handle so browser automation/debugging can reach the live store
 // (stripped from production builds by the DEV guard).
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore; shapeWorldBounds: typeof shapeWorldBounds; buildLayerGeometries: typeof buildLayerGeometries; buildLayerCutters: typeof buildLayerCutters; cutHolesFromSolid: typeof cutHolesFromSolid } }).__smartgrid = { useDocumentStore, shapeWorldBounds, buildLayerGeometries, buildLayerCutters, cutHolesFromSolid }
+  ;(window as unknown as { __smartgrid: { useDocumentStore: typeof useDocumentStore; shapeWorldBounds: typeof shapeWorldBounds; buildLayerGeometries: typeof buildLayerGeometries; buildLayerCutters: typeof buildLayerCutters; cutHolesFromSolid: typeof cutHolesFromSolid; prism: typeof prism; holeOutline: typeof holeOutline } }).__smartgrid = { useDocumentStore, shapeWorldBounds, buildLayerGeometries, buildLayerCutters, cutHolesFromSolid, prism, holeOutline }
 }

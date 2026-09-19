@@ -163,22 +163,27 @@ export function holeExtents(shape: HoleShape, size: number): { u: number; v: num
  * (distances from center). Non-indexed with outward-facing windings and
  * flat normals — what a CSG brush wants.
  */
-function prism(outline: Point2[], center: THREE.Vector3, U: THREE.Vector3, V: THREE.Vector3, axis: THREE.Vector3, from: number, to: number): THREE.BufferGeometry {
+export function prism(outline: Point2[], center: THREE.Vector3, U: THREE.Vector3, V: THREE.Vector3, axis: THREE.Vector3, from: number, to: number): THREE.BufferGeometry {
   const n = outline.length
   const at = (p: Point2, s: number) => new THREE.Vector3().copy(center).addScaledVector(U, p.x).addScaledVector(V, p.y).addScaledVector(axis, s)
   const a = outline.map((p) => at(p, from))
   const b = outline.map((p) => at(p, to))
+  // Sides and caps must agree: for a counter-clockwise outline in the
+  // (U, V) plane with the axis along U × V, a side quad [a_i, b_j, b_i]
+  // faces outward (tangent × axis), the far cap keeps the outline's
+  // winding and the near cap reverses it.
   const tris: THREE.Vector3[][] = []
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n
-    tris.push([a[i], b[i], b[j]], [a[i], b[j], a[j]])
+    tris.push([a[i], b[j], b[i]], [a[i], a[j], b[j]])
   }
   const caps = THREE.ShapeUtils.triangulateShape(outline.map((p) => new THREE.Vector2(p.x, p.y)), [])
   for (const [i, j, k] of caps) {
     tris.push([a[i], a[k], a[j]], [b[i], b[j], b[k]])
   }
-  // Whichever way the outline and axis happen to be handed, make every
-  // face point outward: flip everything if the signed volume is negative.
+  // Whichever way the outline and axis happen to be handed (a mirrored
+  // frame flips every face together), make the whole surface point
+  // outward: flip everything if the signed volume comes out negative.
   let volume = 0
   for (const [p, q, r] of tris) volume += p.dot(new THREE.Vector3().crossVectors(q, r))
   const positions = new Float32Array(tris.length * 9)
