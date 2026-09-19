@@ -85,7 +85,7 @@ export function AuthDialog({ onClose, reason, initialMode = 'signin' }: AuthDial
     reason ??
     (mode === 'reset'
       ? 'We will email you a link that signs you in and lets you choose a new password.'
-      : 'Keep your projects in the cloud, open them anywhere, share with the community, and use the design assistant.')
+      : 'Keep your projects in the cloud, open them anywhere, and share with the community.')
 
   return (
     <div className="auth-dialog__backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>

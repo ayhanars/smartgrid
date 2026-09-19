@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Cloud, CloudOff, Plus, Search, Trash2 } from 'lucide-react'
+import { Cloud, CloudOff, LayoutGrid, List, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useDocumentStore, artboardSize } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { ASSET_CATEGORIES, ASSET_LIBRARY } from '../../lib/assets/library'
@@ -12,6 +12,15 @@ import { ASSET_MIME } from './assetDrag'
 import './AssetsPanel.css'
 
 const round = (v: number) => Math.round(v * 10) / 10
+
+const VIEW_KEY = 'smartgrid:assets:view'
+const readView = (): string | null => {
+  try {
+    return localStorage.getItem(VIEW_KEY)
+  } catch {
+    return null
+  }
+}
 
 /**
  * Ready-made objects to drop into a project, Figma-style: the built-in
@@ -30,6 +39,26 @@ export function AssetsPanel() {
   const assetStatus = useUserAssets((s) => s.status)
   const addUserAsset = useUserAssets((s) => s.add)
   const removeUserAsset = useUserAssets((s) => s.remove)
+  const renameUserAsset = useUserAssets((s) => s.rename)
+  const [view, setView] = useState<'grid' | 'list'>(() => (readView() === 'list' ? 'list' : 'grid'))
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const changeView = (v: 'grid' | 'list') => {
+    setView(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      /* preference just won't stick */
+    }
+  }
+  const startRename = (asset: AssetDefinition) => {
+    setRenamingId(asset.id)
+    setRenameDraft(asset.name)
+  }
+  const commitRename = () => {
+    if (renamingId) renameUserAsset(renamingId, renameDraft)
+    setRenamingId(null)
+  }
   const [saving, setSaving] = useState(false)
   const [draftName, setDraftName] = useState('')
 
@@ -67,6 +96,14 @@ export function AssetsPanel() {
     <div className="assets-panel">
       <div className="assets-panel__header">
         <span className="assets-panel__title">Assets</span>
+        <span className="assets-panel__view" role="group" aria-label="View">
+          <button type="button" aria-label="Grid view" aria-pressed={view === 'grid'} title="Grid" onClick={() => changeView('grid')}>
+            <LayoutGrid size={13} />
+          </button>
+          <button type="button" aria-label="List view" aria-pressed={view === 'list'} title="List" onClick={() => changeView('list')}>
+            <List size={13} />
+          </button>
+        </span>
         {selection.length > 0 && !saving && (
           <button
             type="button"
@@ -123,46 +160,94 @@ export function AssetsPanel() {
                 </span>
               )}
             </h3>
-            <div className="assets-grid">
+            <div className={`assets-grid ${view === 'list' ? 'assets-grid--list' : ''}`}>
               {section.assets.map((asset) => (
-                <button
+                <div
                   key={asset.id}
-                  type="button"
-                  className="asset-card"
+                  role="button"
+                  tabIndex={0}
+                  className={`asset-card ${view === 'list' ? 'asset-card--row' : ''}`}
                   title={`${asset.description}\nClick to add, or drag onto the canvas.`}
-                  draggable
+                  draggable={renamingId !== asset.id}
                   onDragStart={(e) => {
                     e.dataTransfer.setData(ASSET_MIME, JSON.stringify(asset))
                     e.dataTransfer.effectAllowed = 'copy'
                   }}
-                  onClick={() => place(asset)}
+                  onClick={() => renamingId !== asset.id && place(asset)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+                      e.preventDefault()
+                      place(asset)
+                    }
+                  }}
                 >
                   <AssetThumbnail asset={asset} />
-                  <span className="asset-card__name">{asset.name}</span>
-                  <span className="asset-card__size">
-                    {round(asset.width)} × {round(asset.height)} mm
+                  <span className="asset-card__text">
+                    {renamingId === asset.id ? (
+                      <input
+                        className="asset-card__rename"
+                        value={renameDraft}
+                        autoFocus
+                        aria-label="Asset name"
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRename()
+                          else if (e.key === 'Escape') setRenamingId(null)
+                          e.stopPropagation()
+                        }}
+                      />
+                    ) : (
+                      <span className="asset-card__name">{asset.name}</span>
+                    )}
+                    <span className="asset-card__size">
+                      {round(asset.width)} × {round(asset.height)} mm
+                    </span>
                   </span>
                   {section.mine && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      className="asset-card__delete"
-                      aria-label={`Delete ${asset.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        removeUserAsset(asset.id)
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
+                    <span className="asset-card__actions">
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="asset-card__action"
+                        aria-label={`Rename ${asset.name}`}
+                        title="Rename"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          startRename(asset)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.stopPropagation()
+                            startRename(asset)
+                          }
+                        }}
+                      >
+                        <Pencil size={12} />
+                      </span>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="asset-card__action asset-card__action--danger"
+                        aria-label={`Delete ${asset.name}`}
+                        title="Delete"
+                        onClick={(e) => {
                           e.stopPropagation()
                           removeUserAsset(asset.id)
-                        }
-                      }}
-                    >
-                      <Trash2 size={12} />
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.stopPropagation()
+                            removeUserAsset(asset.id)
+                          }
+                        }}
+                      >
+                        <Trash2 size={12} />
+                      </span>
                     </span>
                   )}
-                </button>
+                </div>
               ))}
             </div>
           </section>

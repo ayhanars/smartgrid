@@ -22,8 +22,6 @@ layout is intentionally on hold pending a layout benchmark.
 - three-bvh-csg for real boolean mesh subtraction (holes)
 - polygon-clipping for 2D boolean ops (union/subtract/intersect/exclude)
 - Supabase for auth + cloud project storage (see `supabase/schema.sql`)
-- Claude (Anthropic API) design assistant, proxied through a Supabase Edge
-  Function so the API key never reaches the browser (`supabase/functions/claude`)
 - Deployed to GitHub Pages via GitHub Actions on push to `main`
 
 ## Project structure
@@ -36,8 +34,9 @@ src/
     inspector/     per-shape geometry controls
     layers/        layer tree panel
     export/        STL / 3MF export
-    auth/          Supabase auth store, sign-in dialog, user menu
-    assistant/     Claude chat panel + streaming client for the Edge Function
+    auth/          Supabase auth store, sign-in dialog, user menu, guest gate
+    community/     publish dialog + community cards
+    assets/        asset library panel
   lib/
     geometry/      bevel/CSG/polygon-boolean helpers
     supabase/      Supabase client + cloud project data access
@@ -58,16 +57,14 @@ npm run dev
 
 Everything server-side runs on one free Supabase project: sign-in (email +
 password, or Google), the `projects`, `profiles`, `user_assets` and
-`community_items` tables, an `avatars` storage bucket, and two Edge
-Functions: `claude` (fronts the Anthropic API) and `account` (deletes a
-user, which needs the service role). Without the Supabase env vars the app
-still works in guest mode (no sign-in, no sync, no assistant, no
-community).
+`community_items` tables, an `avatars` storage bucket, and the `account`
+Edge Function (deletes a user, which needs the service role). Without the
+Supabase env vars the app still works in guest mode (no sign-in, no sync,
+no community).
 
 1. **Create a project** at https://supabase.com/dashboard (free tier).
 2. **Run the schema**: open SQL Editor and run `supabase/schema.sql`. It
-   creates `projects` (row-level security per user), `assistant_usage` (a
-   per-user daily token ledger), `profiles` (display name, avatar, role:
+   creates `projects` (row-level security per user), `profiles` (display name, avatar, role:
    `user` / `moderator` / `admin`, created by a trigger on sign-up) and the
    public `avatars` bucket. Emails listed in `bootstrap_admins` become
    admins when they sign up; edit that insert before running it.
@@ -79,11 +76,7 @@ community).
 4. **Frontend env**: copy Project URL and anon key from Settings → API into
    `.env.local` (dev) and into the repo's Actions secrets
    `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (deploys).
-5. **Assistant secrets** (Edge Functions → Secrets, or the CLI):
-   `ANTHROPIC_API_KEY` from https://console.anthropic.com/settings/keys.
-   Optional: `ASSISTANT_DAILY_TOKENS` (output tokens per user per UTC day,
-   default 40000) and `ASSISTANT_MODEL` (default `claude-opus-5`).
-6. **Deploy the functions**: either `npx supabase functions deploy --project-ref <ref>`
+5. **Deploy the functions**: either `npx supabase functions deploy --project-ref <ref>`
    locally after `npx supabase login`, or add the repo secrets
    `SUPABASE_ACCESS_TOKEN` + `SUPABASE_PROJECT_REF` so
    `.github/workflows/supabase-functions.yml` deploys them on push.
@@ -111,7 +104,7 @@ their own items.
 
 Roles: `profiles.role` is `user`, `moderator` or `admin`. Staff get an
 Admin entry in the user menu (`/admin`: overview numbers, community
-moderation with feature / hide / remove, user list, assistant usage);
+moderation with feature / hide / remove, user list);
 admins also change roles there and can delete removed items for good. The
 first admin comes from `bootstrap_admins` in the schema; promote others
 from the Users tab.

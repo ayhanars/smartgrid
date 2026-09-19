@@ -40,8 +40,21 @@ function relativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString()
 }
 
-/** Landing page: every project saved in this browser, plus the signed-in
- * user's cloud copies. */
+/** One row of the home page: a project saved in this browser, in the cloud,
+ * or both. */
+interface ProjectEntry {
+  id: string
+  name: string
+  updatedAt: number
+  shapeCount: number | null
+  /** Saved in this browser (opens instantly, can be renamed here). */
+  local: LocalProjectMeta | null
+  cloud: CloudProjectMeta | null
+}
+
+/** Landing page: one list of projects. Signed in, everything saved in this
+ * browser is uploaded automatically and cloud copies from other devices
+ * show up alongside; as a guest the same list is just this browser. */
 export function HomePage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
@@ -50,6 +63,8 @@ export function HomePage() {
   const [projects, setProjects] = useState<LocalProjectMeta[]>(() => listLocalProjects())
   const [cloudProjects, setCloudProjects] = useState<CloudProjectMeta[] | null>(null)
   const [cloudError, setCloudError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState<Set<string>>(() => new Set())
+  const [failed, setFailed] = useState<Set<string>>(() => new Set())
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
@@ -68,13 +83,16 @@ export function HomePage() {
   }, [online])
 
   const refreshCloud = useCallback(() => {
-    if (!user) return
+    if (!user) {
+      setCloudProjects(null)
+      return
+    }
     listCloudProjects()
       .then((list) => {
         setCloudProjects(list)
         setCloudError(null)
       })
-      .catch((err: unknown) => setCloudError(isNetworkError(err) ? 'No connection. Cloud projects will appear when you are back online.' : err instanceof Error ? err.message : 'Could not load cloud projects'))
+      .catch((err: unknown) => setCloudError(isNetworkError(err) ? 'No connection: showing what is saved in this browser. Cloud copies appear when you are back online.' : err instanceof Error ? err.message : 'Could not load cloud projects'))
   }, [user])
   useEffect(refreshCloud, [refreshCloud])
   // Back online: reload the cloud list (and clear the offline notice).
@@ -84,9 +102,64 @@ export function HomePage() {
 
   const guest = isSupabaseConfigured && !authLoading && user === null
   const cloudKnown = user !== null && cloudProjects !== null && !cloudError
-  const localIds = useMemo(() => new Set(projects.map((p) => p.id)), [projects])
-  const cloudIds = useMemo(() => new Set((user ? cloudProjects ?? [] : []).map((p) => p.id)), [user, cloudProjects])
-  const cloudOnly = (user ? cloudProjects ?? [] : []).filter((p) => !localIds.has(p.id))
+  const cloudIds = useMemo(() => new Set((cloudProjects ?? []).map((p) => p.id)), [cloudProjects])
+
+  // Signed in with the cloud list in hand: anything only in this browser
+  // goes up now, so there is one set of projects wherever you sign in.
+  const attempted = useRef(new Set<string>())
+  useEffect(() => {
+    if (!cloudKnown || !online) return
+    const missing = projects.filter((p) => isCloudSyncable(p.id) && !cloudIds.has(p.id) && !attempted.current.has(p.id))
+    if (missing.length === 0) return
+    for (const p of missing) attempted.current.add(p.id)
+    setUploading((set) => new Set([...set, ...missing.map((p) => p.id)]))
+    let done = 0
+    for (const p of missing) {
+      uploadProject(p.id)
+        .then((ok) => {
+          if (!ok) attempted.current.delete(p.id)
+        })
+        .catch((err: unknown) => {
+          console.warn('Upload failed', err)
+          attempted.current.delete(p.id)
+          setFailed((set) => new Set([...set, p.id]))
+        })
+        .finally(() => {
+          setUploading((set) => {
+            const next = new Set(set)
+            next.delete(p.id)
+            return next
+          })
+          if (++done === missing.length) refreshCloud()
+        })
+    }
+  }, [cloudKnown, online, projects, cloudIds, refreshCloud])
+  // A user signing out (or a new one signing in) starts the bookkeeping over.
+  useEffect(() => {
+    attempted.current.clear()
+    setFailed(new Set())
+  }, [user?.id])
+
+  const entries = useMemo((): ProjectEntry[] => {
+    const byId = new Map<string, ProjectEntry>()
+    for (const p of projects) byId.set(p.id, { id: p.id, name: p.name, updatedAt: p.updatedAt, shapeCount: p.shapeCount, local: p, cloud: null })
+    for (const c of user ? cloudProjects ?? [] : []) {
+      const existing = byId.get(c.id)
+      if (existing) existing.cloud = c
+      else byId.set(c.id, { id: c.id, name: c.name, updatedAt: c.updatedAt, shapeCount: null, local: null, cloud: c })
+    }
+    return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+  }, [projects, cloudProjects, user])
+
+  const cloudStateFor = (e: ProjectEntry): CardCloudState => {
+    if (!isSupabaseConfigured) return 'none'
+    if (guest) return 'guest'
+    if (e.cloud) return 'cloud'
+    if (!e.local || !isCloudSyncable(e.id)) return 'none'
+    if (uploading.has(e.id)) return 'uploading'
+    if (failed.has(e.id) || !online) return 'missing'
+    return cloudKnown ? 'uploading' : 'unknown'
+  }
 
   const open = (id: string) => navigate(`/p/${id}`)
   const createProject = () => {
@@ -97,21 +170,36 @@ export function HomePage() {
     duplicateLocalProject(id)
     refresh()
   }
-  const remove = (id: string, name: string) => {
-    const inCloud = user !== null && cloudIds.has(id)
-    const where = inCloud ? 'from this browser and the cloud' : 'from this browser'
-    if (!window.confirm(`Delete "${name}" ${where}? This can't be undone.`)) return
-    void deleteProjectEverywhere(id).then(() => {
+  const remove = (entry: ProjectEntry) => {
+    const where = entry.cloud && entry.local ? 'from this browser and the cloud' : entry.cloud ? 'from the cloud' : 'from this browser'
+    if (!window.confirm(`Delete "${entry.name}" ${where}? This can't be undone.`)) return
+    void deleteProjectEverywhere(entry.id).then(() => {
       refresh()
       refreshCloud()
     })
   }
   const upload = (id: string) => {
+    setFailed((set) => {
+      const next = new Set(set)
+      next.delete(id)
+      return next
+    })
+    setUploading((set) => new Set([...set, id]))
     uploadProject(id)
       .then((ok) => {
         if (ok) refreshCloud()
       })
-      .catch((err: unknown) => setCloudError(isNetworkError(err) ? 'No connection: the project was not uploaded. Try again when you are back online.' : err instanceof Error ? err.message : 'Upload failed'))
+      .catch((err: unknown) => {
+        setFailed((set) => new Set([...set, id]))
+        setCloudError(isNetworkError(err) ? 'No connection: the project was not uploaded. It will be retried when you are back online.' : err instanceof Error ? err.message : 'Upload failed')
+      })
+      .finally(() =>
+        setUploading((set) => {
+          const next = new Set(set)
+          next.delete(id)
+          return next
+        }),
+      )
   }
   const rename = (id: string, name: string) => {
     const trimmed = name.trim()
@@ -119,6 +207,9 @@ export function HomePage() {
     setRenamingId(null)
     refresh()
   }
+
+  const menuEntry = menu ? entries.find((e) => e.id === menu.id) : undefined
+  const notUploaded = entries.filter((e) => cloudStateFor(e) === 'missing').length
 
   return (
     <div className="home">
@@ -141,7 +232,8 @@ export function HomePage() {
           <div className="home__banner home__banner--warn" role="status">
             <WifiOff size={16} />
             <span>
-              <strong>You are offline.</strong> Projects still save in this browser; cloud sync, sharing and the assistant resume when the connection is back.
+              <strong>You are offline.</strong> Projects still save in this browser
+              {notUploaded > 0 ? ` (${notUploaded} not uploaded yet)` : ''}; cloud sync and sharing resume when the connection is back.
             </span>
           </div>
         )}
@@ -149,35 +241,59 @@ export function HomePage() {
           <div className="home__banner" role="status">
             <CloudOff size={16} />
             <span>
-              <strong>Guest mode.</strong> Your projects are saved only in this browser and are lost if its data is cleared.
+              <strong>Guest mode.</strong> Your projects are saved only in this browser and are lost if its data is cleared. Sign in and they upload automatically.
             </span>
             <button type="button" className="home__cloud-btn" onClick={() => setAuthOpen(true)}>
               Sign in
             </button>
           </div>
         )}
+        {online && user && cloudError && (
+          <div className="home__banner home__banner--warn" role="status">
+            <CloudOff size={16} />
+            <span>
+              <strong>Cloud unavailable.</strong> {cloudError}
+            </span>
+            <button type="button" className="home__cloud-btn" onClick={refreshCloud}>
+              Retry
+            </button>
+          </div>
+        )}
+        {online && user && !cloudError && notUploaded > 0 && (
+          <div className="home__banner home__banner--warn" role="status">
+            <CloudOff size={16} />
+            <span>
+              <strong>{notUploaded} project{notUploaded === 1 ? '' : 's'} not uploaded.</strong> The cloud could not be reached for them; use “Upload to cloud” from a project’s menu to retry.
+            </span>
+          </div>
+        )}
         <section className="home__section">
           <div className="home__section-header">
-            <h2>Local versions</h2>
-            <span className="home__hint">Saved in this browser as you work — {projects.length === 0 ? 'nothing yet' : `${projects.length} project${projects.length === 1 ? '' : 's'}`}</span>
+            <h2>Projects</h2>
+            <span className="home__hint">
+              {entries.length === 0
+                ? 'Nothing yet'
+                : `${entries.length} project${entries.length === 1 ? '' : 's'}`}
+              {user && !cloudError && cloudProjects === null ? ' · checking the cloud…' : ''}
+            </span>
           </div>
-          {projects.length === 0 ? (
+          {entries.length === 0 ? (
             <button type="button" className="home__empty" onClick={createProject}>
               <Plus size={18} />
               <strong>Start your first project</strong>
-              <span>Draw shapes, extrude them, and export for your printer. Everything autosaves here.</span>
+              <span>Draw shapes, extrude them, and export for your printer. Everything autosaves{user ? ' to the cloud' : ' in this browser'}.</span>
             </button>
           ) : (
             <div className="home__grid">
-              {projects.map((p) => (
+              {entries.map((e) => (
                 <ProjectCard
-                  key={p.id}
-                  meta={p}
-                  cloudState={!isSupabaseConfigured ? 'none' : guest ? 'guest' : !cloudKnown ? 'unknown' : cloudIds.has(p.id) ? 'cloud' : isCloudSyncable(p.id) ? 'missing' : 'none'}
-                  renaming={renamingId === p.id}
-                  onOpen={() => open(p.id)}
-                  onMenu={(x, y) => setMenu({ id: p.id, x, y })}
-                  onRename={(name) => rename(p.id, name)}
+                  key={e.id}
+                  entry={e}
+                  cloudState={cloudStateFor(e)}
+                  renaming={renamingId === e.id}
+                  onOpen={() => open(e.id)}
+                  onMenu={(x, y) => setMenu({ id: e.id, x, y })}
+                  onRename={(name) => rename(e.id, name)}
                   onCancelRename={() => setRenamingId(null)}
                 />
               ))}
@@ -189,76 +305,6 @@ export function HomePage() {
           )}
         </section>
 
-        {isSupabaseConfigured && (
-          <section className="home__section">
-            <div className="home__section-header">
-              <h2>Cloud versions</h2>
-              <span className="home__hint">
-                {!user
-                  ? 'Sign in to sync'
-                  : cloudProjects === null
-                    ? 'Loading…'
-                    : `${cloudProjects.length} project${cloudProjects.length === 1 ? '' : 's'} in the cloud`}
-              </span>
-            </div>
-            {!user ? (
-              <div className="home__cloud">
-                <Cloud size={22} />
-                <div>
-                  <strong>Sync your projects to the cloud</strong>
-                  <p>Sign in to keep every project backed up, open it from any device, and use the design assistant. Projects you open while signed in sync automatically.</p>
-                </div>
-                <button type="button" className="home__cloud-btn" onClick={() => setAuthOpen(true)}>
-                  Sign in
-                </button>
-              </div>
-            ) : cloudError ? (
-              <div className="home__cloud">
-                <Cloud size={22} />
-                <div>
-                  <strong>Couldn't reach the cloud</strong>
-                  <p>{cloudError}</p>
-                </div>
-                <button type="button" className="home__cloud-btn" onClick={refreshCloud}>
-                  Retry
-                </button>
-              </div>
-            ) : cloudOnly.length === 0 ? (
-              <div className="home__cloud">
-                <Cloud size={22} />
-                <div>
-                  <strong>{cloudIds.size === 0 ? 'Nothing in the cloud yet' : 'Everything is on this device'}</strong>
-                  <p>
-                    {cloudIds.size === 0
-                      ? 'Open a project and it will sync as you work, or use “Upload to cloud” from a project’s menu.'
-                      : 'All your cloud projects are also saved in this browser. Projects only in the cloud show up here.'}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="home__grid">
-                {cloudOnly.map((p) => (
-                  <div
-                    key={p.id}
-                    className="home__card home__card--cloud"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => open(p.id)}
-                    onKeyDown={(e) => e.key === 'Enter' && open(p.id)}
-                  >
-                    <div className={`home__thumb ${p.thumbnail ? 'home__thumb--picture' : 'home__thumb--cloud'}`}>
-                      {p.thumbnail ? <img className="home__thumb-img" src={p.thumbnail} alt="" /> : <Cloud size={26} />}
-                    </div>
-                    <div className="home__card-body">
-                      <span className="home__card-name">{p.name}</span>
-                      <span className="home__card-meta">Edited {relativeTime(p.updatedAt)} · only in the cloud</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
         {isSupabaseConfigured && (
           <section className="home__section">
             <div className="home__section-header">
@@ -292,16 +338,16 @@ export function HomePage() {
         )}
       </main>
 
-      {menu && (
+      {menu && menuEntry && (
         <ProjectMenu
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
           onOpen={() => open(menu.id)}
-          onRename={() => setRenamingId(menu.id)}
-          onDuplicate={() => duplicate(menu.id)}
-          onUpload={user && isCloudSyncable(menu.id) && !cloudIds.has(menu.id) ? () => upload(menu.id) : undefined}
-          onDelete={() => remove(menu.id, projects.find((p) => p.id === menu.id)?.name ?? 'project')}
+          onRename={menuEntry.local ? () => setRenamingId(menu.id) : undefined}
+          onDuplicate={menuEntry.local ? () => duplicate(menu.id) : undefined}
+          onUpload={user && menuEntry.local && !menuEntry.cloud && isCloudSyncable(menu.id) ? () => upload(menu.id) : undefined}
+          onDelete={() => remove(menuEntry)}
         />
       )}
       {authOpen && <AuthDialog onClose={() => setAuthOpen(false)} />}
@@ -309,10 +355,10 @@ export function HomePage() {
   )
 }
 
-type CardCloudState = 'none' | 'guest' | 'unknown' | 'cloud' | 'missing'
+type CardCloudState = 'none' | 'guest' | 'unknown' | 'uploading' | 'cloud' | 'missing'
 
 function ProjectCard({
-  meta,
+  entry,
   cloudState,
   renaming,
   onOpen,
@@ -320,7 +366,7 @@ function ProjectCard({
   onRename,
   onCancelRename,
 }: {
-  meta: LocalProjectMeta
+  entry: ProjectEntry
   cloudState: CardCloudState
   renaming: boolean
   onOpen: () => void
@@ -328,11 +374,12 @@ function ProjectCard({
   onRename: (name: string) => void
   onCancelRename: () => void
 }) {
+  const meta = { id: entry.id, name: entry.name, updatedAt: entry.updatedAt }
   const [draft, setDraft] = useState(meta.name)
   const [hovered, setHovered] = useState(false)
   useEffect(() => setDraft(meta.name), [meta.name, renaming])
-  const snapshot = useMemo(() => loadLocalProject(meta.id), [meta.id, meta.updatedAt])
-  const picture = useMemo(() => loadLocalThumbnail(meta.id), [meta.id, meta.updatedAt])
+  const snapshot = useMemo(() => (entry.local ? loadLocalProject(meta.id) : null), [entry.local, meta.id, meta.updatedAt])
+  const picture = useMemo(() => loadLocalThumbnail(meta.id) ?? entry.cloud?.thumbnail ?? null, [entry.cloud, meta.id, meta.updatedAt])
 
   return (
     <div
@@ -346,8 +393,8 @@ function ProjectCard({
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
     >
-      <div className={`home__thumb ${picture ? 'home__thumb--picture' : ''}`}>
-        {picture ? <img className="home__thumb-img" src={picture} alt="" /> : snapshot && <Thumbnail snapshot={snapshot} />}
+      <div className={`home__thumb ${picture ? 'home__thumb--picture' : ''} ${!picture && !snapshot ? 'home__thumb--cloud' : ''}`}>
+        {picture ? <img className="home__thumb-img" src={picture} alt="" /> : snapshot ? <Thumbnail snapshot={snapshot} /> : <Cloud size={26} />}
         {/* Hover: the same project as a live 3D turntable, over the 2D thumbnail. */}
         {snapshot && hovered && (
           <div className="home__thumb-3d" aria-hidden>
@@ -374,14 +421,21 @@ function ProjectCard({
           <span className="home__card-name">{meta.name}</span>
         )}
         <span className="home__card-meta">
-          Edited {relativeTime(meta.updatedAt)} · {meta.shapeCount} shape{meta.shapeCount === 1 ? '' : 's'}
+          Edited {relativeTime(meta.updatedAt)}
+          {entry.shapeCount !== null ? ` · ${entry.shapeCount} shape${entry.shapeCount === 1 ? '' : 's'}` : ' · from the cloud'}
+          {cloudState === 'uploading' && (
+            <span className="home__card-cloud home__card-cloud--muted" title="Uploading to the cloud">
+              <CloudUpload size={11} />
+              uploading…
+            </span>
+          )}
           {cloudState === 'cloud' && (
             <span className="home__card-cloud" title="Synced to the cloud">
               <Cloud size={11} />
             </span>
           )}
           {cloudState === 'missing' && (
-            <span className="home__card-cloud home__card-cloud--missing" title="Not uploaded to the cloud yet. Open it, or use “Upload to cloud” from its menu.">
+            <span className="home__card-cloud home__card-cloud--missing" title="Not uploaded to the cloud: it could not be reached. Use “Upload to cloud” from the menu to retry.">
               <CloudOff size={11} />
               not in cloud
             </span>
@@ -446,8 +500,8 @@ function ProjectMenu({
   y: number
   onClose: () => void
   onOpen: () => void
-  onRename: () => void
-  onDuplicate: () => void
+  onRename?: () => void
+  onDuplicate?: () => void
   onUpload?: () => void
   onDelete: () => void
 }) {
@@ -474,14 +528,18 @@ function ProjectMenu({
         <FolderOpen size={13} />
         Open
       </button>
-      <button type="button" role="menuitem" onClick={run(onRename)}>
-        <Pencil size={13} />
-        Rename
-      </button>
-      <button type="button" role="menuitem" onClick={run(onDuplicate)}>
-        <Copy size={13} />
-        Duplicate
-      </button>
+      {onRename && (
+        <button type="button" role="menuitem" onClick={run(onRename)}>
+          <Pencil size={13} />
+          Rename
+        </button>
+      )}
+      {onDuplicate && (
+        <button type="button" role="menuitem" onClick={run(onDuplicate)}>
+          <Copy size={13} />
+          Duplicate
+        </button>
+      )}
       {onUpload && (
         <button type="button" role="menuitem" onClick={run(onUpload)}>
           <CloudUpload size={13} />

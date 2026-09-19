@@ -48,50 +48,6 @@ create trigger projects_set_updated_at
   execute function public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- Assistant usage: a per-user, per-day token ledger the `claude` Edge
--- Function consults before forwarding a request to Anthropic. Only the
--- function (service role) writes here; users can read their own rows so the
--- UI can show what's left of today's allowance.
--- ---------------------------------------------------------------------------
-
-create table if not exists public.assistant_usage (
-  user_id uuid not null references auth.users (id) on delete cascade,
-  day date not null default (now() at time zone 'utc')::date,
-  requests integer not null default 0,
-  input_tokens integer not null default 0,
-  output_tokens integer not null default 0,
-  primary key (user_id, day)
-);
-
-alter table public.assistant_usage enable row level security;
-
-create policy "Users can read their own assistant usage"
-  on public.assistant_usage for select
-  using (auth.uid() = user_id);
-
--- Atomically adds one request's token counts to today's row.
-create or replace function public.record_assistant_usage(
-  p_user_id uuid,
-  p_input_tokens integer,
-  p_output_tokens integer
-)
-returns void
-language sql
-security definer
-set search_path = public
-as $$
-  insert into public.assistant_usage (user_id, day, requests, input_tokens, output_tokens)
-  values (p_user_id, (now() at time zone 'utc')::date, 1, p_input_tokens, p_output_tokens)
-  on conflict (user_id, day) do update
-    set requests = assistant_usage.requests + 1,
-        input_tokens = assistant_usage.input_tokens + excluded.input_tokens,
-        output_tokens = assistant_usage.output_tokens + excluded.output_tokens;
-$$;
-
-revoke all on function public.record_assistant_usage(uuid, integer, integer) from public;
-grant execute on function public.record_assistant_usage(uuid, integer, integer) to service_role;
-
--- ---------------------------------------------------------------------------
 -- Profiles: one row per auth user with the public bits of an account
 -- (display name, avatar) and its role. Rows are created by a trigger on
 -- sign-up; anyone signed in can read them (community pages show authors),
@@ -381,7 +337,7 @@ grant execute on function public.record_community_download(uuid) to anon, authen
 
 -- ---------------------------------------------------------------------------
 -- Admin dashboard: staff-only readers over data that RLS otherwise hides
--- (other people's projects, emails, assistant usage). Each checks the
+-- (other people's projects, emails). Each checks the
 -- caller's role itself, so they are safe to expose through PostgREST.
 -- ---------------------------------------------------------------------------
 
@@ -406,11 +362,7 @@ begin
     'community_published', (select count(*) from public.community_items where status = 'published'),
     'community_hidden', (select count(*) from public.community_items where status = 'hidden'),
     'community_removed', (select count(*) from public.community_items where status = 'removed'),
-    'community_downloads', (select coalesce(sum(downloads), 0) from public.community_items),
-    'assistant_requests_today', (select coalesce(sum(requests), 0) from public.assistant_usage where day = (now() at time zone 'utc')::date),
-    'assistant_output_tokens_today', (select coalesce(sum(output_tokens), 0) from public.assistant_usage where day = (now() at time zone 'utc')::date),
-    'assistant_requests_30d', (select coalesce(sum(requests), 0) from public.assistant_usage where day > (now() at time zone 'utc')::date - 30),
-    'assistant_output_tokens_30d', (select coalesce(sum(output_tokens), 0) from public.assistant_usage where day > (now() at time zone 'utc')::date - 30)
+    'community_downloads', (select coalesce(sum(downloads), 0) from public.community_items)
   ) into result;
   return result;
 end;
@@ -426,8 +378,7 @@ returns table (
   created_at timestamptz,
   last_sign_in_at timestamptz,
   projects integer,
-  community_items integer,
-  assistant_requests_30d integer
+  community_items integer
 )
 language plpgsql
 stable
@@ -448,8 +399,7 @@ begin
       u.created_at,
       u.last_sign_in_at,
       (select count(*)::integer from public.projects pr where pr.owner_id = u.id),
-      (select count(*)::integer from public.community_items ci where ci.owner_id = u.id and ci.status <> 'removed'),
-      (select coalesce(sum(au.requests), 0)::integer from public.assistant_usage au where au.user_id = u.id and au.day > (now() at time zone 'utc')::date - 30)
+      (select count(*)::integer from public.community_items ci where ci.owner_id = u.id and ci.status <> 'removed')
     from auth.users u
     left join public.profiles p on p.id = u.id
     where p_query = '' or u.email ilike '%' || p_query || '%' or p.display_name ilike '%' || p_query || '%'
@@ -458,35 +408,7 @@ begin
 end;
 $$;
 
-create or replace function public.admin_assistant_usage(p_days integer default 30)
-returns table (
-  day date,
-  requests bigint,
-  input_tokens bigint,
-  output_tokens bigint,
-  users bigint
-)
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-begin
-  if not public.is_staff() then
-    raise exception 'staff only' using errcode = '42501';
-  end if;
-  return query
-    select au.day, sum(au.requests), sum(au.input_tokens), sum(au.output_tokens), count(distinct au.user_id)
-    from public.assistant_usage au
-    where au.day > (now() at time zone 'utc')::date - greatest(1, least(p_days, 365))
-    group by au.day
-    order by au.day desc;
-end;
-$$;
-
 revoke all on function public.admin_stats() from public;
 revoke all on function public.admin_users(text, integer) from public;
-revoke all on function public.admin_assistant_usage(integer) from public;
 grant execute on function public.admin_stats() to authenticated;
 grant execute on function public.admin_users(text, integer) to authenticated;
-grant execute on function public.admin_assistant_usage(integer) to authenticated;

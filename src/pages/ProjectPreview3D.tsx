@@ -1,11 +1,13 @@
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
+import { Environment, Lightformer } from '@react-three/drei'
+import { useViewStore } from '../state/viewStore'
 import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import { getBedPreset } from '../lib/geometry/bedPresets'
 import { SCENE_SCALE } from '../features/viewport-3d/sceneScale'
 import { ExtrudedShapeMesh } from '../features/viewport-3d/ExtrudedShapeMesh'
-import { activeHoleIds } from '../features/viewport-3d/useCutGeometries'
+import { activeHoleIds, useCutGeometries } from '../features/viewport-3d/useCutGeometries'
 import { PrinterPlate } from '../features/viewport-3d/PrinterPlate'
 import { shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { layerZRange } from '../lib/geometry/layerGeometry'
@@ -41,6 +43,9 @@ export function ProjectPreview3D({ snapshot }: { snapshot: DocumentSnapshot }) {
     const active = activeHoleIds(snapshot.layers, snapshot.order)
     return snapshot.order.map((id) => snapshot.layers[id]).filter((l) => l && l.visible && !(l.isHole && active.has(l.id)))
   }, [snapshot])
+  // The same CSG the editor runs, so holes, perforation and hollowing show.
+  const tileVersion = useViewStore((s) => s.tileVersion)
+  const { cutGeometriesById, uncutGeometriesById } = useCutGeometries(snapshot.layers, snapshot.order, artboardWidth, artboardHeight, tileVersion)
 
   // Frame the shapes (fall back to the plate on an empty project).
   const { center, radius } = useMemo(() => {
@@ -67,8 +72,15 @@ export function ProjectPreview3D({ snapshot }: { snapshot: DocumentSnapshot }) {
       frameloop="always"
     >
       <color attach="background" args={['#0a0a0b']} />
-      <ambientLight intensity={0.65} />
-      <directionalLight position={[bedWidth * 2, bedWidth * 3, bedWidth]} intensity={1.1} />
+      <ambientLight intensity={0.25} />
+      <directionalLight position={[bedWidth * 2, bedWidth * 3, bedWidth]} intensity={1.4} />
+      <directionalLight position={[-bedWidth * 2, bedWidth * 1.5, -bedWidth * 2]} intensity={0.35} />
+      <Environment resolution={128} frames={1}>
+        <Lightformer form="rect" intensity={2.5} position={[0, 6, 0]} rotation-x={Math.PI / 2} scale={[8, 8, 1]} />
+        <Lightformer form="rect" intensity={1.2} position={[6, 3, 2]} rotation-y={-Math.PI / 2} scale={[6, 3, 1]} />
+        <Lightformer form="rect" intensity={0.8} position={[-6, 2, -2]} rotation-y={Math.PI / 2} scale={[6, 3, 1]} />
+        <Lightformer form="ring" intensity={1.5} position={[0, 2, -8]} scale={4} color="#b9c6ff" />
+      </Environment>
       <Turntable center={center}>
         <PrinterPlate width={bedWidth} depth={bedDepth} widthMM={artboardWidth} depthMM={artboardHeight} />
         {layers.map((layer) => (
@@ -80,6 +92,8 @@ export function ProjectPreview3D({ snapshot }: { snapshot: DocumentSnapshot }) {
             onSelect={() => {}}
             artboardWidth={artboardWidth}
             artboardHeight={artboardHeight}
+            cutGeometries={cutGeometriesById[layer.id]}
+            outlineGeometries={uncutGeometriesById[layer.id]}
           />
         ))}
       </Turntable>

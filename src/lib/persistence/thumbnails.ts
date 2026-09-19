@@ -38,7 +38,9 @@ export function deleteLocalThumbnail(id: string): void {
 // autosave asks for a fresh picture through it. With the viewport closed
 // (2D-only layout) there is nothing to capture and the last picture stays.
 
-type CaptureFn = () => string | null
+/** 'busy': the viewport is mounted but still cutting holes; ask again. */
+export type CaptureResult = string | null | 'busy'
+type CaptureFn = () => CaptureResult
 
 let capture: CaptureFn | null = null
 
@@ -49,9 +51,9 @@ export function registerThumbnailCapture(fn: CaptureFn): () => void {
   }
 }
 
-/** A fresh thumbnail of the open document, or null when the 3D viewport
- * is not mounted (or rendering failed). */
-export function captureThumbnail(): string | null {
+/** A fresh thumbnail of the open document; null when the 3D viewport is
+ * not mounted (or rendering failed), 'busy' while its cuts are pending. */
+export function captureThumbnail(): CaptureResult {
   if (!capture) return null
   try {
     return capture()

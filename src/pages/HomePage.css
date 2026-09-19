@@ -360,3 +360,9 @@
   background: var(--bg-hover);
   color: var(--text);
 }
+
+.home__card-cloud--muted {
+  gap: 3px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}

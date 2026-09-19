@@ -5,7 +5,7 @@ import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { UserMenu } from '../features/auth/UserMenu'
 import { Avatar } from '../features/community/CommunityCard'
 import { isSupabaseConfigured } from '../lib/supabase/client'
-import { fetchAdminStats, fetchAdminUsers, fetchAssistantUsage, setUserRole, type AdminStats, type AdminUser, type AssistantUsageDay } from '../lib/supabase/admin'
+import { fetchAdminStats, fetchAdminUsers, setUserRole, type AdminStats, type AdminUser } from '../lib/supabase/admin'
 import { deleteCommunityItem, listCommunityItems, moderateCommunityItem, type CommunityItem, type CommunityStatus } from '../lib/supabase/community'
 import type { UserRole } from '../lib/supabase/profiles'
 import '../features/community/community.css'
@@ -13,7 +13,7 @@ import './HomePage.css'
 import './AccountPage.css'
 import './AdminPage.css'
 
-type Tab = 'overview' | 'community' | 'users' | 'assistant'
+type Tab = 'overview' | 'community' | 'users'
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Something went wrong')
 
@@ -49,7 +49,6 @@ export function AdminPage() {
     { id: 'overview', label: 'Overview' },
     { id: 'community', label: 'Community' },
     { id: 'users', label: 'Users' },
-    { id: 'assistant', label: 'Assistant' },
   ]
 
   return (
@@ -71,7 +70,6 @@ export function AdminPage() {
         {tab === 'overview' && <Overview />}
         {tab === 'community' && <CommunityAdmin admin={admin} navigate={navigate} />}
         {tab === 'users' && <UsersAdmin admin={admin} selfId={user.id} />}
-        {tab === 'assistant' && <AssistantAdmin />}
       </main>
     </div>
   )
@@ -120,8 +118,6 @@ function Overview() {
     { label: 'Cloud projects', value: (s) => fmt(s.projects), hint: (s) => `${fmt(s.assets)} personal assets` },
     { label: 'Community models', value: (s) => fmt(s.community_published), hint: (s) => `${fmt(s.community_hidden)} hidden · ${fmt(s.community_removed)} removed` },
     { label: 'Copies opened', value: (s) => fmt(s.community_downloads) },
-    { label: 'Assistant today', value: (s) => `${fmt(s.assistant_requests_today)} req`, hint: (s) => `${fmt(s.assistant_output_tokens_today)} output tokens` },
-    { label: 'Assistant, 30 days', value: (s) => `${fmt(s.assistant_requests_30d)} req`, hint: (s) => `${fmt(s.assistant_output_tokens_30d)} output tokens` },
   ]
   return (
     <section>
@@ -310,7 +306,6 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
               <th>Role</th>
               <th>Projects</th>
               <th>Shared</th>
-              <th>Assistant 30d</th>
               <th>Joined</th>
               <th>Last sign-in</th>
             </tr>
@@ -340,7 +335,6 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
                 </td>
                 <td>{u.projects}</td>
                 <td>{u.communityItems}</td>
-                <td>{u.assistantRequests30d}</td>
                 <td>{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td>{u.lastSignInAt ? new Date(u.lastSignInAt).toLocaleString() : '—'}</td>
               </tr>
@@ -349,54 +343,6 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
         </table>
       </div>
       {!admin && <p className="community-item__hint">Only admins can change roles.</p>}
-    </section>
-  )
-}
-
-function AssistantAdmin() {
-  const load = useCallback(() => fetchAssistantUsage(30), [])
-  const { data, error, busy, reload } = useLoader(load)
-  const total = (data ?? []).reduce((acc, d) => ({ requests: acc.requests + d.requests, out: acc.out + d.outputTokens, inp: acc.inp + d.inputTokens }), { requests: 0, out: 0, inp: 0 })
-  return (
-    <section>
-      <Toolbar busy={busy} onReload={reload}>
-        <span className="admin__count">
-          Last 30 days: {fmt(total.requests)} requests · {fmt(total.inp)} input · {fmt(total.out)} output tokens
-        </span>
-      </Toolbar>
-      {error && <p className="account__error">{error}</p>}
-      <div className="admin__table-wrap">
-        <table className="admin__table">
-          <thead>
-            <tr>
-              <th>Day (UTC)</th>
-              <th>Requests</th>
-              <th>Users</th>
-              <th>Input tokens</th>
-              <th>Output tokens</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((d: AssistantUsageDay) => (
-              <tr key={d.day}>
-                <td>{d.day}</td>
-                <td>{fmt(d.requests)}</td>
-                <td>{fmt(d.users)}</td>
-                <td>{fmt(d.inputTokens)}</td>
-                <td>{fmt(d.outputTokens)}</td>
-              </tr>
-            ))}
-            {data && data.length === 0 && (
-              <tr>
-                <td colSpan={5} className="admin__empty">
-                  No assistant use yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <p className="community-item__hint">The daily allowance per user is ASSISTANT_DAILY_TOKENS on the claude Edge Function (default 40000 output tokens).</p>
     </section>
   )
 }

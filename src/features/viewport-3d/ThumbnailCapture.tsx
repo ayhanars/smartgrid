@@ -1,11 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useThree } from '@react-three/fiber'
 import { useDocumentStore } from '../../state/documentStore'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
 import { shapeWorldBounds } from '../../lib/geometry/layerBounds'
 import { layerZRange } from '../../lib/geometry/layerGeometry'
-import { registerThumbnailCapture, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '../../lib/persistence/thumbnails'
+import { registerThumbnailCapture, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH, type CaptureResult } from '../../lib/persistence/thumbnails'
 import { SCENE_SCALE } from './sceneScale'
 
 /** Scene objects that are editor chrome, not the model: hidden while the
@@ -25,9 +25,13 @@ function isChrome(obj: THREE.Object3D): boolean {
  * offscreen target and hands back a WebP data URL, so the home page shows
  * the real model with its holes, bevels and textures.
  */
-export function ThumbnailCapture() {
+export function ThumbnailCapture({ ready }: { ready: boolean }) {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
+  // Holes are cut in a worker; a picture taken before they land would show
+  // solid shapes.
+  const readyRef = useRef(ready)
+  readyRef.current = ready
 
   useEffect(() => {
     const target = new THREE.WebGLRenderTarget(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, { samples: 4 })
@@ -69,7 +73,8 @@ export function ThumbnailCapture() {
       camera.updateProjectionMatrix()
     }
 
-    const capture = (): string | null => {
+    const capture = (): CaptureResult => {
+      if (!readyRef.current) return 'busy'
       frame()
       const hidden: THREE.Object3D[] = []
       scene.traverse((obj) => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ArrowDownToLine, ArrowUpToLine, Bookmark, Copy, Eye, EyeOff, Group, Lock, Trash2, Ungroup, Unlock } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpToLine, Copy, Eye, EyeOff, Group, Lock, Shapes, Trash2, Ungroup, Unlock } from 'lucide-react'
 import { useDocumentStore, expandToGroup } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { useUserAssets } from '../../state/userAssetsStore'
@@ -114,7 +114,7 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
         <kbd>⌘⇧G</kbd>
       </button>
       <button type="button" role="menuitem" onClick={run(saveAsAsset)}>
-        <Bookmark size={13} />
+        <Shapes size={13} />
         Save as asset
       </button>
       <div className="layer-context-menu__divider" />

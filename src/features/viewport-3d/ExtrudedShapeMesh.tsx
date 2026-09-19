@@ -19,6 +19,7 @@ interface ExtrudedShapeMeshProps {
   isSelected: boolean
   wireframe: boolean
   onSelect: (id: string, additive: boolean, single: boolean) => void
+  onContextMenu?: (id: string, clientX: number, clientY: number) => void
   artboardWidth: number
   artboardHeight: number
   /** Precomputed geometry with every overlapping hole already subtracted
@@ -48,6 +49,7 @@ export function ExtrudedShapeMesh({
   isSelected,
   wireframe,
   onSelect,
+  onContextMenu,
   artboardWidth,
   artboardHeight,
   cutGeometries,
@@ -98,6 +100,11 @@ export function ExtrudedShapeMesh({
       ref={onGroupRef}
       position={[origin[0] + center.x, origin[1] + center.y, origin[2] + center.z]}
       onPointerDown={handlePointerDown}
+      onContextMenu={(e) => {
+        if (!onContextMenu || hidden) return
+        e.stopPropagation()
+        onContextMenu(layer.id, e.nativeEvent.clientX, e.nativeEvent.clientY)
+      }}
       visible={!hidden}
     >
       <group position={[-center.x, -center.y, -center.z]}>

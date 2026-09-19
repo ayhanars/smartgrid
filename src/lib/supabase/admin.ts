@@ -10,10 +10,6 @@ export interface AdminStats {
   community_hidden: number
   community_removed: number
   community_downloads: number
-  assistant_requests_today: number
-  assistant_output_tokens_today: number
-  assistant_requests_30d: number
-  assistant_output_tokens_30d: number
 }
 
 export interface AdminUser {
@@ -26,15 +22,6 @@ export interface AdminUser {
   lastSignInAt: number | null
   projects: number
   communityItems: number
-  assistantRequests30d: number
-}
-
-export interface AssistantUsageDay {
-  day: string
-  requests: number
-  inputTokens: number
-  outputTokens: number
-  users: number
 }
 
 export async function fetchAdminStats(): Promise<AdminStats> {
@@ -56,19 +43,6 @@ export async function fetchAdminUsers(query = ''): Promise<AdminUser[]> {
     lastSignInAt: r.last_sign_in_at ? Date.parse(r.last_sign_in_at as string) : null,
     projects: (r.projects as number) ?? 0,
     communityItems: (r.community_items as number) ?? 0,
-    assistantRequests30d: (r.assistant_requests_30d as number) ?? 0,
-  }))
-}
-
-export async function fetchAssistantUsage(days = 30): Promise<AssistantUsageDay[]> {
-  const { data, error } = await supabase.rpc('admin_assistant_usage', { p_days: days })
-  if (error) throw error
-  return (data as Record<string, unknown>[]).map((r) => ({
-    day: r.day as string,
-    requests: Number(r.requests),
-    inputTokens: Number(r.input_tokens),
-    outputTokens: Number(r.output_tokens),
-    users: Number(r.users),
   }))
 }
 

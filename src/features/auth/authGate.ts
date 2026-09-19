@@ -3,11 +3,10 @@ import { isSupabaseConfigured } from '../../lib/supabase/client'
 import { useAuthStore } from './useAuthStore'
 
 /** Features a guest cannot use; the gate sheet explains each one. */
-export type GatedFeature = 'cloud' | 'assistant' | 'community' | 'assets' | 'account'
+export type GatedFeature = 'cloud' | 'community' | 'assets' | 'account'
 
 export const GATE_COPY: Record<GatedFeature, { title: string; reason: string }> = {
   cloud: { title: 'Sign in to save to the cloud', reason: 'As a guest your projects live only in this browser. An account backs them up and opens them on any device.' },
-  assistant: { title: 'Sign in to use the assistant', reason: 'The design assistant needs an account so it can keep a daily allowance per person.' },
   community: { title: 'Sign in to publish', reason: 'Community models are tied to the account that shares them, so you can update or remove them later.' },
   assets: { title: 'Sign in to sync your assets', reason: 'Personal assets follow your account across projects and devices. As a guest they stay in this browser.' },
   account: { title: 'Sign in to manage your account', reason: 'There is no account to manage while browsing as a guest.' },

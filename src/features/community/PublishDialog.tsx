@@ -76,8 +76,8 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
     const snapshot = serializeDocument(useDocumentStore.getState())
     saveLocalProject(projectId, snapshot)
     const fresh = captureThumbnail()
-    if (fresh) saveLocalThumbnail(projectId, fresh)
-    return { snapshot, thumbnail: fresh ?? loadLocalThumbnail(projectId) }
+    if (fresh && fresh !== 'busy') saveLocalThumbnail(projectId, fresh)
+    return { snapshot, thumbnail: fresh && fresh !== 'busy' ? fresh : loadLocalThumbnail(projectId) }
   }
 
   const submit = async (e: FormEvent) => {
