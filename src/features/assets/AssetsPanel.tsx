@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { Cloud, CloudOff, Plus, Search, Trash2 } from 'lucide-react'
 import { useDocumentStore, artboardSize } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { ASSET_CATEGORIES, ASSET_LIBRARY } from '../../lib/assets/library'
 import type { AssetDefinition } from '../../lib/assets/types'
-import { captureAsset, loadUserAssets, saveUserAssets } from '../../lib/assets/userAssets'
+import { captureAsset } from '../../lib/assets/userAssets'
+import { useUserAssets } from '../../state/userAssetsStore'
+import { isGuest, requireAccount } from '../auth/authGate'
 import { AssetThumbnail } from './AssetThumbnail'
 import { ASSET_MIME } from './assetDrag'
 import './AssetsPanel.css'
@@ -24,7 +26,10 @@ export function AssetsPanel() {
   const customBedHeight = useDocumentStore((s) => s.customBedHeight)
   const setNotice = useViewStore((s) => s.setNotice)
   const [query, setQuery] = useState('')
-  const [userAssets, setUserAssets] = useState<AssetDefinition[]>(() => loadUserAssets())
+  const userAssets = useUserAssets((s) => s.assets)
+  const assetStatus = useUserAssets((s) => s.status)
+  const addUserAsset = useUserAssets((s) => s.add)
+  const removeUserAsset = useUserAssets((s) => s.remove)
   const [saving, setSaving] = useState(false)
   const [draftName, setDraftName] = useState('')
 
@@ -38,18 +43,10 @@ export function AssetsPanel() {
     const { layers, order, selection: sel } = useDocumentStore.getState()
     const asset = captureAsset(draftName, layers, order, sel)
     if (!asset) return
-    const next = [asset, ...userAssets]
-    setUserAssets(next)
-    saveUserAssets(next)
+    addUserAsset(asset)
     setSaving(false)
     setDraftName('')
-    setNotice(`Saved "${asset.name}" to My assets. It is kept in this browser.`)
-  }
-
-  const removeUserAsset = (id: string) => {
-    const next = userAssets.filter((a) => a.id !== id)
-    setUserAssets(next)
-    saveUserAssets(next)
+    setNotice(isGuest() ? `Saved "${asset.name}" to My assets. It is kept in this browser only until you sign in.` : `Saved "${asset.name}" to My assets. It is available in all your projects.`)
   }
 
   const q = query.trim().toLowerCase()
@@ -113,6 +110,18 @@ export function AssetsPanel() {
             <h3 className="assets-section__title">
               {section.title}
               <span className="assets-section__count">{section.assets.length}</span>
+              {section.mine && isGuest() && (
+                <button type="button" className="assets-section__sync assets-section__sync--off" title="Kept in this browser only. Sign in to use them in every project and on every device." onClick={() => requireAccount('assets')}>
+                  <CloudOff size={11} />
+                  this browser only
+                </button>
+              )}
+              {section.mine && !isGuest() && assetStatus !== 'off' && (
+                <span className={`assets-section__sync ${assetStatus === 'synced' ? '' : 'assets-section__sync--off'}`} title={assetStatus === 'synced' ? 'Synced to your account' : assetStatus === 'syncing' ? 'Syncing…' : 'Not synced yet: the cloud could not be reached. Your assets are safe in this browser.'}>
+                  {assetStatus === 'synced' ? <Cloud size={11} /> : <CloudOff size={11} />}
+                  {assetStatus === 'synced' ? 'synced' : assetStatus === 'syncing' ? 'syncing…' : 'not synced'}
+                </span>
+              )}
             </h3>
             <div className="assets-grid">
               {section.assets.map((asset) => (
@@ -158,7 +167,7 @@ export function AssetsPanel() {
             </div>
           </section>
         ))}
-        <p className="assets-panel__hint">Every asset is made of ordinary shapes: after placing one, edit any part like you drew it. Select shapes and press "Save selection" to keep your own.</p>
+        <p className="assets-panel__hint">Every asset is made of ordinary shapes: after placing one, edit any part like you drew it. Select shapes and press "Save selection", or right-click a layer or group and choose "Save as asset", to keep your own.</p>
       </div>
     </div>
   )

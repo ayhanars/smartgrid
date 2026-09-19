@@ -230,3 +230,33 @@ create policy "Users manage their own avatar"
   on storage.objects for all
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ---------------------------------------------------------------------------
+-- User assets ("My assets"): shapes saved from a selection, mirrored from
+-- the browser so they follow the account across projects and devices.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.user_assets (
+  id text primary key,
+  owner_id uuid not null references auth.users (id) on delete cascade,
+  name text not null default 'My asset',
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists user_assets_owner_id_idx on public.user_assets (owner_id);
+
+alter table public.user_assets enable row level security;
+
+drop policy if exists "Users manage their own assets" on public.user_assets;
+create policy "Users manage their own assets"
+  on public.user_assets for all
+  using (auth.uid() = owner_id)
+  with check (auth.uid() = owner_id);
+
+drop trigger if exists user_assets_set_updated_at on public.user_assets;
+create trigger user_assets_set_updated_at
+  before update on public.user_assets
+  for each row
+  execute function public.set_updated_at();
