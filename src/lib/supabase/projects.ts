@@ -7,6 +7,8 @@ export interface CloudProjectMeta {
   /** Unix ms, to match `LocalProjectMeta`. */
   createdAt: number
   updatedAt: number
+  /** WebP data URL, when the project has been opened in the 3D view. */
+  thumbnail: string | null
 }
 
 interface ProjectRow {
@@ -14,46 +16,48 @@ interface ProjectRow {
   owner_id: string
   name: string
   data: DocumentSnapshot
+  thumbnail: string | null
   created_at: string
   updated_at: string
 }
 
-const toMeta = (row: Pick<ProjectRow, 'id' | 'name' | 'created_at' | 'updated_at'>): CloudProjectMeta => ({
+type MetaRow = Pick<ProjectRow, 'id' | 'name' | 'thumbnail' | 'created_at' | 'updated_at'>
+const META_COLUMNS = 'id, name, thumbnail, created_at, updated_at'
+
+const toMeta = (row: MetaRow): CloudProjectMeta => ({
   id: row.id,
   name: row.name,
   createdAt: Date.parse(row.created_at),
   updatedAt: Date.parse(row.updated_at),
+  thumbnail: row.thumbnail ?? null,
 })
 
 /** Newest first. */
 export async function listCloudProjects(): Promise<CloudProjectMeta[]> {
-  const { data, error } = await supabase
-    .from('projects')
-    .select('id, name, created_at, updated_at')
-    .order('updated_at', { ascending: false })
+  const { data, error } = await supabase.from('projects').select(META_COLUMNS).order('updated_at', { ascending: false })
   if (error) throw error
-  return (data as Pick<ProjectRow, 'id' | 'name' | 'created_at' | 'updated_at'>[]).map(toMeta)
+  return (data as MetaRow[]).map(toMeta)
 }
 
-export async function loadCloudProject(id: string): Promise<DocumentSnapshot | null> {
-  const { data, error } = await supabase.from('projects').select('data').eq('id', id).maybeSingle()
+export async function loadCloudProject(id: string): Promise<{ snapshot: DocumentSnapshot; thumbnail: string | null } | null> {
+  const { data, error } = await supabase.from('projects').select('data, thumbnail').eq('id', id).maybeSingle()
   if (error) throw error
-  const snapshot = (data as Pick<ProjectRow, 'data'> | null)?.data
-  return snapshot && snapshot.version === 1 ? snapshot : null
+  const row = data as Pick<ProjectRow, 'data' | 'thumbnail'> | null
+  const snapshot = row?.data
+  return snapshot && snapshot.version === 1 ? { snapshot, thumbnail: row?.thumbnail ?? null } : null
 }
 
-export async function saveCloudProject(id: string, snapshot: DocumentSnapshot): Promise<CloudProjectMeta> {
+/** Upserts the document; `thumbnail` is left untouched when undefined. */
+export async function saveCloudProject(id: string, snapshot: DocumentSnapshot, thumbnail?: string | null): Promise<CloudProjectMeta> {
   const { data: userData } = await supabase.auth.getUser()
   const owner_id = userData.user?.id
   if (!owner_id) throw new Error('Not signed in')
 
-  const { data, error } = await supabase
-    .from('projects')
-    .upsert({ id, owner_id, name: snapshot.name, data: snapshot })
-    .select('id, name, created_at, updated_at')
-    .single()
+  const row: Partial<ProjectRow> = { id, owner_id, name: snapshot.name, data: snapshot }
+  if (thumbnail !== undefined) row.thumbnail = thumbnail
+  const { data, error } = await supabase.from('projects').upsert(row).select(META_COLUMNS).single()
   if (error) throw error
-  return toMeta(data as ProjectRow)
+  return toMeta(data as MetaRow)
 }
 
 export async function deleteCloudProject(id: string): Promise<void> {

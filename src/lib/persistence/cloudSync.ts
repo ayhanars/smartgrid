@@ -1,6 +1,7 @@
 import { useAuthStore } from '../../features/auth/useAuthStore'
 import { deleteCloudProject, loadCloudProject, saveCloudProject } from '../supabase/projects'
 import { deleteLocalProject, loadLocalProject, saveLocalProject, type DocumentSnapshot } from './localProjects'
+import { deleteLocalThumbnail, loadLocalThumbnail, saveLocalThumbnail } from './thumbnails'
 
 /** Cloud rows are keyed by uuid; ids from the pre-uuid fallback in
  * `localProjects.newId` stay local-only. */
@@ -17,21 +18,24 @@ export async function loadProjectAnywhere(id: string): Promise<DocumentSnapshot 
   if (local) return local
   if (!isSignedIn() || !isCloudSyncable(id)) return null
   const remote = await loadCloudProject(id)
-  if (remote) saveLocalProject(id, remote)
-  return remote
+  if (!remote) return null
+  saveLocalProject(id, remote.snapshot)
+  if (remote.thumbnail) saveLocalThumbnail(id, remote.thumbnail)
+  return remote.snapshot
 }
 
 /** Pushes the browser's copy of a project to the cloud. */
 export async function uploadProject(id: string): Promise<boolean> {
   const snapshot = loadLocalProject(id)
   if (!snapshot || !isSignedIn() || !isCloudSyncable(id)) return false
-  await saveCloudProject(id, snapshot)
+  await saveCloudProject(id, snapshot, loadLocalThumbnail(id))
   return true
 }
 
 /** Removes a project from this browser and, when signed in, from the cloud. */
 export async function deleteProjectEverywhere(id: string): Promise<void> {
   deleteLocalProject(id)
+  deleteLocalThumbnail(id)
   if (isSignedIn() && isCloudSyncable(id)) {
     try {
       await deleteCloudProject(id)

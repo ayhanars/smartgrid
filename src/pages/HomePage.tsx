@@ -21,6 +21,7 @@ import { emptyDocument } from '../state/documentStore'
 import { getBedPreset } from '../lib/geometry/bedPresets'
 import { contourBounds, regionsToSvgPath } from '../lib/geometry/primitives'
 import { ProjectPreview3D } from './ProjectPreview3D'
+import { loadLocalThumbnail } from '../lib/persistence/thumbnails'
 import '../features/layers/LayerContextMenu.css'
 import './HomePage.css'
 
@@ -230,8 +231,8 @@ export function HomePage() {
                     onClick={() => open(p.id)}
                     onKeyDown={(e) => e.key === 'Enter' && open(p.id)}
                   >
-                    <div className="home__thumb home__thumb--cloud">
-                      <Cloud size={26} />
+                    <div className={`home__thumb ${p.thumbnail ? 'home__thumb--picture' : 'home__thumb--cloud'}`}>
+                      {p.thumbnail ? <img className="home__thumb-img" src={p.thumbnail} alt="" /> : <Cloud size={26} />}
                     </div>
                     <div className="home__card-body">
                       <span className="home__card-name">{p.name}</span>
@@ -285,6 +286,7 @@ function ProjectCard({
   const [hovered, setHovered] = useState(false)
   useEffect(() => setDraft(meta.name), [meta.name, renaming])
   const snapshot = useMemo(() => loadLocalProject(meta.id), [meta.id, meta.updatedAt])
+  const picture = useMemo(() => loadLocalThumbnail(meta.id), [meta.id, meta.updatedAt])
 
   return (
     <div
@@ -298,8 +300,8 @@ function ProjectCard({
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
     >
-      <div className="home__thumb">
-        {snapshot && <Thumbnail snapshot={snapshot} />}
+      <div className={`home__thumb ${picture ? 'home__thumb--picture' : ''}`}>
+        {picture ? <img className="home__thumb-img" src={picture} alt="" /> : snapshot && <Thumbnail snapshot={snapshot} />}
         {/* Hover: the same project as a live 3D turntable, over the 2D thumbnail. */}
         {snapshot && hovered && (
           <div className="home__thumb-3d" aria-hidden>

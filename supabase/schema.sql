@@ -13,6 +13,9 @@ create table if not exists public.projects (
 
 create index if not exists projects_owner_id_idx on public.projects (owner_id);
 
+-- A small WebP data URL rendered from the 3D view (see thumbnails.ts).
+alter table public.projects add column if not exists thumbnail text;
+
 alter table public.projects enable row level security;
 
 create policy "Users can select their own projects"
