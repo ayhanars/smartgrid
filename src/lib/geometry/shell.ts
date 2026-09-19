@@ -23,6 +23,10 @@ export interface ShellCavity {
   /** The wall the cavity was actually cut with — smaller than requested
    * when the outline is too narrow for the full wall. */
   wall: number
+  /** Fillet on the cavity's closed end, so the inside follows a bevelled
+   * outside at a constant wall thickness (outer radius minus the wall). */
+  bevelBottom: number
+  bevelTop: number
 }
 
 /** Extra reach past the open face so CSG never has to resolve coplanar
@@ -93,5 +97,7 @@ export function buildShellCavity(solid: ShapeLayer, options: ShellOptions): Shel
     z: Math.round(z * 1e6) / 1e6,
     depth: Math.round(depth * 1e6) / 1e6,
     wall: appliedWall,
+    bevelBottom: options.openFrom === 'top' ? Math.max(0, solid.bevelBottom - appliedWall) : 0,
+    bevelTop: options.openFrom === 'bottom' ? Math.max(0, solid.bevelTop - appliedWall) : 0,
   }
 }

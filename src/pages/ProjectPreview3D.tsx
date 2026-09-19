@@ -5,6 +5,7 @@ import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import { getBedPreset } from '../lib/geometry/bedPresets'
 import { SCENE_SCALE } from '../features/viewport-3d/sceneScale'
 import { ExtrudedShapeMesh } from '../features/viewport-3d/ExtrudedShapeMesh'
+import { activeHoleIds } from '../features/viewport-3d/useCutGeometries'
 import { PrinterPlate } from '../features/viewport-3d/PrinterPlate'
 import { shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { layerZRange } from '../lib/geometry/layerGeometry'
@@ -34,7 +35,12 @@ export function ProjectPreview3D({ snapshot }: { snapshot: DocumentSnapshot }) {
   const bedWidth = artboardWidth * SCENE_SCALE
   const bedDepth = artboardHeight * SCENE_SCALE
 
-  const layers = snapshot.order.map((id) => snapshot.layers[id]).filter((l) => l && l.visible)
+  // Same rule as the editor: a cutter busy cutting something is not drawn
+  // as a ghost over it (with nothing selected here, that's every one).
+  const layers = useMemo(() => {
+    const active = activeHoleIds(snapshot.layers, snapshot.order)
+    return snapshot.order.map((id) => snapshot.layers[id]).filter((l) => l && l.visible && !(l.isHole && active.has(l.id)))
+  }, [snapshot])
 
   // Frame the shapes (fall back to the plate on an empty project).
   const { center, radius } = useMemo(() => {

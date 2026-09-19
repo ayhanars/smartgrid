@@ -127,20 +127,32 @@ function holeFootprintsInLocalFrame(solid: ShapeLayer, hole: ShapeLayer): Point2
 /** The shape's own perforation cutter (real holes through its walls/top),
  * in the same frame and orientation as `buildLayerGeometries` — subtract
  * it like any hole. Null when the shape has no perforation. */
-export function buildLayerCutters(layer: ShapeLayer, scale: number, cavities: ShapeLayer[] = []): THREE.BufferGeometry[] {
+export function buildLayerCutters(layer: ShapeLayer, scale: number, holes: ShapeLayer[] = []): THREE.BufferGeometry[] {
   if (!layer.perforation || layer.isHole) return []
   const contour = effectiveContour(layer)
   if (!contour) return []
   const depth = Math.max(0.2, layer.extrusionDepth)
-  const cutter = buildPerforationCutter(contour, depth, layer.perforation, cavities.flatMap((hole) => holeFootprintsInLocalFrame(layer, hole)))
-  if (!cutter) return []
-  cutter.scale(scale, scale, scale)
+  // Hollowed cavities are where "through the wall" holes stop; every other
+  // cutter (a carved pocket, a magnet recess) is something to keep out of.
+  const innerContours = holes.filter((h) => h.shellOf).flatMap((hole) => holeFootprintsInLocalFrame(layer, hole))
+  const obstacles = holes
+    .filter((h) => !h.shellOf)
+    .map((hole) => ({
+      rings: holeFootprintsInLocalFrame(layer, hole),
+      zFrom: hole.transform.z - layer.transform.z,
+      zTo: hole.transform.z - layer.transform.z + hole.extrusionDepth,
+    }))
+  const cutters = buildPerforationCutter(contour, depth, layer.perforation, { innerContours, obstacles })
+  if (cutters.length === 0) return []
   // Same bake as the body: derive it from the body's own (unscaled) mesh.
   const body = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop)
   body.scale(scale, scale, scale)
   const bake = rotationBake(body, layer)
   body.dispose()
-  return [bake ? cutter.applyMatrix4(bake) : cutter]
+  return cutters.map((cutter) => {
+    cutter.scale(scale, scale, scale)
+    return bake ? cutter.applyMatrix4(bake) : cutter
+  })
 }
 
 /** Real geometric Z range (mm, print frame) of the built shape — derived

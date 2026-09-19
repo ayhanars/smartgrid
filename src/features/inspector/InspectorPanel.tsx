@@ -19,7 +19,7 @@ import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
 import { IconButton } from '../../components/IconButton'
-import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
+import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, HOLE_SHAPES, INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
 import { TexturePreview } from './TexturePreview'
 import { prepareTile } from '../../lib/geometry/customTile'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
@@ -524,6 +524,7 @@ function ShellSection({ layer }: { layer: ShapeLayer }) {
 }
 
 const MAX_TILE_BYTES = 400 * 1024
+const SLOT_ASPECT_LABEL = '2.4×'
 
 /** Compact pattern chooser: the current pattern as one row, and a popover
  * with big previews to change it — Figma's style-picker idea, so the
@@ -811,13 +812,7 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
         <>
           <p className="inspector-field__label">Hole shape</p>
           <div className="inspector-preset-chips">
-            {(
-              [
-                ['round', 'Round'],
-                ['square', 'Square'],
-                ['hex', 'Hexagon'],
-              ] as const
-            ).map(([id, label]) => (
+            {HOLE_SHAPES.map(({ id, label }) => (
               <button key={id} type="button" className={`inspector-preset-chip ${perf.shape === id ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ shape: id })}>
                 {label}
               </button>
@@ -833,7 +828,7 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
             </button>
           </div>
           <div className="inspector-grid-2">
-            <Field label="Hole size" value={perf.size} suffix="mm" onChange={(v) => patch({ size: v })} />
+            <Field label={perf.shape.startsWith('slot') ? 'Slot width' : 'Hole size'} value={perf.size} suffix="mm" onChange={(v) => patch({ size: v })} />
             <Field label="Spacing (center to center)" value={perf.spacing} suffix="mm" onChange={(v) => patch({ spacing: v })} />
           </div>
           <p className="inspector-field__label">Drill into</p>
@@ -888,7 +883,7 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
             </div>
           )}
           <p className="inspector-note">
-            Holes never straddle a corner. "Through the wall" stops at a hollowed cavity, or goes right through a solid block. Keep spacing at least a nozzle width or two above the hole size.
+            Holes never straddle a corner or break into a carved pocket. "Through the wall" stops at a hollowed cavity; on a solid block it makes blind holes two diameters deep. Slots are {SLOT_ASPECT_LABEL} their width long; rows spread out as needed.
           </p>
         </>
       )}

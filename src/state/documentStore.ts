@@ -6,7 +6,7 @@ import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
 import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking'
-import { buildShellCavity, type ShellOptions } from '../lib/geometry/shell'
+import { buildShellCavity, type ShellCavity, type ShellOptions } from '../lib/geometry/shell'
 import { useViewStore } from './viewStore'
 import { buildLayerCutters, buildLayerGeometries } from '../lib/geometry/layerGeometry'
 import { cutHolesFromSolid } from '../lib/geometry/holeCut'
@@ -218,6 +218,19 @@ function writePinnedBedPreset(id: string | null) {
 
 type Patch = Partial<DocumentStore>
 
+/** A cavity layer updated to a freshly built shell cavity. */
+function applyCavity(cavity: ShapeLayer, built: ShellCavity): ShapeLayer {
+  return {
+    ...cavity,
+    regions: built.regions,
+    extrusionDepth: built.depth,
+    transform: { ...cavity.transform, x: built.x, y: built.y, z: built.z, rotation: 0 },
+    bevelBottom: built.bevelBottom,
+    bevelTop: built.bevelTop,
+    bevelMode: 'shape',
+  }
+}
+
 /**
  * Keeps every "Hollow out" cavity glued to its solid: after any change to
  * the layers, a cavity whose solid changed is rebuilt from the solid's
@@ -247,13 +260,7 @@ function syncShells(state: DocumentStore, patch: Patch): Patch {
     if (solid === state.layers[link.solidId] && cavity === state.layers[id]) continue
     const rebuilt = buildShellCavity(solid, link)
     if (!rebuilt) continue
-    const next: ShapeLayer = {
-      ...cavity,
-      regions: rebuilt.regions,
-      extrusionDepth: rebuilt.depth,
-      transform: { ...cavity.transform, x: rebuilt.x, y: rebuilt.y, z: rebuilt.z, rotation: 0 },
-      groupId: solid.groupId,
-    }
+    const next: ShapeLayer = { ...applyCavity(cavity, rebuilt), groupId: solid.groupId }
     if (JSON.stringify(next) === JSON.stringify(cavity)) continue
     if (!changed) layers = { ...layers }
     changed = true
@@ -806,8 +813,9 @@ export const useDocumentStore = create<DocumentStore>()(
             extrusionDepth: cavity.depth,
             cornerRadius: 0,
             smartPolish: 0,
-            bevelBottom: 0,
-            bevelTop: 0,
+            bevelBottom: cavity.bevelBottom,
+            bevelTop: cavity.bevelTop,
+            bevelMode: 'shape',
             isHole: true,
             groupId,
             shellOf: { solidId: id, wall: options.wall, floor: floorLayers * layerHeight, openFrom: options.openFrom },
@@ -836,13 +844,7 @@ export const useDocumentStore = create<DocumentStore>()(
           return {
             layers: {
               ...state.layers,
-              [cavityId]: {
-                ...cavity,
-                shellOf: nextLink,
-                regions: rebuilt.regions,
-                extrusionDepth: rebuilt.depth,
-                transform: { ...cavity.transform, x: rebuilt.x, y: rebuilt.y, z: rebuilt.z, rotation: 0 },
-              },
+              [cavityId]: { ...applyCavity(cavity, rebuilt), shellOf: nextLink },
             },
           }
         }),

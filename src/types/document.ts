@@ -121,8 +121,22 @@ export const DEFAULT_TEXTURE: SurfaceTexture = { pattern: 'grid', target: 'walls
 /** Real holes drilled through a shape's walls and/or top face in a
  * regular pattern — cut with CSG, so they go right through (or to a set
  * depth) and show up in the print. */
+export type HoleShape = 'round' | 'square' | 'hex' | 'diamond' | 'triangle' | 'star' | 'slot-v' | 'slot-h' | 'slot-d'
+
+export const HOLE_SHAPES: { id: HoleShape; label: string }[] = [
+  { id: 'round', label: 'Round' },
+  { id: 'square', label: 'Square' },
+  { id: 'hex', label: 'Hexagon' },
+  { id: 'diamond', label: 'Diamond' },
+  { id: 'triangle', label: 'Triangle' },
+  { id: 'star', label: 'Star' },
+  { id: 'slot-v', label: 'Vertical slot' },
+  { id: 'slot-h', label: 'Horizontal slot' },
+  { id: 'slot-d', label: 'Diagonal slot' },
+]
+
 export interface Perforation {
-  shape: 'round' | 'square' | 'hex'
+  shape: HoleShape
   pattern: 'grid' | 'staggered'
   /** Hole diameter / side, mm. */
   size: number
