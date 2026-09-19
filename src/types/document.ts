@@ -140,6 +140,15 @@ export interface Perforation {
 
 export const DEFAULT_PERFORATION: Perforation = { shape: 'round', pattern: 'grid', size: 3, spacing: 5.5, target: 'walls', depth: null }
 
+export interface ShellLink {
+  solidId: string
+  /** Wall thickness, mm. */
+  wall: number
+  /** Floor (or ceiling) thickness, mm, already rounded to whole layers. */
+  floor: number
+  openFrom: 'top' | 'bottom'
+}
+
 export interface ShapeLayer {
   id: string
   kind: ShapeKind
@@ -182,6 +191,10 @@ export interface ShapeLayer {
   /** Membership in a group (see DocumentState.groups): clicking any member
    * on the canvas selects the whole group, like Figma. */
   groupId?: string
+  /** For a cavity made by "Hollow out": the solid it hollows and the wall
+   * settings it was built with. The cavity is derived — whenever that
+   * solid is resized, moved or reshaped, the cavity is rebuilt to match. */
+  shellOf?: ShellLink
   polygonSides?: number
   starPoints?: number
   starInnerRatio?: number

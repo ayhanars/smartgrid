@@ -37,6 +37,10 @@ interface ExtrudedShapeMeshProps {
   /** Receives the outer group (origin at the shape's center) so a viewport
    * gizmo can attach to it. */
   onGroupRef?: (group: THREE.Group | null) => void
+  /** Kept in the scene but neither drawn nor clickable (a cutter that is
+   * busy cutting: its pocket shows instead). Staying mounted means a gizmo
+   * attached to it a moment ago detaches cleanly. */
+  hidden?: boolean
 }
 
 export function ExtrudedShapeMesh({
@@ -51,6 +55,7 @@ export function ExtrudedShapeMesh({
   warning,
   clippingPlanes,
   onGroupRef,
+  hidden = false,
 }: ExtrudedShapeMeshProps) {
   // A custom texture tile decoding late bumps tileVersion -> rebuild.
   const tileVersion = useViewStore((s) => s.tileVersion)
@@ -93,10 +98,11 @@ export function ExtrudedShapeMesh({
       ref={onGroupRef}
       position={[origin[0] + center.x, origin[1] + center.y, origin[2] + center.z]}
       onPointerDown={handlePointerDown}
+      visible={!hidden}
     >
       <group position={[-center.x, -center.y, -center.z]}>
         {geometries.map((geo, i) => (
-          <mesh key={i} geometry={geo}>
+          <mesh key={i} geometry={geo} raycast={hidden ? () => null : undefined}>
             <meshPhysicalMaterial
               color={layer.isHole ? '#ff5c5c' : layer.color}
               wireframe={wireframe}

@@ -17,7 +17,7 @@ import {
 import { unitRest } from '../../lib/geometry/stacking'
 import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
-import { useCutGeometries } from './useCutGeometries'
+import { activeHoleIds, useCutGeometries } from './useCutGeometries'
 import { PrinterPlate } from './PrinterPlate'
 import { PrintPreviewSlider } from './PrintPreviewSlider'
 import { PreviewCaps, type PreviewCapItem } from './PreviewCaps'
@@ -183,6 +183,11 @@ export function Viewport3DPane() {
   }
 
   const { cutGeometriesById, uncutGeometriesById, pending: cutsPending } = useCutGeometries(layers, order, artboardWidth, artboardHeight, tileVersion)
+  // A cutter that is doing its job is shown by the pocket it leaves, not
+  // as a ghost on top of it — a few carves would otherwise pile up into a
+  // haze of red glass. It reappears while selected (from the canvas or the
+  // Layers panel) so it can still be positioned.
+  const activeHoles = useMemo(() => activeHoleIds(layers, order), [layers, order])
 
   // What the print preview caps: the same geometry each shape renders
   // with (hole-cut where applicable), so the cross-section matches.
@@ -267,6 +272,7 @@ export function Viewport3DPane() {
             <ExtrudedShapeMesh
               key={id}
               layer={layer}
+              hidden={layer.isHole && activeHoles.has(id) && !selection.includes(id)}
               isSelected={selection.includes(id)}
               wireframe={wireframe}
               onSelect={handleSelect}

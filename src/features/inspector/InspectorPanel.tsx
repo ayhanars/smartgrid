@@ -220,6 +220,7 @@ function EmptyState({ text }: { text: string }) {
 }
 
 function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount: number }) {
+  const solidName = useDocumentStore((s) => (layer?.shellOf ? s.layers[layer.shellOf.solidId]?.name : undefined))
   const resizeShape = useDocumentStore((s) => s.resizeShape)
   const moveShapesBy = useDocumentStore((s) => s.moveShapesBy)
   const setLayerZ = useDocumentStore((s) => s.setLayerZ)
@@ -246,9 +247,14 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
             onChange={(v) => setLayerZ(layer.id, v)}
           />
         </div>
-        {layer.isHole && (
+        {layer.isHole && !layer.shellOf && (
           <p className="inspector-note">
             Print height of this cutter's own bottom — independent of whatever solid it cuts into.
+          </p>
+        )}
+        {layer.shellOf && (
+          <p className="inspector-note">
+            This cavity is made from {solidName ?? 'its shape'} and follows it. Change the walls in that shape's Shell section.
           </p>
         )}
       </Section>
@@ -409,14 +415,69 @@ const DEFAULT_SHELL_FLOOR_MM = 1.2
 /** Shell: one click turns a solid into a container by generating the
  * negative (hole) object from its own outline — the same mechanism as a
  * hand-drawn hole, just automated and grouped with the solid. */
+/** The cavity that hollows this solid, if it has been hollowed out. */
+function useCavityOf(solidId: string): ShapeLayer | null {
+  return useDocumentStore((s) => {
+    for (const id of s.order) {
+      const l = s.layers[id]
+      if (l?.shellOf?.solidId === solidId) return l
+    }
+    return null
+  })
+}
+
 function ShellSection({ layer }: { layer: ShapeLayer }) {
   const [wall, setWall] = useState(DEFAULT_WALL_MM)
   const [floor, setFloor] = useState(DEFAULT_SHELL_FLOOR_MM)
   const [openFrom, setOpenFrom] = useState<'top' | 'bottom'>('top')
   const hollowOut = useDocumentStore((s) => s.hollowOut)
+  const updateShell = useDocumentStore((s) => s.updateShell)
+  const removeShapes = useDocumentStore((s) => s.removeShapes)
+  const setSelection = useDocumentStore((s) => s.setSelection)
   const layerHeight = useDocumentStore((s) => s.printSettings.layerHeight)
   const setNotice = useViewStore((s) => s.setNotice)
   const floorLayers = Math.max(1, Math.ceil(floor / layerHeight - 1e-6))
+  const cavity = useCavityOf(layer.id)
+
+  if (cavity?.shellOf) {
+    const link = cavity.shellOf
+    return (
+      <Section
+        title="Shell"
+        action={
+          <button
+            type="button"
+            className="inspector-section__hint inspector-section__hint--button"
+            onClick={() => {
+              removeShapes([cavity.id])
+              setSelection([layer.id])
+            }}
+          >
+            Remove cavity
+          </button>
+        }
+      >
+        <div className="inspector-grid-2">
+          <Field label="Wall thickness" value={link.wall} suffix="mm" onChange={(v) => updateShell(cavity.id, { wall: Math.max(0.4, v) })} />
+          <Field label={link.openFrom === 'top' ? 'Floor thickness' : 'Ceiling thickness'} value={link.floor} suffix="mm" onChange={(v) => updateShell(cavity.id, { floor: Math.max(0, v) })} />
+        </div>
+        <p className="inspector-field__label">Open from</p>
+        <div className="inspector-preset-chips">
+          {(['top', 'bottom'] as const).map((side) => (
+            <button
+              key={side}
+              type="button"
+              className={`inspector-preset-chip ${link.openFrom === side ? 'inspector-preset-chip--active' : ''}`}
+              onClick={() => updateShell(cavity.id, { openFrom: side })}
+            >
+              {side === 'top' ? 'Top (cup, tray, planter)' : 'Bottom (cap, lid)'}
+            </button>
+          ))}
+        </div>
+        <p className="inspector-note">Hollowed out. The cavity follows this shape: resize, move or reshape it and the walls stay {round(link.wall)} mm.</p>
+      </Section>
+    )
+  }
 
   const run = () => {
     const result = hollowOut(layer.id, { wall, floor, openFrom })
@@ -761,6 +822,9 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
                 {label}
               </button>
             ))}
+          </div>
+          <p className="inspector-field__label">Layout</p>
+          <div className="inspector-preset-chips">
             <button type="button" className={`inspector-preset-chip ${perf.pattern === 'grid' ? 'inspector-preset-chip--active' : ''}`} onClick={() => patch({ pattern: 'grid' })}>
               Grid
             </button>

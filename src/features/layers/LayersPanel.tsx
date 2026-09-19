@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Circle, CircleDashed, Eye, EyeOff, Folder, Lock, Pentagon, Plus, Square, Star, Unlock } from 'lucide-react'
 import { useDocumentStore } from '../../state/documentStore'
 import type { ShapeKind, ShapeLayer } from '../../types/document'
@@ -39,6 +39,17 @@ function LayerThumbnail({ layer }: { layer: ShapeLayer }) {
   )
 }
 
+/** Where a dragged row would land: directly above or below `id` in the
+ * panel, and whether that puts it inside a group. */
+interface DropTarget {
+  id: string
+  position: 'above' | 'below'
+  /** The group the target row belongs to (null: top level). */
+  groupId: string | null
+}
+
+const DRAG_THRESHOLD_PX = 4
+
 export function LayersPanel() {
   const layers = useDocumentStore((s) => s.layers)
   const groups = useDocumentStore((s) => s.groups)
@@ -47,12 +58,96 @@ export function LayersPanel() {
   const setSelection = useDocumentStore((s) => s.setSelection)
   const toggleVisibility = useDocumentStore((s) => s.toggleVisibility)
   const toggleLocked = useDocumentStore((s) => s.toggleLocked)
+  const moveLayersTo = useDocumentStore((s) => s.moveLayersTo)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
+
+  // Shift-click selects everything between the last plain click and this one.
+  const anchorRef = useRef<string | null>(null)
+
+  // Drag to reorder: a press on a row arms a drag; moving a few pixels
+  // starts it; the row under the pointer (upper/lower half) is the target.
+  const [drag, setDrag] = useState<{ ids: string[]; over: DropTarget | null } | null>(null)
+  const dragArm = useRef<{ ids: string[]; x: number; y: number; active: boolean; over: DropTarget | null } | null>(null)
+  const justDragged = useRef(false)
 
   // Layers panel lists back-to-front draw order top-to-bottom in reverse,
   // so the most recently drawn (frontmost) shape appears at the top.
   const rows = [...order].reverse()
+  // Every layer row in the order it is listed (groups flattened), for
+  // range selection.
+  const visual: string[] = []
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const arm = dragArm.current
+      if (!arm) return
+      if (!arm.active) {
+        if (Math.hypot(e.clientX - arm.x, e.clientY - arm.y) < DRAG_THRESHOLD_PX) return
+        arm.active = true
+        setDrag({ ids: arm.ids, over: null })
+      }
+      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-layer-row]')
+      const id = el?.dataset.layerRow
+      let over: DropTarget | null = null
+      if (el && id && !arm.ids.includes(id)) {
+        const rect = el.getBoundingClientRect()
+        over = { id, position: e.clientY < rect.top + rect.height / 2 ? 'above' : 'below', groupId: el.dataset.layerGroup || null }
+      }
+      arm.over = over
+      setDrag({ ids: arm.ids, over })
+    }
+    const onUp = () => {
+      const arm = dragArm.current
+      dragArm.current = null
+      if (!arm?.active) return
+      justDragged.current = true
+      setDrag(null)
+      if (arm.over) {
+        const { id, position, groupId } = arm.over
+        // A whole group being dragged keeps its own grouping; a single
+        // layer adopts the target's group (or leaves its old one).
+        const wholeGroup = arm.ids.length > 1 && arm.ids.every((mid) => layers[mid]?.groupId && layers[mid]?.groupId === layers[arm.ids[0]]?.groupId)
+        moveLayersTo(arm.ids, { id, position }, wholeGroup ? undefined : groupId)
+      }
+      window.setTimeout(() => (justDragged.current = false), 0)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [layers, moveLayersTo])
+
+  const armDrag = (ids: string[], e: React.PointerEvent) => {
+    if (e.button !== 0) return
+    if ((e.target as HTMLElement).closest('button')) return
+    dragArm.current = { ids, x: e.clientX, y: e.clientY, active: false, over: null }
+  }
+
+  const clickLayer = (id: string, e: React.MouseEvent) => {
+    if (justDragged.current) return
+    const isSelected = selection.includes(id)
+    if (e.shiftKey && anchorRef.current && visual.includes(anchorRef.current)) {
+      const a = visual.indexOf(anchorRef.current)
+      const b = visual.indexOf(id)
+      setSelection(visual.slice(Math.min(a, b), Math.max(a, b) + 1))
+      return
+    }
+    if (e.metaKey || e.ctrlKey) {
+      setSelection(isSelected ? selection.filter((sid) => sid !== id) : [...selection, id])
+      anchorRef.current = id
+      return
+    }
+    setSelection([id])
+    anchorRef.current = id
+  }
+
+  const dropClass = (id: string) => {
+    if (!drag?.over || drag.over.id !== id) return ''
+    return drag.over.position === 'above' ? 'layer-row--drop-above' : 'layer-row--drop-below'
+  }
 
   // A group is listed once, where its frontmost member sits, with every
   // member nested under it.
@@ -62,18 +157,17 @@ export function LayersPanel() {
   const renderLayerRow = (id: string, nested: boolean) => {
     const layer = layers[id]
     if (!layer) return null
+    visual.push(id)
     const isSelected = selection.includes(id)
+    const dragging = drag?.ids.includes(id)
     return (
       <div
         key={id}
-        className={`layer-row ${isSelected ? 'layer-row--selected' : ''} ${layer.visible ? '' : 'layer-row--hidden'} ${nested ? 'layer-row--nested' : ''}`}
-        onClick={(e) => {
-          if (e.shiftKey) {
-            setSelection(isSelected ? selection.filter((sid) => sid !== id) : [...selection, id])
-          } else {
-            setSelection([id])
-          }
-        }}
+        data-layer-row={id}
+        data-layer-group={nested ? layer.groupId : ''}
+        className={`layer-row ${isSelected ? 'layer-row--selected' : ''} ${layer.visible ? '' : 'layer-row--hidden'} ${nested ? 'layer-row--nested' : ''} ${dragging ? 'layer-row--dragging' : ''} ${dropClass(id)}`}
+        onPointerDown={(e) => armDrag(isSelected && selection.length > 1 ? selection : [id], e)}
+        onClick={(e) => clickLayer(id, e)}
         onContextMenu={(e) => {
           e.preventDefault()
           setContextMenu({ x: e.clientX, y: e.clientY, layerId: id })
@@ -123,11 +217,21 @@ export function LayersPanel() {
     const members = rows.filter((mid) => layers[mid]?.groupId === groupId)
     const allSelected = members.every((mid) => selection.includes(mid))
     const collapsed = !!collapsedGroups[groupId]
+    // Dropping on the group header: above it = above the whole group,
+    // below it = first inside the group.
+    const headerDrop = drag?.over?.id === members[0] && drag.over.groupId === null && !drag.ids.includes(members[0])
     tree.push(
       <div
         key={`group-${groupId}`}
-        className={`layer-group ${allSelected ? 'layer-group--selected' : ''}`}
-        onClick={() => setSelection(members)}
+        data-layer-row={members[0]}
+        data-layer-group=""
+        className={`layer-group ${allSelected ? 'layer-group--selected' : ''} ${headerDrop ? (drag?.over?.position === 'above' ? 'layer-row--drop-above' : 'layer-row--drop-below') : ''}`}
+        onPointerDown={(e) => armDrag(members, e)}
+        onClick={() => {
+          if (justDragged.current) return
+          setSelection(members)
+          anchorRef.current = members[0]
+        }}
         onContextMenu={(e) => {
           e.preventDefault()
           setContextMenu({ x: e.clientX, y: e.clientY, layerId: members[0] })
@@ -153,7 +257,7 @@ export function LayersPanel() {
   }
 
   return (
-    <div className="layers-panel">
+    <div className={`layers-panel ${drag ? 'layers-panel--dragging' : ''}`}>
       <div className="layers-panel__header">
         <span className="layers-panel__title">Layers</span>
         <span className="layers-panel__count">{order.length}</span>

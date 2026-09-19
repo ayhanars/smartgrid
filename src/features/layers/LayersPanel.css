@@ -192,3 +192,38 @@
   background: var(--bg-active);
   color: var(--text);
 }
+
+/* Drag to reorder: the dragged rows fade, the drop slot is an accent line. */
+.layers-panel--dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.layer-row--dragging {
+  opacity: 0.4;
+}
+
+.layer-row--drop-above,
+.layer-row--drop-below {
+  position: relative;
+}
+
+.layer-row--drop-above::before,
+.layer-row--drop-below::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.layer-row--drop-above::before {
+  top: -1px;
+}
+
+.layer-row--drop-below::after {
+  bottom: -1px;
+}

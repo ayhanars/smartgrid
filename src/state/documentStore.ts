@@ -7,6 +7,7 @@ import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geom
 import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking'
 import { buildShellCavity, type ShellOptions } from '../lib/geometry/shell'
+import { useViewStore } from './viewStore'
 import { buildLayerCutters, buildLayerGeometries } from '../lib/geometry/layerGeometry'
 import { cutHolesFromSolid } from '../lib/geometry/holeCut'
 
@@ -114,6 +115,14 @@ interface DocumentActions {
    * given thickness (floor rounded up to whole print layers), grouped with
    * it. Returns the new cavity's id, or null if the outline is too narrow. */
   hollowOut: (id: string, options: ShellOptions) => { cavityId: string; wall: number } | null
+  /** Changes the wall/floor of an existing cavity (see ShapeLayer.shellOf)
+   * and rebuilds it. */
+  updateShell: (cavityId: string, options: Partial<ShellOptions>) => void
+  /** Moves layers in the Layers panel: `ids` land directly above or below
+   * `target` in the panel (panel order is front-to-back, so "above" is
+   * later in `order`). `groupId` joins that group (null leaves any group,
+   * undefined keeps membership as is). */
+  moveLayersTo: (ids: string[], target: { id: string; position: 'above' | 'below' }, groupId?: string | null) => void
   /** Surface relief on a shape; null removes it. */
   setTexture: (id: string, texture: SurfaceTexture | null) => void
   /** Pattern of real holes on a shape; null removes it. */
@@ -171,6 +180,22 @@ function perfectFitOnCreate(layer: ShapeLayer, state: Pick<DocumentState, 'layer
 
 let transientSnapshot: Pick<DocumentState, 'layers' | 'order' | 'groups'> | null = null
 
+/** After copying layers: a copied cavity follows the COPY of its solid
+ * when that was copied too, and becomes a plain hole otherwise. */
+function relinkShells(layers: Record<string, ShapeLayer>, idRemap: Map<string, string>) {
+  for (const newId of idRemap.values()) {
+    const layer = layers[newId]
+    const link = layer?.shellOf
+    if (!link) continue
+    const solidCopy = idRemap.get(link.solidId)
+    if (solidCopy) layers[newId] = { ...layer, shellOf: { ...link, solidId: solidCopy } }
+    else {
+      const { shellOf: _dropped, ...rest } = layer
+      layers[newId] = rest
+    }
+  }
+}
+
 // The pinned ("default") bed preset is a user preference, not part of any
 // one document: it survives reloads and seeds every new project.
 const PINNED_BED_KEY = 'smartgrid:pinnedBed'
@@ -191,9 +216,58 @@ function writePinnedBedPreset(id: string | null) {
   }
 }
 
+type Patch = Partial<DocumentStore>
+
+/**
+ * Keeps every "Hollow out" cavity glued to its solid: after any change to
+ * the layers, a cavity whose solid changed is rebuilt from the solid's
+ * current outline, position and depth (same wall settings), and a cavity
+ * whose solid is gone goes with it. Runs inside the same store update, so
+ * undo treats the solid edit and the cavity rebuild as one step.
+ */
+function syncShells(state: DocumentStore, patch: Patch): Patch {
+  if (!patch.layers || patch.layers === state.layers) return patch
+  let layers = patch.layers
+  let order = patch.order ?? state.order
+  let selection = patch.selection ?? state.selection
+  let changed = false
+  for (const id of Object.keys(layers)) {
+    const cavity = layers[id]
+    const link = cavity?.shellOf
+    if (!link) continue
+    const solid = layers[link.solidId]
+    if (!solid || solid.isHole) {
+      if (!changed) layers = { ...layers }
+      changed = true
+      delete layers[id]
+      order = order.filter((oid) => oid !== id)
+      selection = selection.filter((sid) => sid !== id)
+      continue
+    }
+    if (solid === state.layers[link.solidId] && cavity === state.layers[id]) continue
+    const rebuilt = buildShellCavity(solid, link)
+    if (!rebuilt) continue
+    const next: ShapeLayer = {
+      ...cavity,
+      regions: rebuilt.regions,
+      extrusionDepth: rebuilt.depth,
+      transform: { ...cavity.transform, x: rebuilt.x, y: rebuilt.y, z: rebuilt.z, rotation: 0 },
+      groupId: solid.groupId,
+    }
+    if (JSON.stringify(next) === JSON.stringify(cavity)) continue
+    if (!changed) layers = { ...layers }
+    changed = true
+    layers[id] = next
+  }
+  return changed ? { ...patch, layers, order, selection } : patch
+}
+
 export const useDocumentStore = create<DocumentStore>()(
   temporal(
-    (set, get) => ({
+    (rawSet, get) => {
+      const set = (partial: Patch | ((state: DocumentStore) => Patch)) =>
+        rawSet((state) => syncShells(state, typeof partial === 'function' ? partial(state) : partial))
+      return {
       layers: {},
       groups: {},
       order: [],
@@ -385,6 +459,7 @@ export const useDocumentStore = create<DocumentStore>()(
           // Copies of grouped shapes land in a fresh group of their own
           // rather than being folded into the original's.
           const groupRemap = new Map<string, string>()
+          const idRemap = new Map<string, string>()
           for (const id of ids) {
             const layer = state.layers[id]
             if (!layer) continue
@@ -407,8 +482,10 @@ export const useDocumentStore = create<DocumentStore>()(
               transform: { ...layer.transform, x: layer.transform.x + 10, y: layer.transform.y + 10 },
               ...(groupId ? { groupId } : {}),
             }
+            idRemap.set(id, newId)
             order.push(newId)
           }
+          relinkShells(layers, idRemap)
           return { layers, order, groups, selection: newIds }
         })
         return newIds
@@ -422,6 +499,7 @@ export const useDocumentStore = create<DocumentStore>()(
         set((state) => {
           const layers = { ...state.layers }
           const order = [...state.order]
+          const idRemap = new Map<string, string>()
           for (const source of sourceLayers) {
             const newId = generateId()
             newIds.push(newId)
@@ -430,8 +508,10 @@ export const useDocumentStore = create<DocumentStore>()(
               id: newId,
               transform: { ...source.transform, x: source.transform.x + 10, y: source.transform.y + 10 },
             }
+            idRemap.set(source.id, newId)
             order.push(newId)
           }
+          relinkShells(layers, idRemap)
           return { layers, order, selection: newIds }
         })
         return newIds
@@ -478,18 +558,31 @@ export const useDocumentStore = create<DocumentStore>()(
       },
 
       removeShapes: (ids) => {
+        const notices: string[] = []
         set((state) => {
           // Locked shapes are protected from deletion, same as move/resize —
           // only unlocking one first allows it to be removed.
           const idSet = new Set(ids.filter((id) => !state.layers[id]?.locked))
           const layers = { ...state.layers }
-          for (const id of idSet) delete layers[id]
+          for (const id of idSet) {
+            // Deleting a cavity leaves a solid block: wall holes that were
+            // meant to open into it would just tunnel through, so they go.
+            const link = layers[id]?.shellOf
+            const solid = link ? layers[link.solidId] : undefined
+            if (solid?.perforation && !idSet.has(solid.id)) {
+              const { perforation: _dropped, ...rest } = solid
+              layers[solid.id] = rest
+              notices.push(`Removed the holes from ${solid.name} too — without the cavity they would just go through a solid block.`)
+            }
+            delete layers[id]
+          }
           return {
             layers,
             order: state.order.filter((id) => !idSet.has(id)),
             selection: state.selection.filter((id) => !idSet.has(id)),
           }
         })
+        if (notices.length) useViewStore.getState().setNotice(notices[0])
       },
 
       setSelection: (ids) => set({ selection: ids }),
@@ -717,6 +810,7 @@ export const useDocumentStore = create<DocumentStore>()(
             bevelTop: 0,
             isHole: true,
             groupId,
+            shellOf: { solidId: id, wall: options.wall, floor: floorLayers * layerHeight, openFrom: options.openFrom },
           }
           const at = s.order.indexOf(id)
           const order = [...s.order]
@@ -725,6 +819,52 @@ export const useDocumentStore = create<DocumentStore>()(
         })
         return { cavityId, wall: cavity.wall }
       },
+
+      updateShell: (cavityId, options) =>
+        set((state) => {
+          const cavity = state.layers[cavityId]
+          const link = cavity?.shellOf
+          if (!link) return {}
+          const solid = state.layers[link.solidId]
+          if (!solid) return {}
+          const layerHeight = state.printSettings.layerHeight
+          const floorRaw = options.floor ?? link.floor
+          const floor = Math.max(1, Math.ceil(Math.max(0, floorRaw) / layerHeight - 1e-6)) * layerHeight
+          const nextLink = { ...link, ...options, wall: Math.max(0.4, options.wall ?? link.wall), floor }
+          const rebuilt = buildShellCavity(solid, nextLink)
+          if (!rebuilt) return {}
+          return {
+            layers: {
+              ...state.layers,
+              [cavityId]: {
+                ...cavity,
+                shellOf: nextLink,
+                regions: rebuilt.regions,
+                extrusionDepth: rebuilt.depth,
+                transform: { ...cavity.transform, x: rebuilt.x, y: rebuilt.y, z: rebuilt.z, rotation: 0 },
+              },
+            },
+          }
+        }),
+
+      moveLayersTo: (ids, target, groupId) =>
+        set((state) => {
+          const moving = ids.filter((id) => state.layers[id] && id !== target.id)
+          if (moving.length === 0 || !state.layers[target.id]) return {}
+          const rest = state.order.filter((id) => !moving.includes(id))
+          const at = rest.indexOf(target.id)
+          if (at < 0) return {}
+          const order = [...rest]
+          // Panel lists front (end of `order`) at the top.
+          order.splice(target.position === 'above' ? at + 1 : at, 0, ...moving)
+          if (groupId === undefined) return { order }
+          const layers = { ...state.layers }
+          for (const id of moving) {
+            const { groupId: _old, ...layer } = layers[id]
+            layers[id] = groupId ? { ...layer, groupId } : layer
+          }
+          return { order, layers }
+        }),
 
       setTexture: (id, texture) =>
         set((state) => {
@@ -920,7 +1060,8 @@ export const useDocumentStore = create<DocumentStore>()(
           }
           return { layers }
         }),
-    }),
+    }
+    },
     {
       // Selection is transient UI state, not something Cmd+Z should walk
       // back through — only the shape data itself belongs in history.

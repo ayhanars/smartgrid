@@ -41,6 +41,20 @@ export interface CutGeometries {
 
 const RESULT_CACHE_MAX = 16
 
+/** Holes whose footprint overlaps a visible solid — the ones doing real
+ * cutting right now (as opposed to a cutter parked off to the side). */
+export function activeHoleIds(layers: Record<string, ShapeLayer>, order: string[]): Set<string> {
+  const solids = order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible).map((id) => shapeWorldBounds(layers[id]))
+  const active = new Set<string>()
+  for (const id of order) {
+    const layer = layers[id]
+    if (!layer?.isHole || !layer.visible) continue
+    const bounds = shapeWorldBounds(layer)
+    if (solids.some((b) => rectsOverlap(b, bounds))) active.add(id)
+  }
+  return active
+}
+
 /**
  * A hole is a cutting tool, not a printable shape: any solid whose XY
  * footprint overlaps a hole's gets that hole's volume subtracted from it
