@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Cloud, CloudOff, CloudUpload, Copy, FolderOpen, MoreHorizontal, Pencil, Plus, Trash2, WifiOff } from 'lucide-react'
+import { ArrowRight, Cloud, CloudOff, CloudUpload, Copy, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, Trash2, WifiOff } from 'lucide-react'
 import {
   createLocalProject,
   duplicateLocalProject,
@@ -22,7 +22,10 @@ import { getBedPreset } from '../lib/geometry/bedPresets'
 import { contourBounds, regionsToSvgPath } from '../lib/geometry/primitives'
 import { ProjectPreview3D } from './ProjectPreview3D'
 import { loadLocalThumbnail } from '../lib/persistence/thumbnails'
+import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
+import { CommunityCard } from '../features/community/CommunityCard'
 import '../features/layers/LayerContextMenu.css'
+import '../features/community/community.css'
 import './HomePage.css'
 
 function relativeTime(ts: number): string {
@@ -50,7 +53,19 @@ export function HomePage() {
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
+  const [community, setCommunity] = useState<CommunityItem[] | null>(null)
   const refresh = () => setProjects(listLocalProjects())
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !online) return
+    let cancelled = false
+    listCommunityItems({ limit: 8 })
+      .then((list) => !cancelled && setCommunity(list))
+      .catch(() => !cancelled && setCommunity([]))
+    return () => {
+      cancelled = true
+    }
+  }, [online])
 
   const refreshCloud = useCallback(() => {
     if (!user) return
@@ -239,6 +254,37 @@ export function HomePage() {
                       <span className="home__card-meta">Edited {relativeTime(p.updatedAt)} · only in the cloud</span>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+        {isSupabaseConfigured && (
+          <section className="home__section">
+            <div className="home__section-header">
+              <h2>Community</h2>
+              <span className="home__hint">Models people shared. Open a copy and make it yours.</span>
+              <button type="button" className="home__see-all" onClick={() => navigate('/community')}>
+                Browse all
+                <ArrowRight size={13} />
+              </button>
+            </div>
+            {!online ? (
+              <div className="community-empty">The community needs a connection.</div>
+            ) : community === null ? (
+              <div className="community-empty">Loading…</div>
+            ) : community.length === 0 ? (
+              <div className="home__cloud">
+                <Globe size={22} />
+                <div>
+                  <strong>Nothing shared yet</strong>
+                  <p>Open a project and choose “Publish to community” from its menu to share a copy with everyone.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="home__grid">
+                {community.map((item) => (
+                  <CommunityCard key={item.id} item={item} onOpen={() => navigate(`/c/${item.id}`)} />
                 ))}
               </div>
             )}

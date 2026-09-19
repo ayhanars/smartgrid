@@ -3,6 +3,8 @@ import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-d
 import { HomePage } from './pages/HomePage'
 import { EditorPage } from './pages/EditorPage'
 import { AccountPage } from './pages/AccountPage'
+import { CommunityPage } from './pages/CommunityPage'
+import { CommunityItemPage } from './pages/CommunityItemPage'
 import { AuthGate } from './features/auth/AuthGate'
 import { PasswordRecoveryDialog } from './features/auth/PasswordRecoveryDialog'
 import { createLocalProject } from './lib/persistence/localProjects'
@@ -26,6 +28,8 @@ function App() {
         <Route path="/new" element={<NewProjectRedirect />} />
         <Route path="/p/:id" element={<EditorPage />} />
         <Route path="/account" element={<AccountPage />} />
+        <Route path="/community" element={<CommunityPage />} />
+        <Route path="/c/:id" element={<CommunityItemPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AuthGate />

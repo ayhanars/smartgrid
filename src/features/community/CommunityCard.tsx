@@ -1,0 +1,36 @@
+import { Box, Download, Star } from 'lucide-react'
+import type { CommunityItem } from '../../lib/supabase/community'
+import './community.css'
+
+export function Avatar({ name, url, large }: { name: string; url: string | null; large?: boolean }) {
+  return <span className={`community-avatar ${large ? 'community-avatar--lg' : ''}`}>{url ? <img src={url} alt="" referrerPolicy="no-referrer" /> : name.slice(0, 1)}</span>
+}
+
+/** One shared model in a grid; `showStatus` marks hidden / removed items
+ * for their owner and staff. */
+export function CommunityCard({ item, onOpen, showStatus }: { item: CommunityItem; onOpen: () => void; showStatus?: boolean }) {
+  return (
+    <div className="community-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === 'Enter' && onOpen()}>
+      <div className="community-card__thumb">
+        {item.thumbnail ? <img src={item.thumbnail} alt="" loading="lazy" /> : <Box size={28} />}
+        {item.featured && (
+          <span className="community-card__badge">
+            <Star size={9} /> featured
+          </span>
+        )}
+        {showStatus && item.status !== 'published' && <span className="community-card__badge community-card__badge--status">{item.status}</span>}
+      </div>
+      <div className="community-card__body">
+        <span className="community-card__title">{item.title}</span>
+        <span className="community-card__meta">
+          <Avatar name={item.author.displayName} url={item.author.avatarUrl} />
+          <span>{item.author.displayName}</span>
+          <span className="community-card__downloads" title="Copies opened">
+            <Download size={11} />
+            {item.downloads}
+          </span>
+        </span>
+      </div>
+    </div>
+  )
+}

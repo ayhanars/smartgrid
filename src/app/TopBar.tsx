@@ -20,6 +20,7 @@ import {
   Sparkles,
   Cloud,
   CloudOff,
+  Globe,
 } from 'lucide-react'
 import { IconButton } from '../components/IconButton'
 import { emptyDocument, serializeDocument, useDocumentStore, useTemporalStore } from '../state/documentStore'
@@ -31,6 +32,7 @@ import { requireAccount } from '../features/auth/authGate'
 import { useAuthStore } from '../features/auth/useAuthStore'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { useConnectivity } from '../lib/connectivity'
+import { PublishDialog } from '../features/community/PublishDialog'
 import { importSvgFiles } from '../lib/import/importSvgFiles'
 import type { ViewMode } from './AppShell'
 import '../features/layers/LayerContextMenu.css'
@@ -70,6 +72,7 @@ export function TopBar({
   const guest = isSupabaseConfigured && !authLoading && user === null
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [draft, setDraft] = useState(projectName)
   const workspaceRef = useRef<HTMLButtonElement>(null)
@@ -166,6 +169,22 @@ export function TopBar({
               <Copy size={13} />
               Duplicate project
             </button>
+            {isSupabaseConfigured && (
+              <>
+                <div className="layer-context-menu__divider" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!projectId}
+                  onClick={run(() => {
+                    if (requireAccount('community')) setPublishOpen(true)
+                  })}
+                >
+                  <Globe size={13} />
+                  Publish to community…
+                </button>
+              </>
+            )}
             <div className="layer-context-menu__divider" />
             <button type="button" role="menuitem" className="layer-context-menu__danger" disabled={!projectId} onClick={run(deleteProject)}>
               <Trash2 size={13} />
@@ -307,6 +326,7 @@ export function TopBar({
         <div className="top-bar__divider" />
         <UserMenu compact />
       </div>
+      {publishOpen && projectId && <PublishDialog projectId={projectId} onClose={() => setPublishOpen(false)} />}
     </header>
   )
 }

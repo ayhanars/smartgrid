@@ -260,3 +260,111 @@ create trigger user_assets_set_updated_at
   before update on public.user_assets
   for each row
   execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Community: models people chose to share. Each item is a *copy* of the
+-- project at publish time (plus the author's notes); the author can push a
+-- fresh copy from the source project later. Published items are visible to
+-- everyone, including guests; hidden ones only to their author and staff;
+-- removed ones only to staff.
+-- ---------------------------------------------------------------------------
+
+-- Author names and avatars show on community pages, so profiles are
+-- readable without signing in (they hold nothing private).
+drop policy if exists "Signed-in users can read profiles" on public.profiles;
+drop policy if exists "Profiles are publicly readable" on public.profiles;
+create policy "Profiles are publicly readable"
+  on public.profiles for select
+  using (true);
+
+create table if not exists public.community_items (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references public.profiles (id) on delete cascade,
+  -- The author's project this was published from (null once that project
+  -- is deleted); lets "Update from project" find the item again.
+  source_project_id uuid,
+  title text not null,
+  description text not null default '',
+  -- Free-form notes from the author: print tips, filament, what it fits.
+  notes text not null default '',
+  tags text[] not null default '{}',
+  data jsonb not null,
+  thumbnail text,
+  status text not null default 'published' check (status in ('published', 'hidden', 'removed')),
+  featured boolean not null default false,
+  downloads integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists community_items_owner_id_idx on public.community_items (owner_id);
+create index if not exists community_items_status_idx on public.community_items (status, created_at desc);
+create index if not exists community_items_source_idx on public.community_items (owner_id, source_project_id);
+
+alter table public.community_items enable row level security;
+
+drop policy if exists "Published items are visible to everyone" on public.community_items;
+create policy "Published items are visible to everyone"
+  on public.community_items for select
+  using (status = 'published' or auth.uid() = owner_id or public.is_staff());
+
+drop policy if exists "Users publish their own items" on public.community_items;
+create policy "Users publish their own items"
+  on public.community_items for insert
+  with check (auth.uid() = owner_id);
+
+drop policy if exists "Owners and staff update items" on public.community_items;
+create policy "Owners and staff update items"
+  on public.community_items for update
+  using (auth.uid() = owner_id or public.is_staff())
+  with check (auth.uid() = owner_id or public.is_staff());
+
+drop policy if exists "Owners and admins delete items" on public.community_items;
+create policy "Owners and admins delete items"
+  on public.community_items for delete
+  using (auth.uid() = owner_id or public.is_admin());
+
+-- Authors may publish / hide; only staff may remove, feature or reset the
+-- download count.
+create or replace function public.guard_community_item()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_staff() then
+    if new.featured is distinct from old.featured then new.featured := old.featured; end if;
+    -- The download counter only moves through record_community_download.
+    if new.downloads is distinct from old.downloads and coalesce(current_setting('smartgrid.counting', true), '') <> 'on' then
+      new.downloads := old.downloads;
+    end if;
+    if new.status = 'removed' or old.status = 'removed' then new.status := old.status; end if;
+    if new.owner_id is distinct from old.owner_id then new.owner_id := old.owner_id; end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists community_items_guard on public.community_items;
+create trigger community_items_guard
+  before update on public.community_items
+  for each row
+  execute function public.guard_community_item();
+
+-- Anyone (guests too) may count an "Open a copy".
+create or replace function public.record_community_download(p_item uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform set_config('smartgrid.counting', 'on', true);
+  update public.community_items set downloads = downloads + 1 where id = p_item and status = 'published';
+  perform set_config('smartgrid.counting', '', true);
+end;
+$$;
+
+grant execute on function public.record_community_download(uuid) to anon, authenticated;
