@@ -4,7 +4,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
 /** False when the build has no Supabase credentials: the app then runs in
- * local-only mode (no sign-in, no cloud sync, no assistant). */
+ * guest mode (no sign-in, no cloud sync, no community). */
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
 
 if (!isSupabaseConfigured) {

@@ -17,7 +17,6 @@ import {
   SquareSplitHorizontal,
   Square,
   Box,
-  Sparkles,
   Cloud,
   CloudOff,
   Globe,
@@ -64,8 +63,6 @@ export function TopBar({
   const setPrintPreview = useViewStore((s) => s.setPrintPreview)
   const saveStatus = useViewStore((s) => s.saveStatus)
   const cloudStatus = useViewStore((s) => s.cloudStatus)
-  const assistantOpen = useViewStore((s) => s.assistantOpen)
-  const setAssistantOpen = useViewStore((s) => s.setAssistantOpen)
   const online = useConnectivity((s) => s.online)
   const authLoading = useAuthStore((s) => s.loading)
   const user = useAuthStore((s) => s.user)
@@ -311,17 +308,6 @@ export function TopBar({
         </IconButton>
         <IconButton size="sm" active={rightPanelOpen} aria-label="Toggle inspector panel" onClick={onToggleRightPanel}>
           <PanelRight size={15} />
-        </IconButton>
-        <IconButton
-          size="sm"
-          active={assistantOpen}
-          aria-label="Toggle assistant"
-          tooltip="Assistant"
-          onClick={() => {
-            if (assistantOpen || requireAccount('assistant')) setAssistantOpen(!assistantOpen)
-          }}
-        >
-          <Sparkles size={15} />
         </IconButton>
         <div className="top-bar__divider" />
         <UserMenu compact />

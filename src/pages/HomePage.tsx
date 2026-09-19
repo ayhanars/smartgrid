@@ -141,7 +141,7 @@ export function HomePage() {
           <div className="home__banner home__banner--warn" role="status">
             <WifiOff size={16} />
             <span>
-              <strong>You are offline.</strong> Projects still save in this browser; cloud sync, sharing and the assistant resume when the connection is back.
+              <strong>You are offline.</strong> Projects still save in this browser; cloud sync and sharing resume when the connection is back.
             </span>
           </div>
         )}

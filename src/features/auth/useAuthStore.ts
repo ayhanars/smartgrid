@@ -55,7 +55,9 @@ export const useAuthStore = create<AuthState>((set, get) => {
       const user = session?.user ?? null
       const previous = get().user
       set({ session, user, loading: false, ...(event === 'PASSWORD_RECOVERY' ? { recovering: true } : {}) })
-      if (user?.id !== previous?.id || event === 'USER_UPDATED') void fetchProfile(user)
+      // supabase-js holds its auth lock while this callback runs, so a
+      // query started here would wait on itself: defer it a tick.
+      if (user?.id !== previous?.id || event === 'USER_UPDATED') window.setTimeout(() => void fetchProfile(user), 0)
     })
   }
 
