@@ -880,8 +880,8 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
                 ))}
               </div>
               <div className="inspector-grid-2">
-                <Field label="Plain margin at bottom" value={perf.wallFrom ?? defaultWallMargin(layer.extrusionDepth)} suffix="mm" onChange={(v) => patch({ wallFrom: Math.max(0, v) })} />
-                <Field label="Plain margin at top" value={perf.wallTopMargin ?? defaultWallMargin(layer.extrusionDepth)} suffix="mm" onChange={(v) => patch({ wallTopMargin: Math.max(0, v) })} />
+                <Field label={layer.bevelBottom > 0 ? 'Margin above the bevel' : 'Plain margin at bottom'} value={perf.wallFrom ?? (layer.bevelBottom > 0 ? 0 : defaultWallMargin(layer.extrusionDepth))} suffix="mm" onChange={(v) => patch({ wallFrom: Math.max(0, v) })} />
+                <Field label={layer.bevelTop > 0 ? 'Margin below the bevel' : 'Plain margin at top'} value={perf.wallTopMargin ?? (layer.bevelTop > 0 ? 0 : defaultWallMargin(layer.extrusionDepth))} suffix="mm" onChange={(v) => patch({ wallTopMargin: Math.max(0, v) })} />
               </div>
             </>
           )}

@@ -92,6 +92,8 @@ interface DocumentActions {
   setSelection: (ids: string[]) => void
   toggleVisibility: (id: string) => void
   toggleLocked: (id: string) => void
+  renameLayer: (id: string, name: string) => void
+  renameGroup: (groupId: string, name: string) => void
   /** Show/hide or lock/unlock several layers at once (a whole group). */
   setVisible: (ids: string[], visible: boolean) => void
   setLocked: (ids: string[], locked: boolean) => void
@@ -644,6 +646,22 @@ export const useDocumentStore = create<DocumentStore>()(
           const layer = state.layers[id]
           if (!layer) return {}
           return { layers: { ...state.layers, [id]: { ...layer, locked: !layer.locked } } }
+        }),
+
+      renameLayer: (id, name) =>
+        set((state) => {
+          const layer = state.layers[id]
+          const clean = name.trim()
+          if (!layer || !clean || clean === layer.name) return {}
+          return { layers: { ...state.layers, [id]: { ...layer, name: clean } } }
+        }),
+
+      renameGroup: (groupId, name) =>
+        set((state) => {
+          const group = state.groups[groupId]
+          const clean = name.trim()
+          if (!group || !clean || clean === group.name) return {}
+          return { groups: { ...state.groups, [groupId]: { ...group, name: clean } } }
         }),
 
       setVisible: (ids, visible) =>

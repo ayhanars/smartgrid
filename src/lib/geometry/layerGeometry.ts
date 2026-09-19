@@ -4,6 +4,7 @@ import { contourBounds } from './primitives'
 import { rotatedLocalPoints } from './layerBounds'
 import { roundPolygonCorners, smartPolishCorners } from './rounding'
 import { buildBeveledGeometry } from './bevelExtrude'
+import { computeSafeBevel } from './offset'
 import { buildSimpleRegionGeometry } from './multiRegionExtrude'
 import { buildPerforationCutter } from './perforation'
 
@@ -106,6 +107,21 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
   })
 }
 
+/** The fillet heights the mesh is actually built with: each bevel is
+ * clamped to what the outline can support, then both are scaled down so
+ * a hair of straight wall always remains (see buildBeveledGeometry). */
+function builtBevels(contour: Point2[], depth: number, layer: ShapeLayer): { bevelBottom: number; bevelTop: number } {
+  let bottom = Math.max(0, computeSafeBevel(contour, layer.bevelBottom))
+  let top = Math.max(0, computeSafeBevel(contour, layer.bevelTop))
+  const maxTotal = depth * 0.98
+  if (bottom + top > maxTotal) {
+    const k = maxTotal / (bottom + top)
+    bottom *= k
+    top *= k
+  }
+  return { bevelBottom: bottom, bevelTop: top }
+}
+
 /** A hole layer's footprint rings expressed in `solid`'s own unrotated
  * local frame (the frame its geometry and cutters are built in): world
  * XY, then undo the solid's spin about its footprint center. */
@@ -143,7 +159,7 @@ export function buildLayerCutters(layer: ShapeLayer, scale: number, holes: Shape
       zFrom: hole.transform.z - layer.transform.z,
       zTo: hole.transform.z - layer.transform.z + hole.extrusionDepth,
     }))
-  const cutters = buildPerforationCutter(contour, depth, layer.perforation, { innerContours, obstacles })
+  const cutters = buildPerforationCutter(contour, depth, layer.perforation, { innerContours, obstacles, ...builtBevels(contour, depth, layer) })
   if (cutters.length === 0) return []
   // Same bake as the body: derive it from the body's own (unscaled) mesh.
   const body = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop)

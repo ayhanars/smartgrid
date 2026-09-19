@@ -231,6 +231,10 @@ export interface PerforationContext {
    * "through the wall" stops just inside the nearest one. */
   innerContours?: Point2[][]
   obstacles?: PerforationObstacle[]
+  /** Height of the shape's bottom/top fillets as actually built (mm):
+   * the wall band sits on the flat wall between them. */
+  bevelBottom?: number
+  bevelTop?: number
 }
 
 /**
@@ -284,8 +288,14 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
   }
 
   if (perforation.target === 'walls' || perforation.target === 'both') {
-    const from = Math.max(0, perforation.wallFrom ?? defaultWallMargin(depth))
-    const to = Math.min(depth, depth - Math.max(0, perforation.wallTopMargin ?? defaultWallMargin(depth)))
+    // The band lives on the flat part of the wall: margins are measured
+    // from where the bottom fillet ends and where the top one begins, and
+    // a fillet counts as its own margin.
+    const bevelBottom = Math.max(0, context.bevelBottom ?? 0)
+    const bevelTop = Math.max(0, context.bevelTop ?? 0)
+    const flat = depth - bevelBottom - bevelTop
+    const from = bevelBottom + Math.max(0, perforation.wallFrom ?? (bevelBottom > 0 ? 0 : defaultWallMargin(flat)))
+    const to = depth - bevelTop - Math.max(0, perforation.wallTopMargin ?? (bevelTop > 0 ? 0 : defaultWallMargin(flat)))
     const rowSpacing = Math.max(spacing, ext.v + MIN_GAP_MM)
     const colSpacing = Math.max(spacing, ext.u + MIN_GAP_MM)
     const rows = centersAlong(to - from, ext.v, rowSpacing, false).map((v) => from + v)

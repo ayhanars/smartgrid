@@ -60,6 +60,34 @@ export function LayersPanel() {
   const toggleLocked = useDocumentStore((s) => s.toggleLocked)
   const setVisible = useDocumentStore((s) => s.setVisible)
   const setLocked = useDocumentStore((s) => s.setLocked)
+  const renameLayer = useDocumentStore((s) => s.renameLayer)
+  const renameGroup = useDocumentStore((s) => s.renameGroup)
+  // Double-click a name to edit it in place (Enter/blur commits, Esc cancels).
+  const [editing, setEditing] = useState<{ kind: 'layer' | 'group'; id: string; draft: string } | null>(null)
+  const commitRename = () => {
+    if (!editing) return
+    if (editing.kind === 'layer') renameLayer(editing.id, editing.draft)
+    else renameGroup(editing.id, editing.draft)
+    setEditing(null)
+  }
+  const renameInput = (
+    <input
+      className="layer-row__rename"
+      autoFocus
+      value={editing?.draft ?? ''}
+      aria-label="Rename"
+      onChange={(e) => setEditing((ed) => (ed ? { ...ed, draft: e.target.value } : ed))}
+      onFocus={(e) => e.target.select()}
+      onBlur={commitRename}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Enter') commitRename()
+        if (e.key === 'Escape') setEditing(null)
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    />
+  )
   const moveLayersTo = useDocumentStore((s) => s.moveLayersTo)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
@@ -170,6 +198,7 @@ export function LayersPanel() {
         className={`layer-row ${isSelected ? 'layer-row--selected' : ''} ${layer.visible ? '' : 'layer-row--hidden'} ${nested ? 'layer-row--nested' : ''} ${dragging ? 'layer-row--dragging' : ''} ${dropClass(id)}`}
         onPointerDown={(e) => armDrag(isSelected && selection.length > 1 ? selection : [id], e)}
         onClick={(e) => clickLayer(id, e)}
+        onDoubleClick={() => setEditing({ kind: 'layer', id, draft: layer.name })}
         onContextMenu={(e) => {
           e.preventDefault()
           setContextMenu({ x: e.clientX, y: e.clientY, layerId: id })
@@ -177,7 +206,7 @@ export function LayersPanel() {
       >
         <span className={`layer-row__icon ${layer.isHole ? 'layer-row__icon--hole' : ''}`}>{kindIcon[layer.kind]}</span>
         <LayerThumbnail layer={layer} />
-        <span className="layer-row__name">{layer.name}</span>
+        {editing?.kind === 'layer' && editing.id === id ? renameInput : <span className="layer-row__name">{layer.name}</span>}
         <div className="layer-row__actions">
           <button
             type="button"
@@ -236,6 +265,7 @@ export function LayersPanel() {
           setSelection(members)
           anchorRef.current = members[0]
         }}
+        onDoubleClick={() => setEditing({ kind: 'group', id: groupId, draft: groups[groupId].name })}
         onContextMenu={(e) => {
           e.preventDefault()
           setContextMenu({ x: e.clientX, y: e.clientY, layerId: members[0] })
@@ -253,7 +283,7 @@ export function LayersPanel() {
           {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
         </button>
         <Folder size={13} />
-        <span className="layer-group__name">{groups[groupId].name}</span>
+        {editing?.kind === 'group' && editing.id === groupId ? renameInput : <span className="layer-group__name">{groups[groupId].name}</span>}
         <span className="layer-group__count">{members.length}</span>
         <div className={`layer-row__actions ${anyHidden || anyLocked ? 'layer-row__actions--pinned' : ''}`}>
           <button
