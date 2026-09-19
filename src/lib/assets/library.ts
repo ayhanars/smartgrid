@@ -41,7 +41,7 @@ export const ASSET_LIBRARY: AssetDefinition[] = [
         cornerRadius: 8,
         color: BLUE,
         hollow: { wall: 1.6, floor: 1.2, openFrom: 'top' },
-        perforation: { shape: 'round', pattern: 'staggered', size: 3.2, spacing: 5.5, target: 'walls', depth: null, wallFrom: 4, wallTo: 41 },
+        perforation: { shape: 'round', pattern: 'staggered', size: 3.2, spacing: 5.5, target: 'walls', depth: null, wallFrom: 4, wallTopMargin: 4 },
       }),
     ],
   },

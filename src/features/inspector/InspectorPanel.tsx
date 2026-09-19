@@ -19,7 +19,7 @@ import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
 import { IconButton } from '../../components/IconButton'
-import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, HOLE_SHAPES, INFILL_PATTERNS, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
+import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, HOLE_SHAPES, INFILL_PATTERNS, defaultWallMargin, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
 import { TexturePreview } from './TexturePreview'
 import { prepareTile } from '../../lib/geometry/customTile'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
@@ -810,12 +810,7 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
           <button
             type="button"
             className="inspector-export-btn"
-            onClick={() => {
-              // Start with a plain margin at the floor and the rim, like a
-              // printed basket: holes right at an edge print badly.
-              const margin = layer.extrusionDepth >= 12 ? 3 : 0
-              patch({ wallFrom: margin, wallTo: layer.extrusionDepth - margin })
-            }}
+            onClick={() => patch({})}
           >
             Add a grid of holes
           </button>
@@ -885,8 +880,8 @@ function PerforationSection({ layer }: { layer: ShapeLayer }) {
                 ))}
               </div>
               <div className="inspector-grid-2">
-                <Field label="Band from (bottom)" value={perf.wallFrom ?? 0} suffix="mm" onChange={(v) => patch({ wallFrom: Math.max(0, v) })} />
-                <Field label="Band to" value={perf.wallTo ?? layer.extrusionDepth} suffix="mm" onChange={(v) => patch({ wallTo: Math.max(0, v) })} />
+                <Field label="Plain margin at bottom" value={perf.wallFrom ?? defaultWallMargin(layer.extrusionDepth)} suffix="mm" onChange={(v) => patch({ wallFrom: Math.max(0, v) })} />
+                <Field label="Plain margin at top" value={perf.wallTopMargin ?? defaultWallMargin(layer.extrusionDepth)} suffix="mm" onChange={(v) => patch({ wallTopMargin: Math.max(0, v) })} />
               </div>
             </>
           )}

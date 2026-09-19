@@ -178,10 +178,19 @@ export interface Perforation {
   /** Hole depth from the surface, mm; null = right through. */
   depth: number | null
   sides?: WallSide[]
+  /** Plain margin left below the wall holes (from the shape's bottom) and
+   * above them (from its top), mm. Margins rather than heights, so the
+   * band follows the shape when its depth changes. Missing = 3 mm on a
+   * shape 12 mm or taller, else none. */
   wallFrom?: number
-  wallTo?: number
+  wallTopMargin?: number
   /** Plain margin kept around the top-face holes, mm. */
   topInset?: number
+}
+
+/** The default plain margin at the floor and the rim of a wall band. */
+export function defaultWallMargin(depth: number): number {
+  return depth >= 12 ? 3 : 0
 }
 
 export const DEFAULT_PERFORATION: Perforation = { shape: 'round', pattern: 'grid', size: 3, spacing: 5.5, target: 'walls', depth: null }

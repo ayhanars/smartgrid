@@ -973,8 +973,11 @@ export const useDocumentStore = create<DocumentStore>()(
             return { layers: { ...state.layers, [id]: rest } }
           }
           const size = Math.min(50, Math.max(0.3, perforation.size))
+          // Older projects stored the band's top as a height; it is a
+          // margin now, so that value is dropped rather than misread.
+          const { wallTo: _legacyTop, ...incoming } = perforation as Perforation & { wallTo?: number }
           const clean: Perforation = {
-            ...perforation,
+            ...incoming,
             size,
             spacing: Math.max(size + 0.4, perforation.spacing),
             depth: perforation.depth == null ? null : Math.max(0.1, perforation.depth),

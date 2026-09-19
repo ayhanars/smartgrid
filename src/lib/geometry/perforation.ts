@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import type { HoleShape, Perforation, Point2, WallSide } from '../../types/document'
+import { defaultWallMargin, type HoleShape, type Perforation, type Point2, type WallSide } from '../../types/document'
 
 /** Reach past the surface so CSG never has to resolve coplanar faces. */
 const OVERSHOOT_MM = 0.5
@@ -279,8 +279,8 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
   }
 
   if (perforation.target === 'walls' || perforation.target === 'both') {
-    const from = Math.max(0, perforation.wallFrom ?? 0)
-    const to = Math.min(depth, perforation.wallTo ?? depth)
+    const from = Math.max(0, perforation.wallFrom ?? defaultWallMargin(depth))
+    const to = Math.min(depth, depth - Math.max(0, perforation.wallTopMargin ?? defaultWallMargin(depth)))
     const rowSpacing = Math.max(spacing, ext.v + MIN_GAP_MM)
     const colSpacing = Math.max(spacing, ext.u + MIN_GAP_MM)
     const rows = centersAlong(to - from, ext.v, rowSpacing, false).map((v) => from + v)
