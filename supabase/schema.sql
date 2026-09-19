@@ -152,6 +152,16 @@ create policy "Users can update their own profile"
   using (auth.uid() = id or public.is_admin())
   with check (auth.uid() = id or public.is_admin());
 
+-- True for requests that carry a user JWT (the app); false for the SQL
+-- editor, migrations and the service role, which may change anything.
+create or replace function public.is_user_request()
+returns boolean
+language sql
+stable
+as $$
+  select coalesce(auth.role(), '') in ('authenticated', 'anon');
+$$;
+
 -- Only admins may change a role; everyone else keeps whatever they had.
 create or replace function public.guard_profile_role()
 returns trigger
@@ -160,7 +170,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if new.role is distinct from old.role and not public.is_admin() then
+  if new.role is distinct from old.role and public.is_user_request() and not public.is_admin() then
     new.role := old.role;
   end if;
   new.updated_at := now();
@@ -333,7 +343,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_staff() then
+  if public.is_user_request() and not public.is_staff() then
     if new.featured is distinct from old.featured then new.featured := old.featured; end if;
     -- The download counter only moves through record_community_download.
     if new.downloads is distinct from old.downloads and coalesce(current_setting('smartgrid.counting', true), '') <> 'on' then
@@ -368,3 +378,115 @@ end;
 $$;
 
 grant execute on function public.record_community_download(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Admin dashboard: staff-only readers over data that RLS otherwise hides
+-- (other people's projects, emails, assistant usage). Each checks the
+-- caller's role itself, so they are safe to expose through PostgREST.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.admin_stats()
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  result json;
+begin
+  if not public.is_staff() then
+    raise exception 'staff only' using errcode = '42501';
+  end if;
+  select json_build_object(
+    'users', (select count(*) from auth.users),
+    'users_7d', (select count(*) from auth.users where created_at > now() - interval '7 days'),
+    'projects', (select count(*) from public.projects),
+    'assets', (select count(*) from public.user_assets),
+    'community_published', (select count(*) from public.community_items where status = 'published'),
+    'community_hidden', (select count(*) from public.community_items where status = 'hidden'),
+    'community_removed', (select count(*) from public.community_items where status = 'removed'),
+    'community_downloads', (select coalesce(sum(downloads), 0) from public.community_items),
+    'assistant_requests_today', (select coalesce(sum(requests), 0) from public.assistant_usage where day = (now() at time zone 'utc')::date),
+    'assistant_output_tokens_today', (select coalesce(sum(output_tokens), 0) from public.assistant_usage where day = (now() at time zone 'utc')::date),
+    'assistant_requests_30d', (select coalesce(sum(requests), 0) from public.assistant_usage where day > (now() at time zone 'utc')::date - 30),
+    'assistant_output_tokens_30d', (select coalesce(sum(output_tokens), 0) from public.assistant_usage where day > (now() at time zone 'utc')::date - 30)
+  ) into result;
+  return result;
+end;
+$$;
+
+create or replace function public.admin_users(p_query text default '', p_limit integer default 100)
+returns table (
+  id uuid,
+  email text,
+  display_name text,
+  avatar_url text,
+  role text,
+  created_at timestamptz,
+  last_sign_in_at timestamptz,
+  projects integer,
+  community_items integer,
+  assistant_requests_30d integer
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_staff() then
+    raise exception 'staff only' using errcode = '42501';
+  end if;
+  return query
+    select
+      u.id,
+      u.email::text,
+      p.display_name,
+      p.avatar_url,
+      p.role,
+      u.created_at,
+      u.last_sign_in_at,
+      (select count(*)::integer from public.projects pr where pr.owner_id = u.id),
+      (select count(*)::integer from public.community_items ci where ci.owner_id = u.id and ci.status <> 'removed'),
+      (select coalesce(sum(au.requests), 0)::integer from public.assistant_usage au where au.user_id = u.id and au.day > (now() at time zone 'utc')::date - 30)
+    from auth.users u
+    left join public.profiles p on p.id = u.id
+    where p_query = '' or u.email ilike '%' || p_query || '%' or p.display_name ilike '%' || p_query || '%'
+    order by u.created_at desc
+    limit greatest(1, least(p_limit, 500));
+end;
+$$;
+
+create or replace function public.admin_assistant_usage(p_days integer default 30)
+returns table (
+  day date,
+  requests bigint,
+  input_tokens bigint,
+  output_tokens bigint,
+  users bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_staff() then
+    raise exception 'staff only' using errcode = '42501';
+  end if;
+  return query
+    select au.day, sum(au.requests), sum(au.input_tokens), sum(au.output_tokens), count(distinct au.user_id)
+    from public.assistant_usage au
+    where au.day > (now() at time zone 'utc')::date - greatest(1, least(p_days, 365))
+    group by au.day
+    order by au.day desc;
+end;
+$$;
+
+revoke all on function public.admin_stats() from public;
+revoke all on function public.admin_users(text, integer) from public;
+revoke all on function public.admin_assistant_usage(integer) from public;
+grant execute on function public.admin_stats() to authenticated;
+grant execute on function public.admin_users(text, integer) to authenticated;
+grant execute on function public.admin_assistant_usage(integer) to authenticated;

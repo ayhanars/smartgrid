@@ -57,11 +57,12 @@ npm run dev
 ## Cloud setup (Supabase, free tier)
 
 Everything server-side runs on one free Supabase project: sign-in (email +
-password, or Google), the `projects` and `profiles` tables, an `avatars`
-storage bucket, and two Edge Functions: `claude` (fronts the Anthropic API)
-and `account` (deletes a user, which needs the service role). Without the
-Supabase env vars the app still works in guest mode (no sign-in, no sync,
-no assistant).
+password, or Google), the `projects`, `profiles`, `user_assets` and
+`community_items` tables, an `avatars` storage bucket, and two Edge
+Functions: `claude` (fronts the Anthropic API) and `account` (deletes a
+user, which needs the service role). Without the Supabase env vars the app
+still works in guest mode (no sign-in, no sync, no assistant, no
+community).
 
 1. **Create a project** at https://supabase.com/dashboard (free tier).
 2. **Run the schema**: open SQL Editor and run `supabase/schema.sql`. It
@@ -96,7 +97,24 @@ avatar, name, email, password, sign-out and account deletion.
 How sync works: projects always autosave to the browser. While signed in
 they also autosave to the cloud a couple of seconds later, and the home
 page lists cloud-only projects so you can open them on another device.
-Deleting a project removes both copies.
+Deleting a project removes both copies. Offline, the editor keeps saving
+locally, says so in the top bar, and uploads when the connection is back;
+project cards flag anything not yet in the cloud. "My assets" (shapes saved
+from a selection or a layer's "Save as asset") sync the same way.
+
+Community: "Publish to community…" in a project's menu stores a *copy* of
+the project with a title, description, print notes and tags; the same menu
+entry later edits the listing or replaces the shared model with the
+current project. `/community` lists and searches shared models, `/c/<id>`
+shows one and opens a copy into your projects. Authors can hide or remove
+their own items.
+
+Roles: `profiles.role` is `user`, `moderator` or `admin`. Staff get an
+Admin entry in the user menu (`/admin`: overview numbers, community
+moderation with feature / hide / remove, user list, assistant usage);
+admins also change roles there and can delete removed items for good. The
+first admin comes from `bootstrap_admins` in the schema; promote others
+from the Users tab.
 
 ## Custom domain
 

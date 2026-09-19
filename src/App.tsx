@@ -5,6 +5,7 @@ import { EditorPage } from './pages/EditorPage'
 import { AccountPage } from './pages/AccountPage'
 import { CommunityPage } from './pages/CommunityPage'
 import { CommunityItemPage } from './pages/CommunityItemPage'
+import { AdminPage } from './pages/AdminPage'
 import { AuthGate } from './features/auth/AuthGate'
 import { PasswordRecoveryDialog } from './features/auth/PasswordRecoveryDialog'
 import { createLocalProject } from './lib/persistence/localProjects'
@@ -30,6 +31,7 @@ function App() {
         <Route path="/account" element={<AccountPage />} />
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/c/:id" element={<CommunityItemPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AuthGate />
