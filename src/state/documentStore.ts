@@ -49,7 +49,7 @@ export interface ShapeGroup {
   name: string
 }
 
-interface DocumentState {
+export interface DocumentState {
   layers: Record<string, ShapeLayer>
   groups: Record<string, ShapeGroup>
   /** Back-to-front draw order (also top-to-bottom in the Layers panel, reversed for display). */

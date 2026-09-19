@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Cloud, Copy, FolderOpen, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Cloud, CloudUpload, Copy, FolderOpen, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import {
   createLocalProject,
-  deleteLocalProject,
   duplicateLocalProject,
   listLocalProjects,
   loadLocalProject,
@@ -11,6 +10,12 @@ import {
   type DocumentSnapshot,
   type LocalProjectMeta,
 } from '../lib/persistence/localProjects'
+import { deleteProjectEverywhere, isCloudSyncable, uploadProject } from '../lib/persistence/cloudSync'
+import { listCloudProjects, type CloudProjectMeta } from '../lib/supabase/projects'
+import { isSupabaseConfigured } from '../lib/supabase/client'
+import { useAuthStore } from '../features/auth/useAuthStore'
+import { AuthDialog } from '../features/auth/AuthDialog'
+import { UserMenu } from '../features/auth/UserMenu'
 import { emptyDocument } from '../state/documentStore'
 import { getBedPreset } from '../lib/geometry/bedPresets'
 import { contourBounds, regionsToSvgPath } from '../lib/geometry/primitives'
@@ -30,14 +35,33 @@ function relativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString()
 }
 
-/** Landing page: every project saved in this browser, plus where cloud
- * versions will live once sync ships. */
+/** Landing page: every project saved in this browser, plus the signed-in
+ * user's cloud copies. */
 export function HomePage() {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
   const [projects, setProjects] = useState<LocalProjectMeta[]>(() => listLocalProjects())
+  const [cloudProjects, setCloudProjects] = useState<CloudProjectMeta[] | null>(null)
+  const [cloudError, setCloudError] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [authOpen, setAuthOpen] = useState(false)
   const refresh = () => setProjects(listLocalProjects())
+
+  const refreshCloud = useCallback(() => {
+    if (!user) return
+    listCloudProjects()
+      .then((list) => {
+        setCloudProjects(list)
+        setCloudError(null)
+      })
+      .catch((err: unknown) => setCloudError(err instanceof Error ? err.message : 'Could not load cloud projects'))
+  }, [user])
+  useEffect(refreshCloud, [refreshCloud])
+
+  const localIds = useMemo(() => new Set(projects.map((p) => p.id)), [projects])
+  const cloudIds = useMemo(() => new Set((user ? cloudProjects ?? [] : []).map((p) => p.id)), [user, cloudProjects])
+  const cloudOnly = (user ? cloudProjects ?? [] : []).filter((p) => !localIds.has(p.id))
 
   const open = (id: string) => navigate(`/p/${id}`)
   const createProject = () => {
@@ -49,9 +73,20 @@ export function HomePage() {
     refresh()
   }
   const remove = (id: string, name: string) => {
-    if (!window.confirm(`Delete "${name}" from this browser? This can't be undone.`)) return
-    deleteLocalProject(id)
-    refresh()
+    const inCloud = user !== null && cloudIds.has(id)
+    const where = inCloud ? 'from this browser and the cloud' : 'from this browser'
+    if (!window.confirm(`Delete "${name}" ${where}? This can't be undone.`)) return
+    void deleteProjectEverywhere(id).then(() => {
+      refresh()
+      refreshCloud()
+    })
+  }
+  const upload = (id: string) => {
+    uploadProject(id)
+      .then((ok) => {
+        if (ok) refreshCloud()
+      })
+      .catch((err: unknown) => setCloudError(err instanceof Error ? err.message : 'Upload failed'))
   }
   const rename = (id: string, name: string) => {
     const trimmed = name.trim()
@@ -67,10 +102,13 @@ export function HomePage() {
           <span className="home__logo">sg</span>
           <span>smartgrid</span>
         </div>
-        <button type="button" className="home__new" onClick={createProject}>
-          <Plus size={15} />
-          New project
-        </button>
+        <div className="home__header-actions">
+          <UserMenu />
+          <button type="button" className="home__new" onClick={createProject}>
+            <Plus size={15} />
+            New project
+          </button>
+        </div>
       </header>
 
       <main className="home__main">
@@ -91,6 +129,7 @@ export function HomePage() {
                 <ProjectCard
                   key={p.id}
                   meta={p}
+                  inCloud={user !== null && cloudIds.has(p.id)}
                   renaming={renamingId === p.id}
                   onOpen={() => open(p.id)}
                   onMenu={(x, y) => setMenu({ id: p.id, x, y })}
@@ -106,22 +145,76 @@ export function HomePage() {
           )}
         </section>
 
-        <section className="home__section">
-          <div className="home__section-header">
-            <h2>Cloud versions</h2>
-            <span className="home__hint">Coming soon</span>
-          </div>
-          <div className="home__cloud">
-            <Cloud size={22} />
-            <div>
-              <strong>Sync your projects to the cloud</strong>
-              <p>Sign in to keep a version history of every project and open it from any device. Available when we release — your local versions above will be ready to upload.</p>
+        {isSupabaseConfigured && (
+          <section className="home__section">
+            <div className="home__section-header">
+              <h2>Cloud versions</h2>
+              <span className="home__hint">
+                {!user
+                  ? 'Sign in to sync'
+                  : cloudProjects === null
+                    ? 'Loading…'
+                    : `${cloudProjects.length} project${cloudProjects.length === 1 ? '' : 's'} in the cloud`}
+              </span>
             </div>
-            <button type="button" className="home__cloud-btn" disabled>
-              Sign in · soon
-            </button>
-          </div>
-        </section>
+            {!user ? (
+              <div className="home__cloud">
+                <Cloud size={22} />
+                <div>
+                  <strong>Sync your projects to the cloud</strong>
+                  <p>Sign in to keep every project backed up, open it from any device, and use the design assistant. Projects you open while signed in sync automatically.</p>
+                </div>
+                <button type="button" className="home__cloud-btn" onClick={() => setAuthOpen(true)}>
+                  Sign in
+                </button>
+              </div>
+            ) : cloudError ? (
+              <div className="home__cloud">
+                <Cloud size={22} />
+                <div>
+                  <strong>Couldn't reach the cloud</strong>
+                  <p>{cloudError}</p>
+                </div>
+                <button type="button" className="home__cloud-btn" onClick={refreshCloud}>
+                  Retry
+                </button>
+              </div>
+            ) : cloudOnly.length === 0 ? (
+              <div className="home__cloud">
+                <Cloud size={22} />
+                <div>
+                  <strong>{cloudIds.size === 0 ? 'Nothing in the cloud yet' : 'Everything is on this device'}</strong>
+                  <p>
+                    {cloudIds.size === 0
+                      ? 'Open a project and it will sync as you work, or use “Upload to cloud” from a project’s menu.'
+                      : 'All your cloud projects are also saved in this browser. Projects only in the cloud show up here.'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="home__grid">
+                {cloudOnly.map((p) => (
+                  <div
+                    key={p.id}
+                    className="home__card home__card--cloud"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => open(p.id)}
+                    onKeyDown={(e) => e.key === 'Enter' && open(p.id)}
+                  >
+                    <div className="home__thumb home__thumb--cloud">
+                      <Cloud size={26} />
+                    </div>
+                    <div className="home__card-body">
+                      <span className="home__card-name">{p.name}</span>
+                      <span className="home__card-meta">Edited {relativeTime(p.updatedAt)} · only in the cloud</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
       {menu && (
@@ -132,15 +225,18 @@ export function HomePage() {
           onOpen={() => open(menu.id)}
           onRename={() => setRenamingId(menu.id)}
           onDuplicate={() => duplicate(menu.id)}
+          onUpload={user && isCloudSyncable(menu.id) && !cloudIds.has(menu.id) ? () => upload(menu.id) : undefined}
           onDelete={() => remove(menu.id, projects.find((p) => p.id === menu.id)?.name ?? 'project')}
         />
       )}
+      {authOpen && <AuthDialog onClose={() => setAuthOpen(false)} />}
     </div>
   )
 }
 
 function ProjectCard({
   meta,
+  inCloud,
   renaming,
   onOpen,
   onMenu,
@@ -148,6 +244,7 @@ function ProjectCard({
   onCancelRename,
 }: {
   meta: LocalProjectMeta
+  inCloud: boolean
   renaming: boolean
   onOpen: () => void
   onMenu: (x: number, y: number) => void
@@ -200,6 +297,11 @@ function ProjectCard({
         )}
         <span className="home__card-meta">
           Edited {relativeTime(meta.updatedAt)} · {meta.shapeCount} shape{meta.shapeCount === 1 ? '' : 's'}
+          {inCloud && (
+            <span className="home__card-cloud" title="Synced to the cloud">
+              <Cloud size={11} />
+            </span>
+          )}
         </span>
       </div>
       <button
@@ -253,6 +355,7 @@ function ProjectMenu({
   onOpen,
   onRename,
   onDuplicate,
+  onUpload,
   onDelete,
 }: {
   x: number
@@ -261,6 +364,7 @@ function ProjectMenu({
   onOpen: () => void
   onRename: () => void
   onDuplicate: () => void
+  onUpload?: () => void
   onDelete: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -294,6 +398,12 @@ function ProjectMenu({
         <Copy size={13} />
         Duplicate
       </button>
+      {onUpload && (
+        <button type="button" role="menuitem" onClick={run(onUpload)}>
+          <CloudUpload size={13} />
+          Upload to cloud
+        </button>
+      )}
       <div className="layer-context-menu__divider" />
       <button type="button" role="menuitem" className="layer-context-menu__danger" onClick={run(onDelete)}>
         <Trash2 size={13} />

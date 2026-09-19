@@ -4,6 +4,7 @@ import { LeftPanel } from './LeftPanel'
 import { InspectorPanel } from '../features/inspector/InspectorPanel'
 import { Canvas2DPane } from '../features/canvas-2d/Canvas2DPane'
 import { Viewport3DPane } from '../features/viewport-3d/Viewport3DPane'
+import { AssistantPanel } from '../features/assistant/AssistantPanel'
 import { useDocumentStore } from '../state/documentStore'
 import { useAnalysisStore } from '../state/analysisStore'
 import { useViewStore } from '../state/viewStore'
@@ -82,6 +83,7 @@ export function AppShell() {
   // The print preview lives in the 3D viewport, so turning it on from a
   // 2D-only layout brings the 3D pane back into view.
   const printPreview = useViewStore((s) => s.printPreview)
+  const assistantOpen = useViewStore((s) => s.assistantOpen)
   useEffect(() => {
     if (printPreview) setViewMode((mode) => (mode === '2d' ? 'split' : mode))
   }, [printPreview])
@@ -134,6 +136,7 @@ export function AppShell() {
             <InspectorPanel />
           </aside>
         )}
+        {assistantOpen && <AssistantPanel />}
       </div>
     </div>
   )

@@ -1,0 +1,217 @@
+.auth-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.auth-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  padding: 28px 26px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.auth-dialog h2 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.auth-dialog__lead {
+  margin: 0 0 20px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.auth-dialog__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+}
+
+.auth-dialog__close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.auth-dialog__google,
+.auth-dialog__submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.auth-dialog__google {
+  background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+.auth-dialog__google:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.auth-dialog__submit {
+  background: var(--accent);
+  color: white;
+}
+
+.auth-dialog__submit:disabled,
+.auth-dialog__google:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.auth-dialog__or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.auth-dialog__or::before,
+.auth-dialog__or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-dialog__form label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.auth-dialog__form input {
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font: inherit;
+}
+
+.auth-dialog__form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.auth-dialog__sent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  text-align: center;
+  font-size: 12.5px;
+}
+
+.auth-dialog__error {
+  margin: 12px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* User chip / sign-in button shared by the home header and the editor top bar. */
+.user-menu {
+  position: relative;
+}
+
+.user-menu__button,
+.user-menu__signin {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px 5px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.user-menu__signin {
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+.user-menu__button:hover,
+.user-menu__signin:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.user-menu__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  overflow: hidden;
+}
+
+.user-menu__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-menu__email {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__popover {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 220px;
+}
+
+.user-menu__popover-header {
+  padding: 8px 10px 6px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

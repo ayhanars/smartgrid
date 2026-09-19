@@ -17,11 +17,16 @@ import {
   SquareSplitHorizontal,
   Square,
   Box,
+  Sparkles,
+  Cloud,
+  CloudOff,
 } from 'lucide-react'
 import { IconButton } from '../components/IconButton'
 import { emptyDocument, serializeDocument, useDocumentStore, useTemporalStore } from '../state/documentStore'
 import { useViewStore } from '../state/viewStore'
-import { createLocalProject, deleteLocalProject, duplicateLocalProject, saveLocalProject } from '../lib/persistence/localProjects'
+import { createLocalProject, duplicateLocalProject, saveLocalProject } from '../lib/persistence/localProjects'
+import { deleteProjectEverywhere } from '../lib/persistence/cloudSync'
+import { UserMenu } from '../features/auth/UserMenu'
 import { importSvgFiles } from '../lib/import/importSvgFiles'
 import type { ViewMode } from './AppShell'
 import '../features/layers/LayerContextMenu.css'
@@ -52,6 +57,9 @@ export function TopBar({
   const printPreview = useViewStore((s) => s.printPreview)
   const setPrintPreview = useViewStore((s) => s.setPrintPreview)
   const saveStatus = useViewStore((s) => s.saveStatus)
+  const cloudStatus = useViewStore((s) => s.cloudStatus)
+  const assistantOpen = useViewStore((s) => s.assistantOpen)
+  const setAssistantOpen = useViewStore((s) => s.setAssistantOpen)
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [editingName, setEditingName] = useState(false)
@@ -103,8 +111,9 @@ export function TopBar({
   }
   const deleteProject = () => {
     if (!projectId) return
-    if (!window.confirm(`Delete "${projectName}" from this browser? This can't be undone.`)) return
-    deleteLocalProject(projectId)
+    const where = cloudStatus === 'off' ? 'from this browser' : 'from this browser and the cloud'
+    if (!window.confirm(`Delete "${projectName}" ${where}? This can't be undone.`)) return
+    void deleteProjectEverywhere(projectId)
     navigate('/')
   }
 
@@ -196,8 +205,20 @@ export function TopBar({
             {projectName}
           </button>
         )}
-        <span className="top-bar__save" aria-live="polite">
-          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved locally' : ''}
+        <span className="top-bar__save" aria-live="polite" title={cloudStatus === 'error' ? 'The last cloud save failed; your changes are still saved in this browser.' : undefined}>
+          {saveStatus === 'saving'
+            ? 'Saving…'
+            : cloudStatus === 'syncing'
+              ? 'Syncing to cloud…'
+              : cloudStatus === 'synced'
+                ? 'Saved to cloud'
+                : cloudStatus === 'error'
+                  ? 'Cloud save failed'
+                  : saveStatus === 'saved'
+                    ? 'Saved locally'
+                    : ''}
+          {cloudStatus === 'synced' && <Cloud size={12} />}
+          {cloudStatus === 'error' && <CloudOff size={12} />}
         </span>
       </div>
 
@@ -237,6 +258,11 @@ export function TopBar({
         <IconButton size="sm" active={rightPanelOpen} aria-label="Toggle inspector panel" onClick={onToggleRightPanel}>
           <PanelRight size={15} />
         </IconButton>
+        <IconButton size="sm" active={assistantOpen} aria-label="Toggle assistant" tooltip="Assistant" onClick={() => setAssistantOpen(!assistantOpen)}>
+          <Sparkles size={15} />
+        </IconButton>
+        <div className="top-bar__divider" />
+        <UserMenu compact />
       </div>
     </header>
   )

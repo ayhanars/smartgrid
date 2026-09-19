@@ -1,0 +1,8 @@
+# Supabase CLI project config. `project_id` is only used for local dev
+# naming; deploys target whatever `--project-ref` is passed.
+project_id = "smartgrid"
+
+[functions.claude]
+# The function verifies the user's JWT itself (it needs the user id for the
+# usage ledger), so the gateway check is redundant but harmless.
+verify_jwt = true
