@@ -2,6 +2,12 @@ import { useEffect } from 'react'
 import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { HomePage } from './pages/HomePage'
 import { EditorPage } from './pages/EditorPage'
+import { AccountPage } from './pages/AccountPage'
+import { CommunityPage } from './pages/CommunityPage'
+import { CommunityItemPage } from './pages/CommunityItemPage'
+import { AdminPage } from './pages/AdminPage'
+import { AuthGate } from './features/auth/AuthGate'
+import { PasswordRecoveryDialog } from './features/auth/PasswordRecoveryDialog'
 import { createLocalProject } from './lib/persistence/localProjects'
 import { emptyDocument } from './state/documentStore'
 
@@ -22,8 +28,14 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/new" element={<NewProjectRedirect />} />
         <Route path="/p/:id" element={<EditorPage />} />
+        <Route path="/account" element={<AccountPage />} />
+        <Route path="/community" element={<CommunityPage />} />
+        <Route path="/c/:id" element={<CommunityItemPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <AuthGate />
+      <PasswordRecoveryDialog />
     </HashRouter>
   )
 }

@@ -19,6 +19,7 @@ import { SCENE_SCALE } from './sceneScale'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import { activeHoleIds, useCutGeometries } from './useCutGeometries'
 import { PrinterPlate } from './PrinterPlate'
+import { ThumbnailCapture, THUMBNAIL_HIDE } from './ThumbnailCapture'
 import { PrintPreviewSlider } from './PrintPreviewSlider'
 import { PreviewCaps, type PreviewCapItem } from './PreviewCaps'
 import { RotationDial } from '../inspector/RotationDial'
@@ -317,14 +318,17 @@ export function Viewport3DPane() {
           />
         )}
 
-        <Grid
-          position={[0, -bedWidth * 0.02, 0]}
-          args={[bedWidth, bedDepth]}
-          cellColor="#1f1f26"
-          sectionColor="#2b2b34"
-          fadeDistance={bedWidth * 6}
-          infiniteGrid
-        />
+        <group name={THUMBNAIL_HIDE}>
+          <Grid
+            position={[0, -bedWidth * 0.02, 0]}
+            args={[bedWidth, bedDepth]}
+            cellColor="#1f1f26"
+            sectionColor="#2b2b34"
+            fadeDistance={bedWidth * 6}
+            infiniteGrid
+          />
+        </group>
+        <ThumbnailCapture />
 
         <OrbitControls ref={controlsRef} makeDefault />
         <GizmoHelper alignment="bottom-right" margin={[64, 64]}>

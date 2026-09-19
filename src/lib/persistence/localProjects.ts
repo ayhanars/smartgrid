@@ -94,7 +94,14 @@ export function createLocalProject(snapshot: DocumentSnapshot): LocalProjectMeta
 export function duplicateLocalProject(id: string): LocalProjectMeta | null {
   const snapshot = loadLocalProject(id)
   if (!snapshot) return null
-  return createLocalProject({ ...snapshot, name: `${snapshot.name} copy` })
+  const copy = createLocalProject({ ...snapshot, name: `${snapshot.name} copy` })
+  try {
+    const thumb = localStorage.getItem(`smartgrid:thumb:${id}`)
+    if (thumb) localStorage.setItem(`smartgrid:thumb:${copy.id}`, thumb)
+  } catch {
+    /* the SVG fallback still draws */
+  }
+  return copy
 }
 
 export function renameLocalProject(id: string, name: string) {
@@ -109,4 +116,16 @@ export function deleteLocalProject(id: string) {
     /* nothing to clean up */
   }
   writeIndex(readIndex().filter((p) => p.id !== id))
+}
+
+/** Wipes every project (and the index) from this browser. */
+export function deleteAllLocalProjects() {
+  for (const p of readIndex()) {
+    try {
+      localStorage.removeItem(docKey(p.id))
+    } catch {
+      /* nothing to clean up */
+    }
+  }
+  writeIndex([])
 }

@@ -20,6 +20,7 @@ import {
   Sparkles,
   Cloud,
   CloudOff,
+  Globe,
 } from 'lucide-react'
 import { IconButton } from '../components/IconButton'
 import { emptyDocument, serializeDocument, useDocumentStore, useTemporalStore } from '../state/documentStore'
@@ -27,6 +28,11 @@ import { useViewStore } from '../state/viewStore'
 import { createLocalProject, duplicateLocalProject, saveLocalProject } from '../lib/persistence/localProjects'
 import { deleteProjectEverywhere } from '../lib/persistence/cloudSync'
 import { UserMenu } from '../features/auth/UserMenu'
+import { requireAccount } from '../features/auth/authGate'
+import { useAuthStore } from '../features/auth/useAuthStore'
+import { isSupabaseConfigured } from '../lib/supabase/client'
+import { useConnectivity } from '../lib/connectivity'
+import { PublishDialog } from '../features/community/PublishDialog'
 import { importSvgFiles } from '../lib/import/importSvgFiles'
 import type { ViewMode } from './AppShell'
 import '../features/layers/LayerContextMenu.css'
@@ -60,8 +66,13 @@ export function TopBar({
   const cloudStatus = useViewStore((s) => s.cloudStatus)
   const assistantOpen = useViewStore((s) => s.assistantOpen)
   const setAssistantOpen = useViewStore((s) => s.setAssistantOpen)
+  const online = useConnectivity((s) => s.online)
+  const authLoading = useAuthStore((s) => s.loading)
+  const user = useAuthStore((s) => s.user)
+  const guest = isSupabaseConfigured && !authLoading && user === null
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [draft, setDraft] = useState(projectName)
   const workspaceRef = useRef<HTMLButtonElement>(null)
@@ -158,6 +169,22 @@ export function TopBar({
               <Copy size={13} />
               Duplicate project
             </button>
+            {isSupabaseConfigured && (
+              <>
+                <div className="layer-context-menu__divider" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!projectId}
+                  onClick={run(() => {
+                    if (requireAccount('community')) setPublishOpen(true)
+                  })}
+                >
+                  <Globe size={13} />
+                  Publish to community…
+                </button>
+              </>
+            )}
             <div className="layer-context-menu__divider" />
             <button type="button" role="menuitem" className="layer-context-menu__danger" disabled={!projectId} onClick={run(deleteProject)}>
               <Trash2 size={13} />
@@ -205,7 +232,19 @@ export function TopBar({
             {projectName}
           </button>
         )}
-        <span className="top-bar__save" aria-live="polite" title={cloudStatus === 'error' ? 'The last cloud save failed; your changes are still saved in this browser.' : undefined}>
+        <span
+          className={`top-bar__save ${cloudStatus === 'error' || cloudStatus === 'offline' ? 'top-bar__save--warn' : ''}`}
+          aria-live="polite"
+          title={
+            cloudStatus === 'error'
+              ? 'The last cloud save failed; your changes are still saved in this browser.'
+              : cloudStatus === 'offline'
+                ? 'No connection: changes are saved in this browser and will upload when you are back online.'
+                : guest
+                  ? 'Guest mode: this project is saved only in this browser.'
+                  : undefined
+          }
+        >
           {saveStatus === 'saving'
             ? 'Saving…'
             : cloudStatus === 'syncing'
@@ -213,13 +252,28 @@ export function TopBar({
               : cloudStatus === 'synced'
                 ? 'Saved to cloud'
                 : cloudStatus === 'error'
-                  ? 'Cloud save failed'
-                  : saveStatus === 'saved'
-                    ? 'Saved locally'
-                    : ''}
+                  ? 'Not uploaded to cloud'
+                  : cloudStatus === 'offline'
+                    ? 'Offline · not uploaded'
+                    : saveStatus === 'saved'
+                      ? guest
+                        ? 'Saved in this browser'
+                        : 'Saved locally'
+                      : ''}
           {cloudStatus === 'synced' && <Cloud size={12} />}
-          {cloudStatus === 'error' && <CloudOff size={12} />}
+          {(cloudStatus === 'error' || cloudStatus === 'offline') && <CloudOff size={12} />}
         </span>
+        {guest && (
+          <button type="button" className="top-bar__guest" title="You are not signed in. Click to learn what an account adds." onClick={() => requireAccount('cloud')}>
+            Guest
+          </button>
+        )}
+        {!online && !guest && cloudStatus !== 'offline' && (
+          <span className="top-bar__offline" title="No connection: cloud features are paused until you are back online.">
+            <CloudOff size={12} />
+            Offline
+          </span>
+        )}
       </div>
 
       <div className="top-bar__section top-bar__right">
@@ -258,12 +312,21 @@ export function TopBar({
         <IconButton size="sm" active={rightPanelOpen} aria-label="Toggle inspector panel" onClick={onToggleRightPanel}>
           <PanelRight size={15} />
         </IconButton>
-        <IconButton size="sm" active={assistantOpen} aria-label="Toggle assistant" tooltip="Assistant" onClick={() => setAssistantOpen(!assistantOpen)}>
+        <IconButton
+          size="sm"
+          active={assistantOpen}
+          aria-label="Toggle assistant"
+          tooltip="Assistant"
+          onClick={() => {
+            if (assistantOpen || requireAccount('assistant')) setAssistantOpen(!assistantOpen)
+          }}
+        >
           <Sparkles size={15} />
         </IconButton>
         <div className="top-bar__divider" />
         <UserMenu compact />
       </div>
+      {publishOpen && projectId && <PublishDialog projectId={projectId} onClose={() => setPublishOpen(false)} />}
     </header>
   )
 }

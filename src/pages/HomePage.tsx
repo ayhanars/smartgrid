@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Cloud, CloudUpload, Copy, FolderOpen, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowRight, Cloud, CloudOff, CloudUpload, Copy, FolderOpen, Globe, MoreHorizontal, Pencil, Plus, Trash2, WifiOff } from 'lucide-react'
 import {
   createLocalProject,
   duplicateLocalProject,
@@ -15,12 +15,17 @@ import { listCloudProjects, type CloudProjectMeta } from '../lib/supabase/projec
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { useAuthStore } from '../features/auth/useAuthStore'
 import { AuthDialog } from '../features/auth/AuthDialog'
+import { isNetworkError, useConnectivity } from '../lib/connectivity'
 import { UserMenu } from '../features/auth/UserMenu'
 import { emptyDocument } from '../state/documentStore'
 import { getBedPreset } from '../lib/geometry/bedPresets'
 import { contourBounds, regionsToSvgPath } from '../lib/geometry/primitives'
 import { ProjectPreview3D } from './ProjectPreview3D'
+import { loadLocalThumbnail } from '../lib/persistence/thumbnails'
+import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
+import { CommunityCard } from '../features/community/CommunityCard'
 import '../features/layers/LayerContextMenu.css'
+import '../features/community/community.css'
 import './HomePage.css'
 
 function relativeTime(ts: number): string {
@@ -40,13 +45,27 @@ function relativeTime(ts: number): string {
 export function HomePage() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const authLoading = useAuthStore((s) => s.loading)
+  const online = useConnectivity((s) => s.online)
   const [projects, setProjects] = useState<LocalProjectMeta[]>(() => listLocalProjects())
   const [cloudProjects, setCloudProjects] = useState<CloudProjectMeta[] | null>(null)
   const [cloudError, setCloudError] = useState<string | null>(null)
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [authOpen, setAuthOpen] = useState(false)
+  const [community, setCommunity] = useState<CommunityItem[] | null>(null)
   const refresh = () => setProjects(listLocalProjects())
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !online) return
+    let cancelled = false
+    listCommunityItems({ limit: 8 })
+      .then((list) => !cancelled && setCommunity(list))
+      .catch(() => !cancelled && setCommunity([]))
+    return () => {
+      cancelled = true
+    }
+  }, [online])
 
   const refreshCloud = useCallback(() => {
     if (!user) return
@@ -55,10 +74,16 @@ export function HomePage() {
         setCloudProjects(list)
         setCloudError(null)
       })
-      .catch((err: unknown) => setCloudError(err instanceof Error ? err.message : 'Could not load cloud projects'))
+      .catch((err: unknown) => setCloudError(isNetworkError(err) ? 'No connection. Cloud projects will appear when you are back online.' : err instanceof Error ? err.message : 'Could not load cloud projects'))
   }, [user])
   useEffect(refreshCloud, [refreshCloud])
+  // Back online: reload the cloud list (and clear the offline notice).
+  useEffect(() => {
+    if (online) refreshCloud()
+  }, [online, refreshCloud])
 
+  const guest = isSupabaseConfigured && !authLoading && user === null
+  const cloudKnown = user !== null && cloudProjects !== null && !cloudError
   const localIds = useMemo(() => new Set(projects.map((p) => p.id)), [projects])
   const cloudIds = useMemo(() => new Set((user ? cloudProjects ?? [] : []).map((p) => p.id)), [user, cloudProjects])
   const cloudOnly = (user ? cloudProjects ?? [] : []).filter((p) => !localIds.has(p.id))
@@ -86,7 +111,7 @@ export function HomePage() {
       .then((ok) => {
         if (ok) refreshCloud()
       })
-      .catch((err: unknown) => setCloudError(err instanceof Error ? err.message : 'Upload failed'))
+      .catch((err: unknown) => setCloudError(isNetworkError(err) ? 'No connection: the project was not uploaded. Try again when you are back online.' : err instanceof Error ? err.message : 'Upload failed'))
   }
   const rename = (id: string, name: string) => {
     const trimmed = name.trim()
@@ -112,6 +137,25 @@ export function HomePage() {
       </header>
 
       <main className="home__main">
+        {!online && (
+          <div className="home__banner home__banner--warn" role="status">
+            <WifiOff size={16} />
+            <span>
+              <strong>You are offline.</strong> Projects still save in this browser; cloud sync, sharing and the assistant resume when the connection is back.
+            </span>
+          </div>
+        )}
+        {online && guest && (
+          <div className="home__banner" role="status">
+            <CloudOff size={16} />
+            <span>
+              <strong>Guest mode.</strong> Your projects are saved only in this browser and are lost if its data is cleared.
+            </span>
+            <button type="button" className="home__cloud-btn" onClick={() => setAuthOpen(true)}>
+              Sign in
+            </button>
+          </div>
+        )}
         <section className="home__section">
           <div className="home__section-header">
             <h2>Local versions</h2>
@@ -129,7 +173,7 @@ export function HomePage() {
                 <ProjectCard
                   key={p.id}
                   meta={p}
-                  inCloud={user !== null && cloudIds.has(p.id)}
+                  cloudState={!isSupabaseConfigured ? 'none' : guest ? 'guest' : !cloudKnown ? 'unknown' : cloudIds.has(p.id) ? 'cloud' : isCloudSyncable(p.id) ? 'missing' : 'none'}
                   renaming={renamingId === p.id}
                   onOpen={() => open(p.id)}
                   onMenu={(x, y) => setMenu({ id: p.id, x, y })}
@@ -202,14 +246,45 @@ export function HomePage() {
                     onClick={() => open(p.id)}
                     onKeyDown={(e) => e.key === 'Enter' && open(p.id)}
                   >
-                    <div className="home__thumb home__thumb--cloud">
-                      <Cloud size={26} />
+                    <div className={`home__thumb ${p.thumbnail ? 'home__thumb--picture' : 'home__thumb--cloud'}`}>
+                      {p.thumbnail ? <img className="home__thumb-img" src={p.thumbnail} alt="" /> : <Cloud size={26} />}
                     </div>
                     <div className="home__card-body">
                       <span className="home__card-name">{p.name}</span>
                       <span className="home__card-meta">Edited {relativeTime(p.updatedAt)} · only in the cloud</span>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+        {isSupabaseConfigured && (
+          <section className="home__section">
+            <div className="home__section-header">
+              <h2>Community</h2>
+              <span className="home__hint">Models people shared. Open a copy and make it yours.</span>
+              <button type="button" className="home__see-all" onClick={() => navigate('/community')}>
+                Browse all
+                <ArrowRight size={13} />
+              </button>
+            </div>
+            {!online ? (
+              <div className="community-empty">The community needs a connection.</div>
+            ) : community === null ? (
+              <div className="community-empty">Loading…</div>
+            ) : community.length === 0 ? (
+              <div className="home__cloud">
+                <Globe size={22} />
+                <div>
+                  <strong>Nothing shared yet</strong>
+                  <p>Open a project and choose “Publish to community” from its menu to share a copy with everyone.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="home__grid">
+                {community.map((item) => (
+                  <CommunityCard key={item.id} item={item} onOpen={() => navigate(`/c/${item.id}`)} />
                 ))}
               </div>
             )}
@@ -234,9 +309,11 @@ export function HomePage() {
   )
 }
 
+type CardCloudState = 'none' | 'guest' | 'unknown' | 'cloud' | 'missing'
+
 function ProjectCard({
   meta,
-  inCloud,
+  cloudState,
   renaming,
   onOpen,
   onMenu,
@@ -244,7 +321,7 @@ function ProjectCard({
   onCancelRename,
 }: {
   meta: LocalProjectMeta
-  inCloud: boolean
+  cloudState: CardCloudState
   renaming: boolean
   onOpen: () => void
   onMenu: (x: number, y: number) => void
@@ -255,6 +332,7 @@ function ProjectCard({
   const [hovered, setHovered] = useState(false)
   useEffect(() => setDraft(meta.name), [meta.name, renaming])
   const snapshot = useMemo(() => loadLocalProject(meta.id), [meta.id, meta.updatedAt])
+  const picture = useMemo(() => loadLocalThumbnail(meta.id), [meta.id, meta.updatedAt])
 
   return (
     <div
@@ -268,8 +346,8 @@ function ProjectCard({
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
     >
-      <div className="home__thumb">
-        {snapshot && <Thumbnail snapshot={snapshot} />}
+      <div className={`home__thumb ${picture ? 'home__thumb--picture' : ''}`}>
+        {picture ? <img className="home__thumb-img" src={picture} alt="" /> : snapshot && <Thumbnail snapshot={snapshot} />}
         {/* Hover: the same project as a live 3D turntable, over the 2D thumbnail. */}
         {snapshot && hovered && (
           <div className="home__thumb-3d" aria-hidden>
@@ -297,9 +375,15 @@ function ProjectCard({
         )}
         <span className="home__card-meta">
           Edited {relativeTime(meta.updatedAt)} · {meta.shapeCount} shape{meta.shapeCount === 1 ? '' : 's'}
-          {inCloud && (
+          {cloudState === 'cloud' && (
             <span className="home__card-cloud" title="Synced to the cloud">
               <Cloud size={11} />
+            </span>
+          )}
+          {cloudState === 'missing' && (
+            <span className="home__card-cloud home__card-cloud--missing" title="Not uploaded to the cloud yet. Open it, or use “Upload to cloud” from its menu.">
+              <CloudOff size={11} />
+              not in cloud
             </span>
           )}
         </span>

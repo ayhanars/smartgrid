@@ -247,3 +247,25 @@
   min-height: 0;
   overflow: hidden;
 }
+
+.assets-section__sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.assets-section__sync--off {
+  color: var(--warning);
+}
+
+button.assets-section__sync:hover {
+  background: var(--bg-hover);
+}

@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { ArrowDownToLine, ArrowUpToLine, Copy, Eye, EyeOff, Group, Lock, Trash2, Ungroup, Unlock } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpToLine, Bookmark, Copy, Eye, EyeOff, Group, Lock, Trash2, Ungroup, Unlock } from 'lucide-react'
 import { useDocumentStore, expandToGroup } from '../../state/documentStore'
+import { useViewStore } from '../../state/viewStore'
+import { useUserAssets } from '../../state/userAssetsStore'
+import { captureAsset } from '../../lib/assets/userAssets'
+import { isGuest } from '../auth/authGate'
 import './LayerContextMenu.css'
 
 export interface ContextMenuState {
@@ -30,6 +34,9 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
   const groupShapes = useDocumentStore((s) => s.groupShapes)
   const ungroupShapes = useDocumentStore((s) => s.ungroupShapes)
   const reorderLayer = useDocumentStore((s) => s.reorderLayer)
+  const groups = useDocumentStore((s) => s.groups)
+  const addUserAsset = useUserAssets((s) => s.add)
+  const setNotice = useViewStore((s) => s.setNotice)
 
   const layer = layers[menu.layerId]
   const targets = selection.includes(menu.layerId) ? selection : expandToGroup(layers, order, menu.layerId)
@@ -58,6 +65,18 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
   const allHidden = targets.every((id) => layers[id] && !layers[id].visible)
   const allLocked = targets.every((id) => layers[id]?.locked)
   const inGroup = targets.some((id) => layers[id]?.groupId)
+
+  // Named after the group when the whole selection is one group, else the
+  // clicked layer.
+  const saveAsAsset = () => {
+    const groupId = layer.groupId
+    const wholeGroup = groupId && targets.every((id) => layers[id]?.groupId === groupId)
+    const name = (wholeGroup ? groups[groupId]?.name : undefined) || layer.name
+    const asset = captureAsset(name, layers, order, targets)
+    if (!asset) return
+    addUserAsset(asset)
+    setNotice(isGuest() ? `Saved "${asset.name}" to My assets (this browser only until you sign in).` : `Saved "${asset.name}" to My assets. Find it in the Assets tab of any project.`)
+  }
 
   // keep the menu on-screen near the pointer
   const style = {
@@ -93,6 +112,10 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
         <Ungroup size={13} />
         Ungroup
         <kbd>⌘⇧G</kbd>
+      </button>
+      <button type="button" role="menuitem" onClick={run(saveAsAsset)}>
+        <Bookmark size={13} />
+        Save as asset
       </button>
       <div className="layer-context-menu__divider" />
       <button type="button" role="menuitem" onClick={run(() => reorderLayer(menu.layerId, 'front'))}>

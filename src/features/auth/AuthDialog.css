@@ -215,3 +215,113 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.auth-dialog__links {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 12px;
+}
+
+.auth-dialog__links button {
+  padding: 0;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-dialog__links button:hover {
+  color: var(--text);
+}
+
+.auth-dialog__links button:only-child {
+  margin-left: auto;
+}
+
+/* Guest gate: the "this needs an account" sheet. */
+.auth-gate__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.auth-gate__actions .auth-dialog__submit {
+  flex: 1;
+}
+
+.auth-gate__guest {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-field);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.auth-gate__guest:hover {
+  background: var(--bg-hover);
+}
+
+.auth-gate__note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.auth-gate__note svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--warning);
+}
+
+/* New-password sheet after a recovery link. */
+.auth-dialog__form .auth-dialog__hint {
+  margin: -2px 0 4px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.user-menu__popover-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: normal;
+}
+
+.user-menu__popover-header strong {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__popover-header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu__role {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}

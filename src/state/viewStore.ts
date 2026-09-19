@@ -12,8 +12,9 @@ interface ViewState {
   gizmoMode: 'translate' | 'rotate'
   /** Local autosave state shown in the top bar. */
   saveStatus: 'idle' | 'saving' | 'saved'
-  /** Cloud copy of the open project: off when signed out. */
-  cloudStatus: 'off' | 'syncing' | 'synced' | 'error'
+  /** Cloud copy of the open project: off when signed out, offline when
+   * the browser has no network and a save is waiting. */
+  cloudStatus: 'off' | 'syncing' | 'synced' | 'error' | 'offline'
   /** Whether the design assistant column is open in the editor. */
   assistantOpen: boolean
   /** One-line transient message (import results etc.), shown as a toast. */
