@@ -278,6 +278,14 @@
   align-items: start;
 }
 
+/* Left column: picture, then versions and comments right under it. */
+.community-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
 .community-item__hero {
   position: relative;
   aspect-ratio: 4 / 3;
@@ -623,9 +631,7 @@
 
 /* Comments */
 .comments {
-  grid-column: 1 / -1;
-  margin-top: 8px;
-  padding-top: 24px;
+  padding-top: 20px;
   border-top: 1px solid var(--border);
 }
 
@@ -820,9 +826,12 @@
 }
 
 .versions {
-  grid-column: 1 / -1;
-  padding-top: 24px;
+  padding-top: 20px;
   border-top: 1px solid var(--border);
+}
+
+.versions .home__grid {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
 
 .versions h2 {

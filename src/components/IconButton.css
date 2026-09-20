@@ -83,3 +83,19 @@
   opacity: 0.4;
   cursor: default;
 }
+
+/* Buttons along the top edge: the tooltip drops below instead of going
+   off-screen above. */
+.top-bar .icon-button__tooltip,
+.viewport-3d__toolbar .icon-button__tooltip {
+  top: calc(100% + 9px);
+  bottom: auto;
+}
+
+.top-bar .icon-button__tooltip::after,
+.viewport-3d__toolbar .icon-button__tooltip::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: #050506;
+}

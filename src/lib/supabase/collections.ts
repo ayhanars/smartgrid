@@ -168,3 +168,13 @@ export async function uploadCollectionCover(collectionId: string, file: File): P
   const { data } = supabase.storage.from('covers').getPublicUrl(path)
   return `${data.publicUrl}?v=${Date.now()}`
 }
+
+/** Approved public collections from everyone, most recently changed first. */
+export async function listPublicCollections(query = '', limit = 60): Promise<Collection[]> {
+  let q = supabase.from('collections').select(COLUMNS).eq('is_public', true).eq('approval', 'approved').order('updated_at', { ascending: false }).limit(limit)
+  const term = query.trim()
+  if (term) q = q.ilike('name', `%${term.replace(/[%_]/g, '')}%`)
+  const { data, error } = await q
+  if (error) throw error
+  return (data as unknown as CollectionRow[]).map(toCollection).filter((c) => c.count > 0)
+}

@@ -105,7 +105,9 @@ function AccountChip() {
   const signOut = useAuthStore((s) => s.signOut)
   const [open, setOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const chipRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -152,7 +154,18 @@ function AccountChip() {
   }
   return (
     <div className="shell__account-wrap" ref={ref}>
-      <button type="button" className="shell__account shell__account--button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button
+        ref={chipRef}
+        type="button"
+        className="shell__account shell__account--button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => {
+          const r = chipRef.current?.getBoundingClientRect()
+          if (r) setPos({ left: r.left, top: r.bottom + 4, width: r.width })
+          setOpen((o) => !o)
+        }}
+      >
         <span className="shell__avatar">{avatarUrl ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer" /> : name.slice(0, 1).toUpperCase()}</span>
         <span className="shell__account-name">{name}</span>
         {profile && (
@@ -163,7 +176,7 @@ function AccountChip() {
         <ChevronDown size={14} className="shell__account-chevron" />
       </button>
       {open && (
-        <div className="layer-context-menu shell__account-menu" role="menu">
+        <div className="layer-context-menu shell__account-menu" role="menu" style={pos ? { left: pos.left, top: pos.top, width: Math.max(220, pos.width) } : undefined}>
           <div className="user-menu__popover-header">
             <strong>{name}</strong>
             <span>{user.email}</span>

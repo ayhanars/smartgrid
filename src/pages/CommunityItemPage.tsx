@@ -160,6 +160,7 @@ export function CommunityItemPage() {
           <div className="community-empty">{error ?? 'This model is not available (it may have been removed).'}</div>
         ) : (
           <div className="community-item">
+            <div className="community-item__main">
             <div className="community-item__hero">
               {live ? (
                 <div>
@@ -175,6 +176,20 @@ export function CommunityItemPage() {
               <button type="button" className="community-item__hero-toggle" onClick={() => setLive((v) => !v)}>
                 {live ? 'Show picture' : 'Spin in 3D'}
               </button>
+            </div>
+
+            {versions.length > 0 && (
+              <section className="versions">
+                <h2>Versions</h2>
+                <p>Models other people published from a copy of this one.</p>
+                <div className="home__grid">
+                  {versions.map((v) => (
+                    <CommunityCard key={v.id} item={v} onOpen={() => navigate(`/c/${v.id}`)} />
+                  ))}
+                </div>
+              </section>
+            )}
+            <CommentsSection itemId={item.id} ownerId={item.ownerId} onCount={(comments) => setItem((it) => (it ? { ...it, comments } : it))} />
             </div>
 
             <div className="community-item__side">
@@ -367,18 +382,6 @@ export function CommunityItemPage() {
               )}
               {error && <p className="account__error" role="alert">{error}</p>}
             </div>
-            {versions.length > 0 && (
-              <section className="versions">
-                <h2>Versions</h2>
-                <p>Models other people published from a copy of this one.</p>
-                <div className="home__grid">
-                  {versions.map((v) => (
-                    <CommunityCard key={v.id} item={v} onOpen={() => navigate(`/c/${v.id}`)} />
-                  ))}
-                </div>
-              </section>
-            )}
-            <CommentsSection itemId={item.id} ownerId={item.ownerId} onCount={(comments) => setItem((it) => (it ? { ...it, comments } : it))} />
           </div>
         )}
       </div>
