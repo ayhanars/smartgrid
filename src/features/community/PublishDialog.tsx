@@ -4,16 +4,18 @@ import { ExternalLink, Globe, Trash2, X } from 'lucide-react'
 import { serializeDocument, useDocumentStore } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { saveLocalProject } from '../../lib/persistence/localProjects'
-import { captureThumbnail, loadLocalThumbnail, saveLocalThumbnail } from '../../lib/persistence/thumbnails'
+import { captureThumbnail, loadLocalThumbnail, loadProjectSource, saveLocalThumbnail } from '../../lib/persistence/thumbnails'
 import {
   deleteCommunityItem,
   findMyCommunityItemForProject,
+  getCommunityItem,
   parseTags,
   publishCommunityItem,
   updateCommunityItem,
   type CommunityItem,
 } from '../../lib/supabase/community'
 import { friendlyAuthError } from '../auth/authErrors'
+import { isStaffRole, useAuthStore } from '../auth/useAuthStore'
 import '../auth/AuthDialog.css'
 import './community.css'
 
@@ -38,6 +40,10 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
   const [tags, setTags] = useState('')
   const [replaceModel, setReplaceModel] = useState(true)
   const [status, setStatus] = useState<'published' | 'hidden'>('published')
+  const [changes, setChanges] = useState('')
+  const [asVersion, setAsVersion] = useState(true)
+  const [source, setSource] = useState<CommunityItem | null>(null)
+  const staff = isStaffRole(useAuthStore((s) => s.profile))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -53,6 +59,7 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
           setNotes(item.notes)
           setTags(item.tags.join(', '))
           setStatus(item.status === 'hidden' ? 'hidden' : 'published')
+          setChanges(item.changes)
         }
       })
       .catch((err: unknown) => {
@@ -60,6 +67,19 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
         setExisting(null)
         setError(friendlyAuthError(err))
       })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
+
+  // Copied from a community model: offer to publish as a version of it.
+  useEffect(() => {
+    const sourceId = loadProjectSource(projectId)
+    if (!sourceId) return
+    let cancelled = false
+    getCommunityItem(sourceId)
+      .then((it) => !cancelled && setSource(it))
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
@@ -88,12 +108,13 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
     try {
       if (existing) {
         const model = replaceModel ? currentModel() : null
-        await updateCommunityItem(existing.id, { ...draft, status, ...(model ? { snapshot: model.snapshot, thumbnail: model.thumbnail } : {}) })
-        setNotice(replaceModel ? 'Community copy updated with the current model.' : 'Community listing updated.')
+        await updateCommunityItem(existing.id, { ...draft, status, changes: changes.trim(), ...(model ? { snapshot: model.snapshot, thumbnail: model.thumbnail } : {}) })
+        setNotice(replaceModel && !staff ? 'Community copy updated. A moderator will review the new model before it shows again.' : replaceModel ? 'Community copy updated with the current model.' : 'Community listing updated.')
       } else {
         const model = currentModel()
-        const item = await publishCommunityItem(projectId, model.snapshot, model.thumbnail, draft)
-        setNotice(`Published "${item.title}" to the community.`)
+        const version = source && asVersion ? { parentId: source.id, changes: changes.trim() } : undefined
+        const item = await publishCommunityItem(projectId, model.snapshot, model.thumbnail, draft, version)
+        setNotice(staff ? `Published "${item.title}" to the community.` : `"${item.title}" was sent for review. You will get a notification once a moderator approves it.`)
       }
       onClose()
     } catch (err) {
@@ -130,9 +151,12 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
           {existing === undefined
             ? 'Checking…'
             : existing
-              ? `Published ${new Date(existing.createdAt).toLocaleDateString()} · ${existing.downloads} ${existing.downloads === 1 ? 'copy opened' : 'copies opened'}`
-              : 'Shares a copy of this project with everyone. You can update it, add notes, hide it or remove it later.'}
+              ? `Published ${new Date(existing.createdAt).toLocaleDateString()} · ${existing.downloads} ${existing.downloads === 1 ? 'copy opened' : 'copies opened'}${existing.approval === 'pending' ? ' · waiting for review' : existing.approval === 'rejected' ? ' · not approved' : ''}`
+              : staff
+                ? 'Shares a copy of this project with everyone. You can update it, add notes, hide it or remove it later.'
+                : 'Shares a copy of this project. A moderator reviews new models before they appear to everyone; you can update, hide or remove it later.'}
         </p>
+        {existing?.approval === 'rejected' && existing.reviewNote && <p className="auth-dialog__error">Moderator note: {existing.reviewNote}</p>}
 
         <div className="auth-dialog__form">
           <label htmlFor="publish-name">Title</label>
@@ -143,6 +167,29 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
           <textarea id="publish-notes" value={notes} maxLength={2000} rows={4} placeholder="Filament, orientation, tolerances, what to tweak…" onChange={(e) => setNotes(e.target.value)} />
           <label htmlFor="publish-tags">Tags</label>
           <input id="publish-tags" value={tags} placeholder="organizer, gridfinity, desk (comma separated)" onChange={(e) => setTags(e.target.value)} />
+
+          {!existing && source && (
+            <div className="publish-dialog__options">
+              <label className="publish-dialog__check">
+                <input type="checkbox" checked={asVersion} onChange={(e) => setAsVersion(e.target.checked)} />
+                Publish as a version of “{source.title}” by {source.author.displayName}
+              </label>
+              {asVersion && (
+                <>
+                  <label htmlFor="publish-changes" className="publish-dialog__sublabel">
+                    What changed?
+                  </label>
+                  <textarea id="publish-changes" value={changes} rows={2} maxLength={600} placeholder="e.g. taller walls, 3 mm holes, gridfinity base" onChange={(e) => setChanges(e.target.value)} />
+                </>
+              )}
+            </div>
+          )}
+          {existing?.parentId && (
+            <>
+              <label htmlFor="publish-changes">What changed in this version?</label>
+              <textarea id="publish-changes" value={changes} rows={2} maxLength={600} onChange={(e) => setChanges(e.target.value)} />
+            </>
+          )}
 
           {existing && (
             <div className="publish-dialog__options">

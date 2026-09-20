@@ -29,8 +29,16 @@
 }
 
 /* Account chip */
+.shell__top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .shell__account-wrap {
   position: relative;
+  flex: 1;
+  min-width: 0;
 }
 
 .shell__account {
@@ -303,7 +311,13 @@
   opacity: 0.5;
 }
 
-/* Collection cards */
+/* Collection cards: 16:9, wider than model cards */
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+}
+
 .collection-card {
   display: flex;
   flex-direction: column;
@@ -316,21 +330,21 @@
   transition: border-color 0.12s;
 }
 
-.collection-card:hover {
+.collection-card:hover,
+.collection-card:focus-visible {
   border-color: var(--border-strong);
+  outline: none;
 }
 
 .collection-card__cover {
+  position: relative;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
   gap: 2px;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
   background: var(--bg-canvas);
 }
 
-.collection-card__cover img,
-.collection-card__cover span {
+.collection-card__cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -338,16 +352,32 @@
   background: var(--bg-panel-raised);
 }
 
-.collection-card__cover--one img:first-child {
-  grid-column: 1 / -1;
-  grid-row: 1 / -1;
-}
-
 .collection-card__cover--empty {
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-faint);
+}
+
+.collection-card__badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.collection-card__badge--danger {
+  color: var(--danger);
 }
 
 .collection-card__body {
@@ -359,7 +389,7 @@
 
 .collection-card__name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 13.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -368,6 +398,44 @@
 .collection-card__meta {
   color: var(--text-faint);
   font-size: 11px;
+}
+
+/* Collection page cover */
+.collection-hero {
+  position: relative;
+  aspect-ratio: 16 / 5;
+  margin-bottom: 20px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border);
+}
+
+.collection-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.collection-hero__actions {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.collection-hero__actions button {
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--text);
+  font-size: 11.5px;
+}
+
+.collection-hero__actions button:hover {
+  background: rgba(0, 0, 0, 0.85);
 }
 
 @media (max-width: 720px) {

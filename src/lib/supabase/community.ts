@@ -2,6 +2,7 @@ import { currentUserId, supabase } from './client'
 import type { DocumentSnapshot } from '../persistence/localProjects'
 
 export type CommunityStatus = 'published' | 'hidden' | 'removed'
+export type Approval = 'pending' | 'approved' | 'rejected'
 
 /** A shared model as listed on the community pages (no geometry). */
 export interface CommunityItem {
@@ -18,9 +19,15 @@ export interface CommunityItem {
   downloads: number
   likes: number
   comments: number
+  approval: Approval
+  reviewNote: string
+  /** The model this one is a version of, when published from a copy. */
+  parentId: string | null
+  /** The author's note on what changed in this version. */
+  changes: string
   createdAt: number
   updatedAt: number
-  author: { displayName: string; avatarUrl: string | null }
+  author: { displayName: string; avatarUrl: string | null; level: number }
   /** Shape count, from the stored document. */
   shapeCount: number
 }
@@ -50,13 +57,17 @@ interface ItemRow {
   downloads: number
   likes: number
   comments: number
+  approval: Approval
+  review_note: string
+  parent_id: string | null
+  changes: string
   created_at: string
   updated_at: string
   shape_count: number | null
-  profiles: { display_name: string; avatar_url: string | null } | null
+  profiles: { display_name: string; avatar_url: string | null; level: number } | null
 }
 
-const LIST_COLUMNS = 'id, owner_id, source_project_id, title, description, notes, tags, thumbnail, status, featured, downloads, likes, comments, created_at, updated_at, shape_count:data->order, profiles!community_items_owner_id_fkey(display_name, avatar_url)'
+const LIST_COLUMNS = 'id, owner_id, source_project_id, title, description, notes, tags, thumbnail, status, featured, downloads, likes, comments, approval, review_note, parent_id, changes, created_at, updated_at, shape_count:data->order, profiles!community_items_owner_id_fkey(display_name, avatar_url, level)'
 
 const toItem = (row: ItemRow): CommunityItem => ({
   id: row.id,
@@ -72,9 +83,13 @@ const toItem = (row: ItemRow): CommunityItem => ({
   downloads: row.downloads,
   likes: row.likes ?? 0,
   comments: row.comments ?? 0,
+  approval: row.approval ?? 'approved',
+  reviewNote: row.review_note ?? '',
+  parentId: row.parent_id ?? null,
+  changes: row.changes ?? '',
   createdAt: Date.parse(row.created_at),
   updatedAt: Date.parse(row.updated_at),
-  author: { displayName: row.profiles?.display_name || 'Someone', avatarUrl: row.profiles?.avatar_url ?? null },
+  author: { displayName: row.profiles?.display_name || 'Someone', avatarUrl: row.profiles?.avatar_url ?? null, level: row.profiles?.level ?? 1 },
   shapeCount: Array.isArray(row.shape_count) ? (row.shape_count as unknown[]).length : 0,
 })
 
@@ -88,6 +103,10 @@ export interface ListOptions {
   ownerId?: string
   /** Staff: include hidden / removed items. */
   includeUnpublished?: boolean
+  /** Versions of this model. */
+  parentId?: string
+  /** Staff: only items waiting for review. */
+  pendingOnly?: boolean
   limit?: number
 }
 
@@ -95,7 +114,9 @@ export interface ListOptions {
 export async function listCommunityItems(options: ListOptions = {}): Promise<CommunityItem[]> {
   let q = supabase.from('community_items').select(LIST_COLUMNS).order('featured', { ascending: false })
   q = options.sort === 'popular' ? q.order('likes', { ascending: false }).order('downloads', { ascending: false }) : q.order('created_at', { ascending: false })
-  if (!options.includeUnpublished && !options.ownerId) q = q.eq('status', 'published')
+  if (!options.includeUnpublished && !options.ownerId) q = q.eq('status', 'published').eq('approval', 'approved')
+  if (options.pendingOnly) q = q.eq('approval', 'pending').neq('status', 'removed')
+  if (options.parentId) q = q.eq('parent_id', options.parentId)
   if (options.ids) {
     if (options.ids.length === 0) return []
     q = q.in('id', options.ids)
@@ -137,12 +158,29 @@ export async function findMyCommunityItemForProject(projectId: string): Promise<
   return data ? toItem(data as unknown as ItemRow) : null
 }
 
-export async function publishCommunityItem(projectId: string, snapshot: DocumentSnapshot, thumbnail: string | null, draft: CommunityDraft): Promise<CommunityItem> {
+export async function publishCommunityItem(
+  projectId: string,
+  snapshot: DocumentSnapshot,
+  thumbnail: string | null,
+  draft: CommunityDraft,
+  version?: { parentId: string; changes: string },
+): Promise<CommunityItem> {
   const owner_id = await currentUserId()
   if (!owner_id) throw new Error('Not signed in')
   const { data, error } = await supabase
     .from('community_items')
-    .insert({ owner_id, source_project_id: projectId, title: draft.title, description: draft.description, notes: draft.notes, tags: draft.tags, data: snapshot, thumbnail })
+    .insert({
+      owner_id,
+      source_project_id: projectId,
+      title: draft.title,
+      description: draft.description,
+      notes: draft.notes,
+      tags: draft.tags,
+      data: snapshot,
+      thumbnail,
+      parent_id: version?.parentId ?? null,
+      changes: version?.changes ?? '',
+    })
     .select(LIST_COLUMNS)
     .single()
   if (error) throw error
@@ -151,8 +189,9 @@ export async function publishCommunityItem(projectId: string, snapshot: Document
 
 /** Edits the texts and, when a snapshot is given, replaces the shared copy
  * of the model with the current project. */
-export async function updateCommunityItem(id: string, patch: Partial<CommunityDraft> & { status?: 'published' | 'hidden'; snapshot?: DocumentSnapshot; thumbnail?: string | null }): Promise<CommunityItem> {
+export async function updateCommunityItem(id: string, patch: Partial<CommunityDraft> & { status?: 'published' | 'hidden'; snapshot?: DocumentSnapshot; thumbnail?: string | null; changes?: string }): Promise<CommunityItem> {
   const row: Record<string, unknown> = {}
+  if (patch.changes !== undefined) row.changes = patch.changes
   if (patch.title !== undefined) row.title = patch.title
   if (patch.description !== undefined) row.description = patch.description
   if (patch.notes !== undefined) row.notes = patch.notes
@@ -175,6 +214,12 @@ export async function moderateCommunityItem(id: string, patch: { status?: Commun
   const { data, error } = await supabase.from('community_items').update(patch).eq('id', id).select(LIST_COLUMNS).single()
   if (error) throw error
   return toItem(data as unknown as ItemRow)
+}
+
+/** Staff: approve or reject a model (the author is notified). */
+export async function reviewCommunityItem(id: string, approval: Approval, note = ''): Promise<void> {
+  const { error } = await supabase.rpc('review_community_item', { p_item: id, p_approval: approval, p_note: note })
+  if (error) throw error
 }
 
 export async function recordCommunityDownload(id: string): Promise<void> {
@@ -226,29 +271,35 @@ export interface CommunityComment {
   id: string
   itemId: string
   authorId: string
+  parentId: string | null
+  mentions: string[]
   body: string
   createdAt: number
-  author: { displayName: string; avatarUrl: string | null }
+  author: { displayName: string; avatarUrl: string | null; level: number }
 }
 
 interface CommentRow {
   id: string
   item_id: string
   author_id: string
+  parent_id: string | null
+  mentions: string[] | null
   body: string
   created_at: string
-  profiles: { display_name: string; avatar_url: string | null } | null
+  profiles: { display_name: string; avatar_url: string | null; level: number } | null
 }
 
-const COMMENT_COLUMNS = 'id, item_id, author_id, body, created_at, profiles!community_comments_author_id_fkey(display_name, avatar_url)'
+const COMMENT_COLUMNS = 'id, item_id, author_id, parent_id, mentions, body, created_at, profiles!community_comments_author_id_fkey(display_name, avatar_url, level)'
 
 const toComment = (r: CommentRow): CommunityComment => ({
   id: r.id,
   itemId: r.item_id,
   authorId: r.author_id,
+  parentId: r.parent_id ?? null,
+  mentions: r.mentions ?? [],
   body: r.body,
   createdAt: Date.parse(r.created_at),
-  author: { displayName: r.profiles?.display_name || 'Someone', avatarUrl: r.profiles?.avatar_url ?? null },
+  author: { displayName: r.profiles?.display_name || 'Someone', avatarUrl: r.profiles?.avatar_url ?? null, level: r.profiles?.level ?? 1 },
 })
 
 /** Oldest first. */
@@ -258,10 +309,14 @@ export async function listComments(itemId: string): Promise<CommunityComment[]> 
   return (data as unknown as CommentRow[]).map(toComment)
 }
 
-export async function addComment(itemId: string, body: string): Promise<CommunityComment> {
+export async function addComment(itemId: string, body: string, options: { parentId?: string | null; mentions?: string[] } = {}): Promise<CommunityComment> {
   const author_id = await currentUserId()
   if (!author_id) throw new Error('Not signed in')
-  const { data, error } = await supabase.from('community_comments').insert({ item_id: itemId, author_id, body: body.trim() }).select(COMMENT_COLUMNS).single()
+  const { data, error } = await supabase
+    .from('community_comments')
+    .insert({ item_id: itemId, author_id, body: body.trim(), parent_id: options.parentId ?? null, mentions: options.mentions ?? [] })
+    .select(COMMENT_COLUMNS)
+    .single()
   if (error) throw error
   return toComment(data as unknown as CommentRow)
 }
@@ -269,4 +324,11 @@ export async function addComment(itemId: string, body: string): Promise<Communit
 export async function deleteComment(id: string): Promise<void> {
   const { error } = await supabase.from('community_comments').delete().eq('id', id)
   if (error) throw error
+}
+
+/** People to @mention, by display name. */
+export async function searchProfiles(query: string): Promise<{ id: string; displayName: string; avatarUrl: string | null; level: number }[]> {
+  const { data, error } = await supabase.rpc('search_profiles', { p_query: query, p_limit: 8 })
+  if (error) throw error
+  return (data as { id: string; display_name: string; avatar_url: string | null; level: number }[]).map((r) => ({ id: r.id, displayName: r.display_name, avatarUrl: r.avatar_url, level: r.level }))
 }

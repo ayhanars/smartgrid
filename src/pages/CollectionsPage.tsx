@@ -85,7 +85,7 @@ export function CollectionsPage() {
           </div>
         </div>
       ) : (
-        <div className="home__grid">
+        <div className="collection-grid">
           {collections.map((c) => (
             <CollectionCard key={c.id} collection={c} onOpen={() => navigate(`/collections/${c.id}`)} />
           ))}

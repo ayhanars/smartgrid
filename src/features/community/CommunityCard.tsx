@@ -19,6 +19,7 @@ export function CommunityCard({ item, onOpen, showStatus }: { item: CommunityIte
           </span>
         )}
         {showStatus && item.status !== 'published' && <span className="community-card__badge community-card__badge--status">{item.status}</span>}
+        {showStatus && item.approval !== 'approved' && <span className="community-card__badge community-card__badge--status">{item.approval === 'pending' ? 'in review' : 'not approved'}</span>}
       </div>
       <div className="community-card__body">
         <span className="community-card__title">{item.title}</span>

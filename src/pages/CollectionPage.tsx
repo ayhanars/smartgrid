@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Globe, Link as LinkIcon, Lock, Pencil, Trash2, X } from 'lucide-react'
-import { deleteCollection, getCollection, listCollectionItemIds, setInCollection, updateCollection, type Collection } from '../lib/supabase/collections'
+import { ArrowLeft, Clock, Globe, ImagePlus, Link as LinkIcon, Lock, Pencil, Trash2, X, XCircle } from 'lucide-react'
+import { deleteCollection, getCollection, listCollectionItemIds, setInCollection, updateCollection, uploadCollectionCover, type Collection } from '../lib/supabase/collections'
 import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
 import { useAuthStore } from '../features/auth/useAuthStore'
 import { useViewStore } from '../state/viewStore'
@@ -25,6 +25,7 @@ export function CollectionPage() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
+  const coverInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!id) return
@@ -89,6 +90,17 @@ export function CollectionPage() {
       await deleteCollection(collection.id)
       navigate('/collections')
     })
+  const setCover = (file: File | undefined) =>
+    act(async () => {
+      if (!collection || !file) return
+      const url = await uploadCollectionCover(collection.id, file)
+      setCollection(await updateCollection(collection.id, { coverUrl: url }))
+    })
+  const removeCover = () =>
+    act(async () => {
+      if (!collection) return
+      setCollection(await updateCollection(collection.id, { coverUrl: null }))
+    })
   const copyLink = () => {
     const url = `${window.location.origin}${window.location.pathname}#/collections/${id}`
     void navigator.clipboard?.writeText(url).then(() => setNotice('Link copied.'))
@@ -103,6 +115,47 @@ export function CollectionPage() {
         <ArrowLeft size={15} />
         {isOwner ? 'Collections' : 'Community'}
       </button>
+      {(collection.coverUrl || isOwner) && (
+        <div className="collection-hero" style={collection.coverUrl ? undefined : { aspectRatio: 'auto', background: 'transparent', border: 'none', marginBottom: 8 }}>
+          {collection.coverUrl && <img src={collection.coverUrl} alt="" />}
+          {isOwner && (
+            <div className="collection-hero__actions" style={collection.coverUrl ? undefined : { position: 'static', justifyContent: 'flex-end' }}>
+              <button type="button" disabled={busy} onClick={() => coverInput.current?.click()}>
+                <ImagePlus size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />
+                {collection.coverUrl ? 'Change cover' : 'Add a cover picture'}
+              </button>
+              {collection.coverUrl && (
+                <button type="button" disabled={busy} onClick={() => void removeCover()}>
+                  Remove
+                </button>
+              )}
+              <input
+                ref={coverInput}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                hidden
+                aria-label="Cover picture"
+                onChange={(e) => {
+                  void setCover(e.target.files?.[0])
+                  e.target.value = ''
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+      {isOwner && collection.approval === 'pending' && (
+        <p className="approval-note" style={{ marginBottom: 16 }}>
+          <Clock size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />
+          <strong>Waiting for review.</strong> A moderator will approve it before it can be shown publicly; you can keep adding models meanwhile.
+        </p>
+      )}
+      {isOwner && collection.approval === 'rejected' && (
+        <p className="approval-note" style={{ marginBottom: 16 }}>
+          <XCircle size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} />
+          <strong>Not approved.</strong> {collection.reviewNote || 'A moderator declined it.'}
+        </p>
+      )}
       {editing ? (
         <form
           className="community-item__edit"
@@ -133,7 +186,7 @@ export function CollectionPage() {
                 <Pencil size={13} />
                 Edit
               </button>
-              <button type="button" className="page__button" disabled={busy} title={collection.isPublic ? 'Anyone with the link can see this collection' : 'Only you can see this collection'} onClick={() => void togglePublic()}>
+              <button type="button" className="page__button" disabled={busy || collection.approval !== 'approved'} title={collection.approval !== 'approved' ? 'Available once a moderator approves the collection' : collection.isPublic ? 'Anyone with the link can see this collection' : 'Only you can see this collection'} onClick={() => void togglePublic()}>
                 {collection.isPublic ? <Globe size={13} /> : <Lock size={13} />}
                 {collection.isPublic ? 'Public' : 'Private'}
               </button>

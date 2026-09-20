@@ -6,6 +6,8 @@ import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { AuthDialog } from '../features/auth/AuthDialog'
 import { requireAccount } from '../features/auth/authGate'
 import { createAndOpenProject } from '../features/projects/ProjectCards'
+import { NotificationBell } from '../features/notifications/NotificationBell'
+import '../state/notificationsStore'
 import '../features/layers/LayerContextMenu.css'
 import '../features/auth/AuthDialog.css'
 import './HomeLayout.css'
@@ -30,7 +32,10 @@ export function HomeLayout() {
   return (
     <div className="shell">
       <aside className="shell__sidebar">
-        <AccountChip />
+        <div className="shell__top">
+          <AccountChip />
+          {user && <NotificationBell />}
+        </div>
         <form className="shell__search" onSubmit={search}>
           <Search size={15} />
           <input value={query} placeholder="Search community" aria-label="Search the community" onChange={(e) => setQuery(e.target.value)} />
@@ -150,6 +155,11 @@ function AccountChip() {
       <button type="button" className="shell__account shell__account--button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className="shell__avatar">{avatarUrl ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer" /> : name.slice(0, 1).toUpperCase()}</span>
         <span className="shell__account-name">{name}</span>
+        {profile && (
+          <span className="level-badge" title={`Level ${profile.level} · ${profile.xp} XP`}>
+            L{profile.level}
+          </span>
+        )}
         <ChevronDown size={14} className="shell__account-chevron" />
       </button>
       {open && (

@@ -62,3 +62,26 @@ export function captureThumbnail(): CaptureResult {
     return null
   }
 }
+
+// --- Source model ---------------------------------------------------------------
+// Which community model a project was copied from, so publishing it can
+// offer "a version of …". Kept beside the project like the thumbnail.
+
+const sourceKey = (id: string) => `smartgrid:source:${id}`
+
+export function loadProjectSource(id: string): string | null {
+  try {
+    return localStorage.getItem(sourceKey(id))
+  } catch {
+    return null
+  }
+}
+
+export function saveProjectSource(id: string, itemId: string | null): void {
+  try {
+    if (itemId) localStorage.setItem(sourceKey(id), itemId)
+    else localStorage.removeItem(sourceKey(id))
+  } catch {
+    /* fine */
+  }
+}
