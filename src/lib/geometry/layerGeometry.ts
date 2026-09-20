@@ -94,7 +94,7 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
   if (contour) {
     const profileStep = profileTessellation(layer.profile, depth, layer.twist ?? 0)
     const requested = options.tessellate ?? perforationTessellation(layer)
-    const geo = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop, {
+    let geo = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop, {
       flare: layer.isHole && (layer.bevelMode ?? 'rim') === 'rim',
       texture: layer.texture ?? null,
       textureSign: ((layer.isHole ? 1 : -1) * (layer.texture?.relief === 'raised' ? -1 : 1)) as 1 | -1,
@@ -103,8 +103,8 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
     })
     // A vase, a cone, a barrel: the footprint scaled along the height; a
     // twisted vase: turned along it.
-    if (layer.profile && layer.profile.points.length > 0) applyProfile(geo, layer.profile, depth, footprintCenter(contour))
-    if (layer.twist) applyTwist(geo, layer.twist, depth, footprintCenter(contour))
+    if (layer.profile && layer.profile.points.length > 0) geo = applyProfile(geo, layer.profile, depth, footprintCenter(contour))
+    if (layer.twist) geo = applyTwist(geo, layer.twist, depth, footprintCenter(contour))
     geo.scale(scale, scale, scale)
     geometries = [geo]
   } else {
@@ -176,11 +176,12 @@ export function buildLayerCutters(layer: ShapeLayer, scale: number, holes: Shape
   const bake = rotationBake(body, layer)
   body.dispose()
   const center = footprintCenter(contour)
-  return cutters.map((cutter) => {
+  return cutters.map((built) => {
     // Drilled into a profiled wall: the cutters follow the same curve so a
     // hole starts outside the bulge and ends in the cavity, as designed.
-    if (layer.profile && layer.profile.points.length > 0) applyProfile(cutter, layer.profile, depth, center)
-    if (layer.twist) applyTwist(cutter, layer.twist, depth, center)
+    let cutter = built
+    if (layer.profile && layer.profile.points.length > 0) cutter = applyProfile(cutter, layer.profile, depth, center)
+    if (layer.twist) cutter = applyTwist(cutter, layer.twist, depth, center)
     cutter.scale(scale, scale, scale)
     return bake ? cutter.applyMatrix4(bake) : cutter
   })
