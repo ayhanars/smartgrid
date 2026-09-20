@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ChevronDown,
-  Command,
   Copy,
   FilePlus,
   FolderOpen,
@@ -274,11 +273,6 @@ export function TopBar({
       </div>
 
       <div className="top-bar__section top-bar__right">
-        <button type="button" className="top-bar__actions">
-          <Command size={13} />
-          <span>K</span>
-        </button>
-        <div className="top-bar__divider" />
         <button
           type="button"
           className={`top-bar__pill ${printPreview ? 'top-bar__pill--active' : ''}`}

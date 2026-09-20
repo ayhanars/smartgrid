@@ -88,21 +88,6 @@
   color: var(--text);
 }
 
-.top-bar__actions {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
-  color: var(--text-faint);
-  background: var(--bg-field);
-  font-size: 11px;
-}
-
-.top-bar__actions:hover {
-  color: var(--text-muted);
-}
-
 .top-bar__view-toggle {
   display: flex;
   align-items: center;
