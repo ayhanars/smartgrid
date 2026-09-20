@@ -48,7 +48,7 @@ export function GhostPlate({
   const active = useMemo(() => activeHoleIds(layers, order), [layers, order])
   return (
     <group position={[offset[0], 0, offset[1]]} onPointerDown={(e) => { e.stopPropagation(); onActivate() }}>
-      <PrinterPlate width={bedWidth} depth={bedDepth} widthMM={artboardWidth} depthMM={artboardHeight} />
+      <PrinterPlate width={bedWidth} depth={bedDepth} widthMM={artboardWidth} depthMM={artboardHeight} dim />
       <Html position={[0, 0.002, bedDepth / 2 + 0.1]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
         <span className="ghost-plate__label">{plate.name}</span>
       </Html>

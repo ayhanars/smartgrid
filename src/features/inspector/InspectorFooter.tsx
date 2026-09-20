@@ -19,6 +19,8 @@ export function InspectorFooter() {
   const plates = useDocumentStore((s) => s.plates)
   const activePlateId = useDocumentStore((s) => s.activePlateId)
   const projectId = useDocumentStore((s) => s.projectId)
+  const projectName = useDocumentStore((s) => s.projectName)
+  const fileBase = projectName.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() || 'smartgrid'
   const multiPlate = plates.length > 1
   const solids = order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible)
   const activePlate = plates.find((p) => p.id === activePlateId) ?? plates[0]
@@ -55,13 +57,13 @@ export function InspectorFooter() {
         // A 3MF carries every plate: Bambu Studio opens it with the same plates.
         const meshes = await buildExportMeshes(layers, order, { plates, bedWidth: bed.width, bedDepth: bed.height })
         if (meshes.length === 0) return
-        downloadBlob(write3mf(meshes, { plates: plates.map((p) => p.name) }), 'smartgrid.3mf', 'model/3mf')
+        downloadBlob(write3mf(meshes, { plates: plates.map((p) => p.name) }), `${fileBase}.3mf`, 'model/3mf')
       } else {
         // STL has no plates, so it holds the plate you are looking at.
         const meshes = await buildExportMeshes(layers, orderOnPlate(state, activePlateId))
         if (meshes.length === 0) return
         const suffix = multiPlate ? `-${activePlate.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}` : ''
-        downloadBlob(writeBinaryStl(meshes), `smartgrid${suffix}.stl`, 'model/stl')
+        downloadBlob(writeBinaryStl(meshes), `${fileBase}${suffix}.stl`, 'model/stl')
       }
     } finally {
       setPreparing(false)

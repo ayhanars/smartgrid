@@ -137,12 +137,15 @@ project.
 
 Plates: a project has up to 5 build plates (`plates` in the document,
 `plateId` on each shape; shapes without one sit on the first plate). The
-tabs in the top bar switch, add, rename (double-click) and delete plates.
+tabs above the layers list (floating over the canvas when that panel is
+hidden) switch, add, rename (double-click) and delete plates; deleting a
+plate moves its shapes to the nearest plate.
 Plates sit in a fixed grid by creation order (`plateLayout.ts`, Bambu
 Studio's spacing): the 2D canvas draws the other plates dimmed around the
 active one (click one to switch, drag a shape onto one to move it there),
 the layers list, print preview and warnings show the active plate only,
-and "All plates" draws the others beside it in 3D. Copy, cut and paste
+and "All plates" draws the others beside it in 3D with their beds faded.
+Exports are named after the project. Copy, cut and paste
 (⌘C/⌘X/⌘V, also in the right-click menu) work across plates and from the
 2D canvas, the 3D view and the layer list alike. A shape larger than the bed offers "Split across plates", which
 cuts it into bed-sized pieces, one per plate. A 3MF export carries every

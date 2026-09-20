@@ -112,3 +112,17 @@
   outline: 2px solid white;
   outline-offset: 2px;
 }
+
+/* Plate switcher over the canvas while the layers panel is hidden. */
+.app-shell__plates {
+  position: absolute;
+  top: 10px;
+  left: 44px;
+  z-index: 5;
+}
+
+.app-shell__plates .plate-tabs {
+  margin: 0;
+  background: var(--bg-panel);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}

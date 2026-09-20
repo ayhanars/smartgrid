@@ -7,6 +7,7 @@ import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geom
 import type { AssetDefinition } from '../lib/assets/types'
 import { rotatedLocalPoints, shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking'
+import { nearestPlate } from '../lib/geometry/plateLayout'
 import { buildShellCavity, type ShellCavity, type ShellOptions } from '../lib/geometry/shell'
 import { useViewStore } from './viewStore'
 import { buildLayerCutters, buildLayerGeometries } from '../lib/geometry/layerGeometry'
@@ -1140,16 +1141,23 @@ export const useDocumentStore = create<DocumentStore>()(
       removePlate: (id) =>
         set((state) => {
           if (state.plates.length <= 1) return {}
+          const index = state.plates.findIndex((p) => p.id === id)
+          if (index < 0) return {}
           const plates = state.plates.filter((p) => p.id !== id)
-          const gone = new Set(state.order.filter((lid) => layerPlateId(state.layers[lid], state.plates) === id))
+          // Nothing is lost: the plate's shapes move to the nearest plate in
+          // the layout (the one just before it in the same row, usually).
+          const bed = artboardSize(state)
+          const target = state.plates[nearestPlate(index, state.plates.length, bed.width, bed.height)].id
           const layers = { ...state.layers }
-          for (const lid of gone) delete layers[lid]
+          for (const lid of state.order) {
+            const l = layers[lid]
+            if (l && layerPlateId(l, state.plates) === id) layers[lid] = { ...l, plateId: target }
+          }
           return {
             plates,
             layers,
-            order: state.order.filter((lid) => !gone.has(lid)),
-            selection: state.selection.filter((lid) => !gone.has(lid)),
-            activePlateId: state.activePlateId === id ? plates[0].id : state.activePlateId,
+            activePlateId: state.activePlateId === id ? target : state.activePlateId,
+            selection: state.activePlateId === id ? [] : state.selection,
           }
         }),
       moveShapesToPlate: (ids, plateId) =>

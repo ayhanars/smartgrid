@@ -11,6 +11,7 @@ import { useViewStore } from '../state/viewStore'
 import { analyzeSupport } from '../lib/geometry/support'
 import { isTextEntryTarget } from '../lib/dom/isTextEntryTarget'
 import { useClipboard } from '../state/clipboardStore'
+import { PlateTabs } from '../features/plates/PlateTabs'
 import './AppShell.css'
 
 export type ViewMode = 'split' | '2d' | '3d'
@@ -146,12 +147,22 @@ export function AppShell() {
           {viewMode !== '3d' && (
             <div className="app-shell__pane">
               <Canvas2DPane />
+              {!leftPanelOpen && (
+                <div className="app-shell__plates">
+                  <PlateTabs />
+                </div>
+              )}
             </div>
           )}
           {viewMode === 'split' && <div className="app-shell__divider" />}
           {viewMode !== '2d' && (
             <div className="app-shell__pane">
               <Viewport3DPane />
+              {viewMode === '3d' && !leftPanelOpen && (
+                <div className="app-shell__plates">
+                  <PlateTabs />
+                </div>
+              )}
             </div>
           )}
         </main>

@@ -1,6 +1,7 @@
 import { Layers, LayoutGrid, Plus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { MAX_PLATES, layerPlateId, useDocumentStore } from '../../state/documentStore'
+import { MAX_PLATES, artboardSize, layerPlateId, useDocumentStore } from '../../state/documentStore'
+import { nearestPlate } from '../../lib/geometry/plateLayout'
 import './PlateTabs.css'
 
 /** Plate switcher shown in the top bar: one tab per build plate, a "+" up to
@@ -28,9 +29,12 @@ export function PlateTabs() {
   }
 
   const remove = (id: string, name: string) => {
-    const { layers, order, plates: all } = useDocumentStore.getState()
+    const state = useDocumentStore.getState()
+    const { layers, order, plates: all } = state
     const count = order.filter((lid) => layers[lid] && !layers[lid].isHole && layerPlateId(layers[lid], all) === id).length
-    if (count > 0 && !window.confirm(`Delete "${name}" and the ${count} shape${count === 1 ? '' : 's'} on it?`)) return
+    const bed = artboardSize(state)
+    const target = all[nearestPlate(all.findIndex((p) => p.id === id), all.length, bed.width, bed.height)]
+    if (count > 0 && !window.confirm(`Delete "${name}"? Its ${count} shape${count === 1 ? '' : 's'} move${count === 1 ? 's' : ''} to "${target?.name ?? 'the next plate'}".`)) return
     removePlate(id)
   }
 

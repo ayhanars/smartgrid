@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, useMemo } from 'react'
 import { ChevronDown, ChevronRight, Circle, CircleDashed, Eye, EyeOff, Folder, Lock, Pentagon, Plus, Square, Star, Unlock } from 'lucide-react'
 import { useDocumentStore, orderOnPlate } from '../../state/documentStore'
+import { PlateTabs } from '../plates/PlateTabs'
 import type { ShapeKind, ShapeLayer } from '../../types/document'
 import { contourBounds, regionsToSvgPath } from '../../lib/geometry/primitives'
 import { LayerContextMenu, type ContextMenuState } from './LayerContextMenu'
@@ -319,6 +320,7 @@ export function LayersPanel() {
 
   return (
     <div className={`layers-panel ${drag ? 'layers-panel--dragging' : ''}`}>
+      <PlateTabs />
       <div className="layers-panel__header">
         <span className="layers-panel__title">Layers</span>
         <span className="layers-panel__count">{order.length}</span>

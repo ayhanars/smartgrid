@@ -206,29 +206,13 @@ export function Canvas2DPane() {
     else setPan({ x: rect.width / 2 - (ARTBOARD_WIDTH / 2) * zoom, y: rect.height / 2 - (ARTBOARD_HEIGHT / 2) * zoom })
   }, [activeIndex, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A plate added or removed: show the whole set.
+  // Back to a single plate: frame it again.
   const plateCountRef = useRef(plates.length)
   useLayoutEffect(() => {
     if (plateCountRef.current === plates.length) return
     plateCountRef.current = plates.length
-    if (plates.length === 1) {
-      fitToView()
-      return
-    }
-    const active = plateSlot(activeIndex, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT)
-    let minX = 0
-    let minY = 0
-    let maxX = ARTBOARD_WIDTH
-    let maxY = ARTBOARD_HEIGHT
-    for (let i = 0; i < plates.length; i++) {
-      const slot = plateSlot(i, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT)
-      minX = Math.min(minX, slot.x - active.x)
-      minY = Math.min(minY, slot.y - active.y)
-      maxX = Math.max(maxX, slot.x - active.x + ARTBOARD_WIDTH)
-      maxY = Math.max(maxY, slot.y - active.y + ARTBOARD_HEIGHT)
-    }
-    zoomToBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, 40)
-  }, [plates.length, activeIndex, ARTBOARD_WIDTH, ARTBOARD_HEIGHT, fitToView, zoomToBounds])
+    if (plates.length === 1) fitToView()
+  }, [plates.length, fitToView])
 
   const zoomAtCenter = (factor: number) => {
     const svg = svgRef.current
