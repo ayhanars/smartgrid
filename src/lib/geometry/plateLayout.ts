@@ -25,3 +25,20 @@ export function plateOrigin(index: number, count: number, bedWidth: number, bedD
   const slot = plateSlot(index, count, bedWidth, bedDepth)
   return { x: slot.x, y: -slot.y }
 }
+
+/** Index of the plate closest to plate `index` in the layout (−1 if alone). */
+export function nearestPlate(index: number, count: number, bedWidth: number, bedDepth: number): number {
+  const from = plateSlot(index, count, bedWidth, bedDepth)
+  let nearest = -1
+  let best = Infinity
+  for (let i = 0; i < count; i++) {
+    if (i === index) continue
+    const slot = plateSlot(i, count, bedWidth, bedDepth)
+    const d = Math.hypot(slot.x - from.x, slot.y - from.y)
+    if (d < best) {
+      best = d
+      nearest = i
+    }
+  }
+  return nearest
+}

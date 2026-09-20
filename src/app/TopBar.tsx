@@ -32,7 +32,6 @@ import { useAuthStore } from '../features/auth/useAuthStore'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { useConnectivity } from '../lib/connectivity'
 import { PublishDialog } from '../features/community/PublishDialog'
-import { PlateTabs } from '../features/plates/PlateTabs'
 import { importSvgFiles } from '../lib/import/importSvgFiles'
 import type { ViewMode } from './AppShell'
 import '../features/layers/LayerContextMenu.css'
@@ -272,7 +271,6 @@ export function TopBar({
             Offline
           </span>
         )}
-        <PlateTabs />
       </div>
 
       <div className="top-bar__section top-bar__right">
