@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { Bookmark, ChevronDown, Clock, Folder, Globe, LogOut, Plus, Search, ShieldCheck, UserRound, UserRoundCog } from 'lucide-react'
+import { Bookmark, ChevronDown, Folder, Globe, House, LogOut, Plus, Search, ShieldCheck, UserRound, UserRoundCog } from 'lucide-react'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { AuthDialog } from '../features/auth/AuthDialog'
@@ -26,7 +26,7 @@ export function HomeLayout() {
   const search = (e: FormEvent) => {
     e.preventDefault()
     const q = query.trim()
-    navigate(q ? `/community?q=${encodeURIComponent(q)}` : '/community')
+    navigate(q ? `/search?q=${encodeURIComponent(q)}` : '/search')
   }
 
   return (
@@ -38,12 +38,12 @@ export function HomeLayout() {
         </div>
         <form className="shell__search" onSubmit={search}>
           <Search size={15} />
-          <input value={query} placeholder="Search community" aria-label="Search the community" onChange={(e) => setQuery(e.target.value)} />
+          <input value={query} placeholder="Search projects, models, people" aria-label="Search" onChange={(e) => setQuery(e.target.value)} />
         </form>
         <nav className="shell__nav">
           <NavLink to="/" end className={({ isActive }) => `shell__link ${isActive ? 'shell__link--active' : ''}`}>
-            <Clock size={16} />
-            Recents
+            <House size={16} />
+            Home
           </NavLink>
           {isSupabaseConfigured && (
             <NavLink to="/community" className={({ isActive }) => `shell__link ${isActive ? 'shell__link--active' : ''}`}>
@@ -182,6 +182,10 @@ function AccountChip() {
             <span>{user.email}</span>
           </div>
           <div className="layer-context-menu__divider" />
+          <button type="button" role="menuitem" onClick={() => go(`/u/${user.id}`)}>
+            <UserRound size={13} />
+            My profile
+          </button>
           <button type="button" role="menuitem" onClick={() => go('/account')}>
             <UserRoundCog size={13} />
             Account settings

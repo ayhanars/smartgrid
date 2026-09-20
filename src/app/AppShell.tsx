@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { TopBar } from './TopBar'
 import { LeftPanel } from './LeftPanel'
 import { InspectorPanel } from '../features/inspector/InspectorPanel'
@@ -17,6 +18,7 @@ const TOAST_MS = 6000
 
 /** Transient one-liner from the view store (import results, errors). */
 function Toast() {
+  const navigate = useNavigate()
   const notice = useViewStore((s) => s.notice)
   const setNotice = useViewStore((s) => s.setNotice)
   useEffect(() => {
@@ -28,6 +30,18 @@ function Toast() {
   return (
     <div className="app-shell__toast" role="status">
       <span>{notice.text}</span>
+      {notice.link && (
+        <button
+          type="button"
+          className="app-shell__toast-link"
+          onClick={() => {
+            setNotice(null)
+            navigate(notice.link!.to)
+          }}
+        >
+          {notice.link.label}
+        </button>
+      )}
       <button type="button" aria-label="Dismiss" onClick={() => setNotice(null)}>
         ×
       </button>

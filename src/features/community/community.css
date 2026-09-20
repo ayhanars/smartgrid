@@ -1019,3 +1019,107 @@
   color: var(--accent);
   font-weight: 500;
 }
+
+/* Primary download: one big button with a format menu on its right. */
+.download-box__split {
+  position: relative;
+  display: flex;
+}
+
+.download-box__primary {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--accent);
+  color: white;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.download-box__more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  background: var(--accent);
+  color: white;
+}
+
+.download-box__primary:hover:not(:disabled),
+.download-box__more:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.download-box__primary:disabled,
+.download-box__more:disabled {
+  opacity: 0.5;
+}
+
+.download-box__split .layer-context-menu.download-box__menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 0;
+  z-index: 60;
+}
+
+.download-box__menu-hint {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+
+/* Secondary actions on the model page use the outlined style. */
+.community-item__open--secondary {
+  background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+}
+
+.community-item__open--secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  filter: none;
+}
+
+.community-card__author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border-radius: var(--radius-pill);
+}
+
+.community-card__author:hover span:last-child {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.comment__meta strong {
+  cursor: pointer;
+}
+
+.comment__meta strong:hover {
+  text-decoration: underline;
+}
+
+.community-item__author-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 2px 2px;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.community-item__author-link:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}

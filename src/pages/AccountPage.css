@@ -317,3 +317,18 @@
   background: var(--accent);
   transition: width 0.3s;
 }
+
+.account__textarea {
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.account__textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}

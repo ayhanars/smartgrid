@@ -195,8 +195,11 @@ export function CommunityItemPage() {
             <div className="community-item__side">
               <h1>{item.title}</h1>
               <div className="community-item__author">
-                <Avatar name={item.author.displayName} url={item.author.avatarUrl} large />
-                <span>{item.author.displayName}</span>
+                <button type="button" className="community-item__author-link" onClick={() => navigate(`/u/${item.ownerId}`)}>
+                  <Avatar name={item.author.displayName} url={item.author.avatarUrl} large />
+                  <span>{item.author.displayName}</span>
+                  <span className="level-badge">L{item.author.level}</span>
+                </button>
                 {item.featured && (
                   <span title="Featured by the moderators" style={{ color: 'var(--warning)', display: 'inline-flex' }}>
                     <Star size={14} />
@@ -252,7 +255,7 @@ export function CommunityItemPage() {
               {item.tags.length > 0 && (
                 <div className="community-item__tags">
                   {item.tags.map((t) => (
-                    <button key={t} type="button" onClick={() => navigate(`/community?q=${encodeURIComponent(t)}`)}>
+                    <button key={t} type="button" onClick={() => navigate(`/community/models?q=${encodeURIComponent(t)}`)}>
                       #{t}
                     </button>
                   ))}
@@ -260,9 +263,10 @@ export function CommunityItemPage() {
               )}
               {item.description && <p className="community-item__desc">{item.description}</p>}
 
+              <DownloadBox itemId={item.id} title={item.title} snapshot={item.data} />
               {isOwner ? (
                 <div className="owner-actions">
-                  <button type="button" className="community-item__open" style={{ flex: 1 }} disabled={!item.sourceProjectId} title={item.sourceProjectId ? 'Open the project this was published from' : 'The source project was deleted'} onClick={() => void editOriginal()}>
+                  <button type="button" className="community-item__open community-item__open--secondary" style={{ flex: 1 }} disabled={!item.sourceProjectId} title={item.sourceProjectId ? 'Open the project this was published from' : 'The source project was deleted'} onClick={() => void editOriginal()}>
                     <PencilLine size={15} />
                     Edit the original
                   </button>
@@ -272,7 +276,7 @@ export function CommunityItemPage() {
                   </button>
                 </div>
               ) : (
-                <button type="button" className="community-item__open" onClick={openCopy}>
+                <button type="button" className="community-item__open community-item__open--secondary" onClick={openCopy}>
                   <Copy size={15} />
                   Open a copy in the editor
                 </button>
@@ -286,7 +290,6 @@ export function CommunityItemPage() {
                   ? 'Edits to the original are pushed to the community from the project menu (“Publish to community”). A copy starts a separate project you can publish as a version.'
                   : 'The copy is yours: it lands in your projects and edits never touch the shared model. Publish it back later as a version of this one.'}
               </p>
-              <DownloadBox itemId={item.id} title={item.title} snapshot={item.data} />
 
               {item.notes && (
                 <div className="community-item__notes">

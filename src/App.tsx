@@ -8,6 +8,10 @@ import { CollectionPage } from './pages/CollectionPage'
 import { EditorPage } from './pages/EditorPage'
 import { AccountPage } from './pages/AccountPage'
 import { CommunityPage } from './pages/CommunityPage'
+import { CommunityModelsPage } from './pages/CommunityModelsPage'
+import { CommunityCollectionsPage } from './pages/CommunityCollectionsPage'
+import { SearchPage } from './pages/SearchPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { CommunityItemPage } from './pages/CommunityItemPage'
 import { AdminPage } from './pages/AdminPage'
 import { AuthGate } from './features/auth/AuthGate'
@@ -38,6 +42,10 @@ function App() {
           <Route path="/collections/:id" element={<CollectionPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/community" element={<CommunityPage />} />
+          <Route path="/community/models" element={<CommunityModelsPage />} />
+          <Route path="/community/collections" element={<CommunityCollectionsPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/u/:id" element={<ProfilePage />} />
           <Route path="/c/:id" element={<CommunityItemPage />} />
           <Route path="/admin" element={<AdminPage />} />
         </Route>

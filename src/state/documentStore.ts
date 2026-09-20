@@ -258,6 +258,51 @@ function makeCavityLayer(solid: ShapeLayer, options: ShellOptions, layerHeight: 
   }
 }
 
+/** The layers an asset places at `origin` (mm), as ordinary shapes: used
+ * when dropping an asset into a document and to preview one in 3D. */
+export function buildAssetLayers(asset: AssetDefinition, origin: Point2, layerHeight: number): { layers: Record<string, ShapeLayer>; order: string[]; group: ShapeGroup | null } {
+  const layers: Record<string, ShapeLayer> = {}
+  const order: string[] = []
+  const needsGroup = asset.parts.length > 1 || asset.parts.some((p) => p.hollow)
+  const groupId = needsGroup ? generateId() : undefined
+  for (const part of asset.parts) {
+    const id = generateId()
+    const regions = part.regions ?? createShapeRegions(part.kind, part.width, part.height, { sides: part.polygonSides, starPoints: part.starPoints, starInnerRatio: part.starInnerRatio })
+    const layer: ShapeLayer = {
+      id,
+      kind: part.kind,
+      name: part.name,
+      visible: true,
+      locked: false,
+      color: part.color ?? '#4d8dff',
+      transform: { x: origin.x + part.x, y: origin.y + part.y, z: part.z ?? 0, rotationX: 0, rotationY: 0, rotation: part.rotation ?? 0 },
+      regions,
+      extrusionDepth: part.depth,
+      cornerRadius: part.cornerRadius ?? 0,
+      smartPolish: part.smartPolish ?? 0,
+      bevelBottom: part.bevelBottom ?? 0,
+      bevelTop: part.bevelTop ?? 0,
+      isHole: !!part.isHole,
+      ...(part.bevelMode ? { bevelMode: part.bevelMode } : {}),
+      ...(part.texture ? { texture: part.texture } : {}),
+      ...(part.perforation ? { perforation: part.perforation } : {}),
+      ...(part.polygonSides ? { polygonSides: part.polygonSides } : {}),
+      ...(part.starPoints ? { starPoints: part.starPoints, starInnerRatio: part.starInnerRatio ?? 0.45 } : {}),
+      ...(groupId ? { groupId } : {}),
+    }
+    layers[id] = layer
+    order.push(id)
+    if (part.hollow && !layer.isHole) {
+      const cavity = makeCavityLayer(layer, part.hollow, layerHeight, groupId)
+      if (cavity) {
+        layers[cavity.id] = cavity
+        order.push(cavity.id)
+      }
+    }
+  }
+  return { layers, order, group: groupId ? { id: groupId, name: asset.name } : null }
+}
+
 /** A cavity layer updated to a freshly built shell cavity. */
 function applyCavity(cavity: ShapeLayer, built: ShellCavity): ShapeLayer {
   return {
@@ -879,50 +924,14 @@ export const useDocumentStore = create<DocumentStore>()(
       addAsset: (asset, origin) => {
         const ids: string[] = []
         set((state) => {
-          const layers = { ...state.layers }
-          const order = [...state.order]
-          let groups = state.groups
-          const needsGroup = asset.parts.length > 1 || asset.parts.some((p) => p.hollow)
-          const groupId = needsGroup ? generateId() : undefined
-          if (groupId) groups = { ...groups, [groupId]: { id: groupId, name: asset.name } }
-          for (const part of asset.parts) {
-            const id = generateId()
-            const regions = part.regions ?? createShapeRegions(part.kind, part.width, part.height, { sides: part.polygonSides, starPoints: part.starPoints, starInnerRatio: part.starInnerRatio })
-            const layer: ShapeLayer = {
-              id,
-              kind: part.kind,
-              name: part.name,
-              visible: true,
-              locked: false,
-              color: part.color ?? '#4d8dff',
-              transform: { x: origin.x + part.x, y: origin.y + part.y, z: part.z ?? 0, rotationX: 0, rotationY: 0, rotation: part.rotation ?? 0 },
-              regions,
-              extrusionDepth: part.depth,
-              cornerRadius: part.cornerRadius ?? 0,
-              smartPolish: part.smartPolish ?? 0,
-              bevelBottom: part.bevelBottom ?? 0,
-              bevelTop: part.bevelTop ?? 0,
-              isHole: !!part.isHole,
-              ...(part.bevelMode ? { bevelMode: part.bevelMode } : {}),
-              ...(part.texture ? { texture: part.texture } : {}),
-              ...(part.perforation ? { perforation: part.perforation } : {}),
-              ...(part.polygonSides ? { polygonSides: part.polygonSides } : {}),
-              ...(part.starPoints ? { starPoints: part.starPoints, starInnerRatio: part.starInnerRatio ?? 0.45 } : {}),
-              ...(groupId ? { groupId } : {}),
-            }
-            layers[id] = layer
-            order.push(id)
-            ids.push(id)
-            if (part.hollow && !layer.isHole) {
-              const cavity = makeCavityLayer(layer, part.hollow, state.printSettings.layerHeight, groupId)
-              if (cavity) {
-                layers[cavity.id] = cavity
-                order.push(cavity.id)
-                ids.push(cavity.id)
-              }
-            }
+          const built = buildAssetLayers(asset, origin, state.printSettings.layerHeight)
+          ids.push(...built.order)
+          return {
+            layers: { ...state.layers, ...built.layers },
+            order: [...state.order, ...built.order],
+            groups: built.group ? { ...state.groups, [built.group.id]: built.group } : state.groups,
+            selection: built.order,
           }
-          return { layers, order, groups, selection: ids }
         })
         return ids
       },

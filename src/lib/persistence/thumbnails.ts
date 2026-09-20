@@ -6,8 +6,9 @@
 
 const thumbKey = (id: string) => `smartgrid:thumb:${id}`
 
-export const THUMBNAIL_WIDTH = 480
-export const THUMBNAIL_HEIGHT = 360
+// 2x the card size so retina screens and the model page hero stay crisp.
+export const THUMBNAIL_WIDTH = 960
+export const THUMBNAIL_HEIGHT = 720
 
 export function loadLocalThumbnail(id: string): string | null {
   try {

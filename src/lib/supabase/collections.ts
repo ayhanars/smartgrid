@@ -170,8 +170,9 @@ export async function uploadCollectionCover(collectionId: string, file: File): P
 }
 
 /** Approved public collections from everyone, most recently changed first. */
-export async function listPublicCollections(query = '', limit = 60): Promise<Collection[]> {
+export async function listPublicCollections(query = '', limit = 60, ownerId?: string): Promise<Collection[]> {
   let q = supabase.from('collections').select(COLUMNS).eq('is_public', true).eq('approval', 'approved').order('updated_at', { ascending: false }).limit(limit)
+  if (ownerId) q = q.eq('owner_id', ownerId)
   const term = query.trim()
   if (term) q = q.ilike('name', `%${term.replace(/[%_]/g, '')}%`)
   const { data, error } = await q

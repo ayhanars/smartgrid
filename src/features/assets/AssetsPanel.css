@@ -383,3 +383,33 @@ button.assets-section__sync:hover {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/* Hover: a still 3D render over the flat thumbnail. */
+.asset-card__preview {
+  position: relative;
+  display: block;
+}
+
+.asset-card--row .asset-card__preview {
+  width: 40px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.asset-card--row .asset-card__preview .asset-card__thumb {
+  width: 100%;
+  height: 100%;
+}
+
+.asset-card__preview-3d {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.asset-card__preview-3d canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}

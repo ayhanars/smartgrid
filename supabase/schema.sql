@@ -774,7 +774,9 @@ declare
 begin
   if p_user is null or p_points = 0 then return; end if;
   select level into old_level from public.profiles where id = p_user;
+  perform set_config('smartgrid.counting', 'on', true);
   update public.profiles set xp = greatest(0, xp + p_points), level = public.xp_to_level(greatest(0, xp + p_points)) where id = p_user returning level into new_level;
+  perform set_config('smartgrid.counting', '', true);
   if new_level > coalesce(old_level, 1) then
     perform public.notify(p_user, 'level', format('You reached level %s', new_level), p_reason, '/account');
   end if;
@@ -1066,3 +1068,105 @@ begin
 end;
 $$;
 grant execute on function public.admin_users(text, integer) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Following: people get a notification when someone they follow has a
+-- model approved. Profile pages are public.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.follows (
+  follower_id uuid not null references public.profiles (id) on delete cascade,
+  followee_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (follower_id, followee_id),
+  check (follower_id <> followee_id)
+);
+
+create index if not exists follows_followee_idx on public.follows (followee_id);
+
+alter table public.follows enable row level security;
+
+drop policy if exists "Follows are visible to everyone" on public.follows;
+create policy "Follows are visible to everyone" on public.follows for select using (true);
+drop policy if exists "Users follow as themselves" on public.follows;
+create policy "Users follow as themselves" on public.follows for insert with check (auth.uid() = follower_id);
+drop policy if exists "Users unfollow as themselves" on public.follows;
+create policy "Users unfollow as themselves" on public.follows for delete using (auth.uid() = follower_id);
+
+alter table public.profiles add column if not exists followers integer not null default 0;
+alter table public.profiles add column if not exists following integer not null default 0;
+alter table public.profiles add column if not exists bio text not null default '';
+
+create or replace function public.on_follow_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  f uuid := coalesce(new.follower_id, old.follower_id);
+  t uuid := coalesce(new.followee_id, old.followee_id);
+  who text;
+begin
+  perform set_config('smartgrid.counting', 'on', true);
+  update public.profiles set followers = (select count(*) from public.follows where followee_id = t) where id = t;
+  update public.profiles set following = (select count(*) from public.follows where follower_id = f) where id = f;
+  perform set_config('smartgrid.counting', '', true);
+  if tg_op = 'INSERT' then
+    select display_name into who from public.profiles where id = f;
+    perform public.notify(t, 'follow', format('%s started following you', coalesce(who, 'Someone')), '', '/u/' || f);
+    perform public.award_xp(t, 5, 'New follower');
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists follows_events on public.follows;
+create trigger follows_events after insert or delete on public.follows for each row execute function public.on_follow_change();
+
+-- The counters on profiles are kept by triggers, not by users.
+create or replace function public.guard_profile_role()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.is_user_request() then
+    if new.role is distinct from old.role and not public.is_admin() then new.role := old.role; end if;
+    -- Counters move only through award_xp / the follow trigger, which set
+    -- the same flag the community counters use.
+    if coalesce(current_setting('smartgrid.counting', true), '') <> 'on' and (new.xp is distinct from old.xp or new.level is distinct from old.level or new.followers is distinct from old.followers or new.following is distinct from old.following) then
+      new.xp := old.xp; new.level := old.level; new.followers := old.followers; new.following := old.following;
+    end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- Followers hear about approved models (new or resubmitted).
+create or replace function public.notify_followers_of_item()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  who text;
+begin
+  if new.approval = 'approved' and new.status = 'published' and (tg_op = 'INSERT' or old.approval is distinct from 'approved') then
+    select display_name into who from public.profiles where id = new.owner_id;
+    insert into public.notifications (user_id, kind, title, body, link)
+    select follower_id, 'follow_post', format('%s published %s', coalesce(who, 'Someone'), new.title), left(new.description, 140), '/c/' || new.id
+    from public.follows where followee_id = new.owner_id;
+  end if;
+  return null;
+end;
+$$;
+
+drop trigger if exists community_items_followers on public.community_items;
+create trigger community_items_followers after insert or update on public.community_items for each row execute function public.notify_followers_of_item();
+
+-- People search for the global search box (profiles are public).
+grant execute on function public.search_profiles(text, integer) to anon;

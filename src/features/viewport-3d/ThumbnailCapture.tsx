@@ -101,7 +101,7 @@ export function ThumbnailCapture({ ready }: { ready: boolean }) {
         image.data.set(pixels.subarray(src, src + rowBytes), y * rowBytes)
       }
       ctx.putImageData(image, 0, 0)
-      return canvas.toDataURL('image/webp', 0.82)
+      return canvas.toDataURL('image/webp', 0.86)
     }
 
     const unregister = registerThumbnailCapture(capture)

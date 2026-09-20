@@ -8,6 +8,7 @@ import { captureAsset } from '../../lib/assets/userAssets'
 import { useUserAssets } from '../../state/userAssetsStore'
 import { isGuest, requireAccount } from '../auth/authGate'
 import { AssetThumbnail } from './AssetThumbnail'
+import { AssetPreview3D } from './AssetPreview3D'
 import { ASSET_MIME } from './assetDrag'
 import './AssetsPanel.css'
 
@@ -42,6 +43,7 @@ export function AssetsPanel() {
   const renameUserAsset = useUserAssets((s) => s.rename)
   const [view, setView] = useState<'grid' | 'list'>(() => (readView() === 'list' ? 'list' : 'grid'))
   const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [hoverId, setHoverId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const changeView = (v: 'grid' | 'list') => {
     setView(v)
@@ -174,6 +176,8 @@ export function AssetsPanel() {
                     e.dataTransfer.effectAllowed = 'copy'
                   }}
                   onClick={() => renamingId !== asset.id && place(asset)}
+                  onPointerEnter={(e) => e.pointerType === 'mouse' && setHoverId(asset.id)}
+                  onPointerLeave={() => setHoverId((h) => (h === asset.id ? null : h))}
                   onKeyDown={(e) => {
                     if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
                       e.preventDefault()
@@ -181,7 +185,14 @@ export function AssetsPanel() {
                     }
                   }}
                 >
-                  <AssetThumbnail asset={asset} />
+                  <span className="asset-card__preview">
+                    <AssetThumbnail asset={asset} />
+                    {hoverId === asset.id && (
+                      <span className="asset-card__preview-3d" aria-hidden>
+                        <AssetPreview3D asset={asset} />
+                      </span>
+                    )}
+                  </span>
                   <span className="asset-card__text">
                     {renamingId === asset.id ? (
                       <input
