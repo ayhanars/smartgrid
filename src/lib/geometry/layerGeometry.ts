@@ -7,6 +7,8 @@ import { buildBeveledGeometry } from './bevelExtrude'
 import { computeSafeBevel } from './offset'
 import { buildSimpleRegionGeometry } from './multiRegionExtrude'
 import { buildPerforationCutter } from './perforation'
+import { difference, type MultiPolygon, type Polygon } from 'polygon-clipping'
+import type { ShapeRegion } from '../../types/document'
 
 // Print frame (X/Y along the plate, Z up) -> three.js scene frame (Y up,
 // doc Y along +Z). A proper rotation, so orientation math done in the
@@ -201,4 +203,89 @@ function computeZRange(layer: ShapeLayer): { bottomZ: number; topZ: number } {
   }
   if (!Number.isFinite(min)) return { bottomZ: layer.transform.z, topZ: layer.transform.z }
   return { bottomZ: layer.transform.z + min, topZ: layer.transform.z + max }
+}
+
+// ---------------------------------------------------------------------------
+// Flat cuts: a straight hole all the way through a plain extrusion needs no
+// 3D boolean at all — subtract its footprint in 2D and extrude the result.
+// That is milliseconds where the CSG takes seconds on a detailed body.
+// ---------------------------------------------------------------------------
+
+const EPS = 1e-6
+
+/** True when `hole` can be cut from `solid` in 2D: both stand upright, the
+ * solid is a plain extrusion (no bevel, relief or perforation) and the
+ * hole is a straight prism spanning the solid's whole height. */
+export function isFlatHole(solid: ShapeLayer, hole: ShapeLayer): boolean {
+  if (!hole.isHole || hole.shellOf) return false
+  if (solid.transform.rotationX || solid.transform.rotationY || hole.transform.rotationX || hole.transform.rotationY) return false
+  if (solid.bevelBottom > 0 || solid.bevelTop > 0 || solid.texture || solid.perforation) return false
+  if (hole.bevelBottom > 0 || hole.bevelTop > 0 || hole.texture) return false
+  const solidBottom = solid.transform.z
+  const solidTop = solid.transform.z + Math.max(0.2, solid.extrusionDepth)
+  const holeBottom = hole.transform.z
+  const holeTop = hole.transform.z + Math.max(0.2, hole.extrusionDepth)
+  return holeBottom <= solidBottom + EPS && holeTop >= solidTop - EPS
+}
+
+function toRing(points: Point2[]): [number, number][] {
+  const ring = points.map((p): [number, number] => [p.x, p.y])
+  if (ring.length && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) ring.push(ring[0])
+  return ring
+}
+
+function fromRing(ring: [number, number][]): Point2[] {
+  const pts = ring.map(([x, y]) => ({ x, y }))
+  if (pts.length > 1 && pts[0].x === pts[pts.length - 1].x && pts[0].y === pts[pts.length - 1].y) pts.pop()
+  return pts
+}
+
+/** The solid's footprint as regions in its own unrotated local frame. */
+function solidLocalRegions(solid: ShapeLayer): ShapeRegion[] {
+  const contour = effectiveContour(solid)
+  return contour ? [{ outer: { points: contour }, holes: [] }] : solid.regions
+}
+
+/** A hole layer's full footprint (outer rings minus its islands) in the
+ * solid's local frame. */
+function holeLocalPolygons(solid: ShapeLayer, hole: ShapeLayer): Polygon[] {
+  const all = solid.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+  const bounds = contourBounds(all)
+  const cx = bounds.x + bounds.width / 2
+  const cy = bounds.y + bounds.height / 2
+  const rad = (-solid.transform.rotation * Math.PI) / 180
+  const cos = Math.cos(rad)
+  const sin = Math.sin(rad)
+  const toLocal = (p: Point2): Point2 => {
+    const x = p.x - solid.transform.x - cx
+    const y = p.y - solid.transform.y - cy
+    return { x: cx + x * cos - y * sin, y: cy + x * sin + y * cos }
+  }
+  const place = (pts: Point2[]) => toRing(rotatedLocalPoints(hole, pts).map((p) => toLocal({ x: p.x + hole.transform.x, y: p.y + hole.transform.y })))
+  return hole.regions.map((r) => [place(r.outer.points), ...r.holes.map((h) => place(h.points))])
+}
+
+/** The solid with every flat hole already subtracted, built like a plain
+ * multi-region extrusion (same frame and orientation as
+ * buildLayerGeometries). Falls back to the uncut body when the 2D
+ * boolean fails or removes everything. */
+export function buildFlatCutGeometries(solid: ShapeLayer, holes: ShapeLayer[], scale: number): THREE.BufferGeometry[] {
+  const depth = Math.max(0.2, solid.extrusionDepth)
+  let regions: ShapeRegion[]
+  try {
+    const base: MultiPolygon = solidLocalRegions(solid).map((r) => [toRing(r.outer.points), ...r.holes.map((h) => toRing(h.points))])
+    const cutters: Polygon[] = holes.flatMap((h) => holeLocalPolygons(solid, h))
+    const result = difference(base, cutters)
+    regions = result.map((polygon) => ({ outer: { points: fromRing(polygon[0]) }, holes: polygon.slice(1).map((ring) => ({ points: fromRing(ring) })) }))
+    regions = regions.filter((r) => r.outer.points.length >= 3)
+    if (regions.length === 0) regions = solidLocalRegions(solid)
+  } catch {
+    regions = solidLocalRegions(solid)
+  }
+  return regions
+    .map((region) => buildSimpleRegionGeometry(region, depth, scale))
+    .map((geo) => {
+      const bake = rotationBake(geo, solid)
+      return bake ? geo.applyMatrix4(bake) : geo
+    })
 }

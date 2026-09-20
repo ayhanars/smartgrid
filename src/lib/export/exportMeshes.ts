@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { ShapeLayer } from '../../types/document'
 import { type Plate, layerPlateId, shapeWorldBounds } from '../../state/documentStore'
 import { plateOrigin } from '../geometry/plateLayout'
-import { buildLayerCutters, buildLayerGeometries, perforationTessellation } from '../geometry/layerGeometry'
+import { planCut } from '../geometry/cutPlan'
 import { cutHolesAsync } from '../geometry/csgClient'
 
 export interface ExportMesh {
@@ -52,20 +52,13 @@ export async function buildExportMeshes(layers: Record<string, ShapeLayer>, orde
     const overlapping = holeIds.filter((hid) => plateIndex(layers[hid]) === plateIndex(layer) && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
     const solidWorld = toWorld(layer)
     const holeLayers = overlapping.map((hid) => layers[hid])
-    const tessellate = perforationTessellation(layer)
-    // Same order and subdivision as the viewport (see useCutGeometries).
-    const holeGeoms = [
-      ...holeLayers.flatMap((hole) => {
-        const w = toWorld(hole)
-        return buildLayerGeometries(hole, 1, { tessellate }).map((geometry) => ({ geometry, ...w }))
-      }),
-      ...buildLayerCutters(layer, 1, holeLayers).map((geometry) => ({ geometry, ...solidWorld })),
-    ]
+    // Same plan as the viewport (see useCutGeometries).
+    const plan = planCut(layer, holeLayers, 1, toWorld)
 
-    for (const geo of buildLayerGeometries(layer, 1)) {
+    for (const geo of plan.bodies) {
       let finalGeo: THREE.BufferGeometry = geo
       try {
-        finalGeo = await cutHolesAsync({ geometry: geo, ...solidWorld }, holeGeoms).promise
+        if (plan.needsCsg) finalGeo = await cutHolesAsync({ geometry: geo, ...solidWorld }, plan.holes()).promise
       } catch (err) {
         console.error(`Hole cut failed for "${layer.name}" during export, exporting it uncut:`, err)
       }
