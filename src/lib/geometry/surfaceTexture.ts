@@ -287,19 +287,39 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
   const sides = texture.sides && texture.sides.length > 0 ? new Set(texture.sides) : null
   const bandFrom = texture.wallFrom
   const bandTo = texture.wallTo
+  // A cavity following its solid's texture measures the pattern on the
+  // solid's wall: same repeats around, same height reference.
+  const ref = texture.derived
+  const refPerimeter = ref?.perimeter ?? perimeter
+  const refHeight = ref?.height ?? height
+  const uScale = refPerimeter / Math.max(perimeter, 1e-6)
+  const phaseV = ref?.phaseV ?? 0
+  const rad = ((texture.angle ?? 0) * Math.PI) / 180
+  const cosA = Math.cos(rad)
+  const sinA = Math.sin(rad)
+  const fade = Math.max(0, texture.fade ?? 0)
   for (let c = 0; c < cols; c++) {
     const col = columns[c]
     const onSide = !sides || sides.has(col.side) ? 1 : 0
     for (let j = 0; j <= rows; j++) {
       const z = zA + (height * j) / rows
+      // Height on the reference wall (the solid's, for a derived texture).
+      const v = z - zA + phaseV
       // Fade at the very ends (so the wall still meets caps/bevels) and at
       // the edges of a height band, over about one pattern step.
       const endFade = j === 0 || j === rows ? 0 : 1
       const bandFade = Math.min(
-        bandFrom == null ? 1 : smoothstep(bandFrom - step, bandFrom + step, z - zA),
-        bandTo == null ? 1 : 1 - smoothstep(bandTo - step, bandTo + step, z - zA),
+        bandFrom == null ? 1 : smoothstep(bandFrom - step, bandFrom + step, v),
+        bandTo == null ? 1 : 1 - smoothstep(bandTo - step, bandTo + step, v),
       )
-      const d = sign * texture.depth * patternStrength(texture, col.u, z - zA, { width: perimeter, height }) * endFade * bandFade * onSide
+      // Optional soft ends: the relief dies out over `fade` mm at the
+      // bottom and the top of the (reference) wall.
+      const softEnds = fade > 0 ? smoothstep(0, fade, v) * (1 - smoothstep(refHeight - fade, refHeight, v)) : 1
+      // Pattern coordinates, turned by the angle.
+      const pu = col.u * uScale
+      const ru = pu * cosA - v * sinA
+      const rv = pu * sinA + v * cosA
+      const d = sign * texture.depth * patternStrength(texture, ru, rv, { width: refPerimeter, height: refHeight }) * endFade * bandFade * softEnds * onSide
       positions.push(col.p.x + col.nrm.x * d, z, col.p.y + col.nrm.y * d)
     }
   }

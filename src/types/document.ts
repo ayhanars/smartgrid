@@ -124,6 +124,17 @@ export interface SurfaceTexture {
   /** 'cut' (default) sinks the pattern into the surface; 'raised' stands
    * it proud of the surface by the same depth. */
   relief?: 'cut' | 'raised'
+  /** Turns the pattern on the wall, degrees (0 = as designed). */
+  angle?: number
+  /** The pattern fades to nothing over this many mm at the bottom and the
+   * top of the wall. */
+  fade?: number
+  /** Through the wall: the shell cavity's wall follows the same pattern,
+   * so the wall keeps its thickness and the inside shows the relief too. */
+  through?: boolean
+  /** Set on a cavity's texture derived from its solid's (see `through`):
+   * pattern coordinates are measured on the solid's wall, so both line up. */
+  derived?: { perimeter: number; height: number; phaseV: number }
 }
 
 export const TEXTURE_PATTERNS: { id: TexturePattern; label: string; hint: string }[] = [

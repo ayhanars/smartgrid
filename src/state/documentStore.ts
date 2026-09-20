@@ -10,7 +10,7 @@ import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking
 import { nearestPlate } from '../lib/geometry/plateLayout'
 import { buildShellCavity, type ShellCavity, type ShellOptions } from '../lib/geometry/shell'
 import { useViewStore } from './viewStore'
-import { buildLayerCutters, buildLayerGeometries } from '../lib/geometry/layerGeometry'
+import { buildLayerCutters, buildLayerGeometries, solidPerimeter } from '../lib/geometry/layerGeometry'
 import { cutHolesFromSolid } from '../lib/geometry/holeCut'
 import { holeOutline, prism } from '../lib/geometry/perforation'
 
@@ -371,6 +371,32 @@ export function buildAssetLayers(asset: AssetDefinition, origin: Point2, layerHe
 }
 
 /** A cavity layer updated to a freshly built shell cavity. */
+/** The cavity's texture when its solid's goes "through the wall": the same
+ * pattern, measured on the solid's wall, pulling the cavity surface the
+ * same way the solid's is pushed — so the wall keeps its thickness. A
+ * cavity texture the user set stays as it is. */
+function withDerivedTexture(solid: ShapeLayer, cavity: ShapeLayer): ShapeLayer {
+  const src = solid.texture
+  const wantsThrough = !!src && src.through && src.depth > 0 && (src.target === 'walls' || src.target === 'both')
+  if (wantsThrough && src) {
+    const texture: SurfaceTexture = {
+      ...src,
+      target: 'walls',
+      through: false,
+      // Solid: cut = inward. Cavity: 'raised' is what moves its surface inward.
+      relief: (src.relief ?? 'cut') === 'cut' ? 'raised' : 'cut',
+      derived: { perimeter: solidPerimeter(solid), height: Math.max(0.2, solid.extrusionDepth), phaseV: cavity.transform.z - solid.transform.z },
+    }
+    if (JSON.stringify(cavity.texture) === JSON.stringify(texture)) return cavity
+    return { ...cavity, texture }
+  }
+  if (cavity.texture?.derived) {
+    const { texture: _dropped, ...rest } = cavity
+    return rest
+  }
+  return cavity
+}
+
 function applyCavity(cavity: ShapeLayer, built: ShellCavity): ShapeLayer {
   return {
     ...cavity,
@@ -412,7 +438,7 @@ function syncShells(state: DocumentStore, patch: Patch): Patch {
     if (solid === state.layers[link.solidId] && cavity === state.layers[id]) continue
     const rebuilt = buildShellCavity(solid, link)
     if (!rebuilt) continue
-    const next: ShapeLayer = { ...applyCavity(cavity, rebuilt), groupId: solid.groupId }
+    const next: ShapeLayer = withDerivedTexture(solid, { ...applyCavity(cavity, rebuilt), groupId: solid.groupId })
     if (JSON.stringify(next) === JSON.stringify(cavity)) continue
     if (!changed) layers = { ...layers }
     changed = true
@@ -1070,6 +1096,8 @@ export const useDocumentStore = create<DocumentStore>()(
             ...texture,
             size: Math.min(50, Math.max(0.5, texture.size)),
             depth: Math.min(5, Math.max(0, texture.depth)),
+            angle: texture.angle ? Math.max(-90, Math.min(90, texture.angle)) : undefined,
+            fade: texture.fade ? Math.max(0, texture.fade) : undefined,
           }
           return { layers: { ...state.layers, [id]: { ...layer, texture: clean } } }
         }),

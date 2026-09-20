@@ -169,6 +169,16 @@ out past 45° are flagged on the ruler and in the panel.
 
 A hollowed shape (solid + cavity, selected together) is edited as one
 thing through its solid: the cavity is rebuilt from it on every change.
+
+A wall texture has an angle (−90..90°, so flutes can run diagonally), a
+fade-out length at the bottom and top ends (the relief eases to flat
+over that many mm), and "Through the wall": the cavity of a hollowed
+shape gets the same pattern, measured on the solid's wall and pushed the
+opposite way, so the wall keeps one thickness and the relief shows
+inside as well (a fluted lamp shade). Twist and silhouette carry over
+because the cavity is built from the solid. The cavity's copy is
+derived (`texture.derived`) and is dropped when the solid stops going
+through.
 The right panel is tabbed: Design / 3D / Effects for a selection (shell
 and profile under 3D; pocket, texture, perforation and carve under
 Effects), Printer / Print for the document. Switching the editor to

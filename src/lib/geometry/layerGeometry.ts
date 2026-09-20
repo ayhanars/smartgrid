@@ -80,6 +80,19 @@ export interface LayerGeometryOptions {
   tessellate?: number
 }
 
+/** Length of the outline the walls are built on (mm), for lining a cavity's
+ * texture up with its solid's. */
+export function solidPerimeter(layer: ShapeLayer): number {
+  const contour = effectiveContour(layer) ?? layer.regions[0]?.outer.points ?? []
+  let total = 0
+  for (let i = 0; i < contour.length; i++) {
+    const a = contour[i]
+    const b = contour[(i + 1) % contour.length]
+    total += Math.hypot(b.x - a.x, b.y - a.y)
+  }
+  return total
+}
+
 /** The face subdivision a perforated body is built with. */
 export function perforationTessellation(layer: ShapeLayer): number | undefined {
   const perforation = !layer.isHole ? layer.perforation : undefined
