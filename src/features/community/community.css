@@ -99,7 +99,7 @@
 
 .community-card:hover,
 .community-card:focus-visible {
-  border-color: var(--border-strong);
+  border-color: var(--accent);
   outline: none;
 }
 

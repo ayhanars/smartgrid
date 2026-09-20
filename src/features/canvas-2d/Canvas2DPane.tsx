@@ -433,7 +433,8 @@ export function Canvas2DPane() {
       wasAlreadySelected = false
     }
 
-    if (e.shiftKey) {
+    // Shift adds/removes the whole group, Cmd/Ctrl the single shape.
+    if (e.shiftKey || e.metaKey || e.ctrlKey) {
       setSelection(
         wasAlreadySelected
           ? selection.filter((sid) => !clickTargets.includes(sid))
