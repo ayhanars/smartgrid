@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronUp, Download, Globe } from 'lucide-react'
-import { useDocumentStore } from '../../state/documentStore'
+import { artboardSize, layerPlateId, orderOnPlate, useDocumentStore } from '../../state/documentStore'
 import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
@@ -16,8 +16,13 @@ import '../layers/LayerContextMenu.css'
 export function InspectorFooter() {
   const layers = useDocumentStore((s) => s.layers)
   const order = useDocumentStore((s) => s.order)
+  const plates = useDocumentStore((s) => s.plates)
+  const activePlateId = useDocumentStore((s) => s.activePlateId)
   const projectId = useDocumentStore((s) => s.projectId)
+  const multiPlate = plates.length > 1
   const solids = order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible)
+  const activePlate = plates.find((p) => p.id === activePlateId) ?? plates[0]
+  const solidsOnActive = solids.filter((id) => layerPlateId(layers[id], plates) === activePlateId)
   const colorCount = new Set(solids.map((id) => layers[id].color)).size
 
   const [menuOpen, setMenuOpen] = useState(false)
@@ -44,10 +49,20 @@ export function InspectorFooter() {
     if (preparing) return
     setPreparing(true)
     try {
-      const meshes = await buildExportMeshes(layers, order)
-      if (meshes.length === 0) return
-      if (format === '3mf') downloadBlob(write3mf(meshes), 'smartgrid.3mf', 'model/3mf')
-      else downloadBlob(writeBinaryStl(meshes), 'smartgrid.stl', 'model/stl')
+      const state = useDocumentStore.getState()
+      const bed = artboardSize(state)
+      if (format === '3mf') {
+        // A 3MF carries every plate: Bambu Studio opens it with the same plates.
+        const meshes = await buildExportMeshes(layers, order, { plates, bedWidth: bed.width, bedDepth: bed.height })
+        if (meshes.length === 0) return
+        downloadBlob(write3mf(meshes, { plates: plates.map((p) => p.name) }), 'smartgrid.3mf', 'model/3mf')
+      } else {
+        // STL has no plates, so it holds the plate you are looking at.
+        const meshes = await buildExportMeshes(layers, orderOnPlate(state, activePlateId))
+        if (meshes.length === 0) return
+        const suffix = multiPlate ? `-${activePlate.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}` : ''
+        downloadBlob(writeBinaryStl(meshes), `smartgrid${suffix}.stl`, 'model/stl')
+      }
     } finally {
       setPreparing(false)
     }
@@ -59,11 +74,11 @@ export function InspectorFooter() {
         <div className="layer-context-menu inspector-footer__menu" role="menu">
           <button type="button" role="menuitem" onClick={() => void exportAs('3mf')}>
             Export 3MF
-            <span className="inspector-footer__menu-hint">colors kept per shape</span>
+            <span className="inspector-footer__menu-hint">{multiPlate ? `all ${plates.length} plates, colors kept` : 'colors kept per shape'}</span>
           </button>
-          <button type="button" role="menuitem" onClick={() => void exportAs('stl')}>
+          <button type="button" role="menuitem" disabled={solidsOnActive.length === 0} onClick={() => void exportAs('stl')}>
             Export STL
-            <span className="inspector-footer__menu-hint">geometry only</span>
+            <span className="inspector-footer__menu-hint">{multiPlate ? `${activePlate.name} only, geometry` : 'geometry only'}</span>
           </button>
           <div className="layer-context-menu__divider" />
           <div className="inspector-footer__menu-note">

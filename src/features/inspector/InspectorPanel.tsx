@@ -14,7 +14,7 @@ import {
   Pin,
   Trash2,
 } from 'lucide-react'
-import { shapeWorldBounds, useDocumentStore, type AlignMode } from '../../state/documentStore'
+import { shapeWorldBounds, useDocumentStore, type AlignMode, artboardSize, orderOnPlate, layerPlateId } from '../../state/documentStore'
 import { InspectorFooter } from './InspectorFooter'
 import { IconButton } from '../../components/IconButton'
 import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, HOLE_SHAPES, INFILL_PATTERNS, defaultWallMargin, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
@@ -223,6 +223,8 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
   }
 
   const bounds = shapeWorldBounds(layer)
+  const bed = artboardSize(useDocumentStore.getState())
+  const tooBig = !layer.isHole && (bounds.width > bed.width + 1e-6 || bounds.height > bed.height + 1e-6)
 
   return (
     <>
@@ -251,6 +253,14 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
           </p>
         )}
       </Section>
+      {tooBig && (
+        <div className="inspector-note inspector-note--warn">
+          Larger than the bed ({Math.round(bed.width)} × {Math.round(bed.height)} mm).{' '}
+          <button type="button" className="inspector-link" onClick={() => useDocumentStore.getState().splitForBed(layer.id)}>
+            Split across plates
+          </button>
+        </div>
+      )}
 
       <AppearanceSection layer={layer} />
 
@@ -1334,7 +1344,8 @@ function PerfectFitRow({ layer, ids }: { layer: ShapeLayer; ids: string[] }) {
   const order = useDocumentStore((s) => s.order)
   const restOnShapeBelow = useDocumentStore((s) => s.restOnShapeBelow)
   const dropToBed = useDocumentStore((s) => s.dropToBed)
-  const rest = useMemo(() => unitRest(ids, layers, order), [ids, layers, order])
+  const plates = useDocumentStore((s) => s.plates)
+  const rest = useMemo(() => unitRest(ids, layers, orderOnPlate({ layers, order, plates }, layerPlateId(layer, plates))), [ids, layer, layers, order, plates])
   const dropDelta = useMemo(() => unitDropDelta(ids, layers), [ids, layers])
   const supporterName = rest ? layers[rest.supporterId]?.name : null
   const alreadyResting = rest ? Math.abs(rest.delta) < 0.01 : false

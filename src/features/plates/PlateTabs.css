@@ -1,0 +1,84 @@
+.plate-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 14px;
+  padding: 2px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+}
+
+.plate-tab {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.plate-tab > button[role='tab'] {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  color: inherit;
+  white-space: nowrap;
+}
+
+.plate-tab--active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.plate-tab:hover:not(.plate-tab--active) {
+  color: var(--text);
+}
+
+.plate-tab__close {
+  display: inline-flex;
+  padding: 3px;
+  margin-right: 4px;
+  border-radius: 50%;
+  color: var(--text-faint);
+}
+
+.plate-tab__close:hover {
+  background: var(--bg-hover);
+  color: var(--danger);
+}
+
+.plate-tab__rename {
+  width: 80px;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.plate-tab__rename:focus {
+  outline: none;
+}
+
+.plate-tabs__add,
+.plate-tabs__all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.plate-tabs__add:hover,
+.plate-tabs__all:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.plate-tabs__all--on {
+  color: var(--accent);
+}

@@ -16,9 +16,27 @@
 }
 
 .top-bar__center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: center;
+  margin: 0 8px;
+  overflow: hidden;
+}
+
+.top-bar__center .top-bar__title,
+.top-bar__center .top-bar__save {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-bar__center .top-bar__title {
+  max-width: 260px;
+}
+
+.top-bar__left,
+.top-bar__right {
+  flex-shrink: 0;
 }
 
 .top-bar__right {

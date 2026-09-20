@@ -5,7 +5,7 @@ import { LeftPanel } from './LeftPanel'
 import { InspectorPanel } from '../features/inspector/InspectorPanel'
 import { Canvas2DPane } from '../features/canvas-2d/Canvas2DPane'
 import { Viewport3DPane } from '../features/viewport-3d/Viewport3DPane'
-import { useDocumentStore } from '../state/documentStore'
+import { orderOnPlate, useDocumentStore } from '../state/documentStore'
 import { useAnalysisStore } from '../state/analysisStore'
 import { useViewStore } from '../state/viewStore'
 import { analyzeSupport } from '../lib/geometry/support'
@@ -86,12 +86,14 @@ export function AppShell() {
   // geometry on every pointer move.
   const layers = useDocumentStore((s) => s.layers)
   const order = useDocumentStore((s) => s.order)
+  const plates = useDocumentStore((s) => s.plates)
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      useAnalysisStore.getState().setWarnings(analyzeSupport(layers, order))
+      // Shapes only rest on shapes of their own plate.
+      useAnalysisStore.getState().setWarnings(plates.flatMap((p) => analyzeSupport(layers, orderOnPlate({ layers, order, plates }, p.id))))
     }, 60)
     return () => window.clearTimeout(handle)
-  }, [layers, order])
+  }, [layers, order, plates])
 
   // The print preview lives in the 3D viewport, so turning it on from a
   // 2D-only layout brings the 3D pane back into view.

@@ -2,35 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Download } from 'lucide-react'
 import '../layers/LayerContextMenu.css'
 import type { DocumentSnapshot } from '../../lib/persistence/localProjects'
-import { bedPresets, getBedPreset } from '../../lib/geometry/bedPresets'
-import { shapeWorldBounds } from '../../lib/geometry/layerBounds'
-import { layerZRange } from '../../lib/geometry/layerGeometry'
-import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
-import { writeBinaryStl } from '../../lib/export/stl'
-import { write3mf } from '../../lib/export/threeMf'
+import { bedPresets } from '../../lib/geometry/bedPresets'
 import { recordCommunityDownload } from '../../lib/supabase/community'
+import { defaultPrinterFor, downloadSnapshot, fitsPrinter, modelSize } from './downloadModel'
 import './community.css'
-
-/** Footprint and height of the model, mm. */
-function modelSize(snapshot: DocumentSnapshot): { width: number; depth: number; height: number } {
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  let height = 0
-  for (const id of snapshot.order) {
-    const l = snapshot.layers[id]
-    if (!l || !l.visible || l.isHole) continue
-    const b = shapeWorldBounds(l)
-    minX = Math.min(minX, b.x)
-    minY = Math.min(minY, b.y)
-    maxX = Math.max(maxX, b.x + b.width)
-    maxY = Math.max(maxY, b.y + b.height)
-    height = Math.max(height, layerZRange(l).topZ)
-  }
-  if (!Number.isFinite(minX)) return { width: 0, depth: 0, height: 0 }
-  return { width: maxX - minX, depth: maxY - minY, height }
-}
 
 /**
  * Download the model straight from the community page, without making a
@@ -40,14 +15,8 @@ function modelSize(snapshot: DocumentSnapshot): { width: number; depth: number; 
  */
 export function DownloadBox({ itemId, title, snapshot }: { itemId: string; title: string; snapshot: DocumentSnapshot }) {
   const size = useMemo(() => modelSize(snapshot), [snapshot])
-  const fits = (id: string) => {
-    const bed = getBedPreset(id)
-    if (!bed) return false
-    // Either orientation on the plate counts.
-    return ((size.width <= bed.width && size.depth <= bed.height) || (size.depth <= bed.width && size.width <= bed.height)) && size.height <= bed.maxZ
-  }
-  const defaultPrinter = fits(snapshot.bedPresetId) ? snapshot.bedPresetId : (bedPresets.find((p) => fits(p.id))?.id ?? snapshot.bedPresetId)
-  const [printer, setPrinter] = useState(defaultPrinter)
+  const fits = (id: string) => fitsPrinter(size, id)
+  const [printer, setPrinter] = useState(() => defaultPrinterFor(snapshot))
   const [busy, setBusy] = useState<'3mf' | 'stl' | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -65,36 +34,12 @@ export function DownloadBox({ itemId, title, snapshot }: { itemId: string; title
     }
   }, [menuOpen])
   const supported = bedPresets.filter((p) => fits(p.id)).length
-  const slug = title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'model'
 
   const exportAs = async (format: '3mf' | 'stl') => {
     if (busy) return
     setBusy(format)
     try {
-      const meshes = await buildExportMeshes(snapshot.layers, snapshot.order)
-      if (meshes.length === 0) return
-      if (format === 'stl') {
-        downloadBlob(writeBinaryStl(meshes), `${slug}.stl`, 'model/stl')
-      } else {
-        const bed = getBedPreset(printer)
-        const ps = snapshot.printSettings as unknown as Record<string, unknown>
-        downloadBlob(
-          write3mf(meshes, {
-            Title: title,
-            Printer: bed?.label,
-            PlateWidthMM: bed?.width,
-            PlateDepthMM: bed?.height,
-            PlateMaxZMM: bed?.maxZ,
-            LayerHeightMM: typeof ps.layerHeight === 'number' ? ps.layerHeight : undefined,
-            WallLoops: typeof ps.wallLoops === 'number' ? ps.wallLoops : undefined,
-            InfillPercent: typeof ps.infillDensity === 'number' ? ps.infillDensity : undefined,
-            InfillPattern: typeof ps.infillPattern === 'string' ? ps.infillPattern : undefined,
-          }),
-          `${slug}-${printer}.3mf`,
-          'model/3mf',
-        )
-      }
-      void recordCommunityDownload(itemId)
+      if (await downloadSnapshot(snapshot, title, format, printer)) void recordCommunityDownload(itemId)
     } finally {
       setBusy(null)
     }
@@ -129,7 +74,7 @@ export function DownloadBox({ itemId, title, snapshot }: { itemId: string; title
               }}
             >
               Download 3MF
-              <span className="download-box__menu-hint">plate + print settings</span>
+              <span className="download-box__menu-hint">{size.plates > 1 ? `${size.plates} plates + print settings` : 'plate + print settings'}</span>
             </button>
             <button
               type="button"
@@ -146,7 +91,8 @@ export function DownloadBox({ itemId, title, snapshot }: { itemId: string; title
         )}
       </div>
       <p className="download-box__hint">
-        {Math.round(size.width)} × {Math.round(size.depth)} × {Math.round(size.height)} mm · fits {supported} of {bedPresets.length} printers. The 3MF carries the chosen plate size and the author's print settings; nothing is added to your projects.
+        {size.plates > 1 ? `${size.plates} plates, largest ` : ''}
+        {Math.round(size.width)} × {Math.round(size.depth)} × {Math.round(size.height)} mm · fits {supported} of {bedPresets.length} printers. The 3MF carries the chosen plate size{size.plates > 1 ? ', every plate' : ''} and the author's print settings; nothing is added to your projects.
       </p>
     </div>
   )

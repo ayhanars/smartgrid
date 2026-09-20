@@ -5,7 +5,7 @@ import { useDocumentStore } from '../../state/documentStore'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
 import { shapeWorldBounds } from '../../lib/geometry/layerBounds'
 import { layerZRange } from '../../lib/geometry/layerGeometry'
-import { registerThumbnailCapture, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH, type CaptureResult } from '../../lib/persistence/thumbnails'
+import { encodeCanvas, registerThumbnailCapture, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH, type CaptureResult } from '../../lib/persistence/thumbnails'
 import { SCENE_SCALE } from './sceneScale'
 
 /** Scene objects that are editor chrome, not the model: hidden while the
@@ -28,20 +28,27 @@ function isChrome(obj: THREE.Object3D): boolean {
 export function ThumbnailCapture({ ready }: { ready: boolean }) {
   const gl = useThree((s) => s.gl)
   const scene = useThree((s) => s.scene)
+  const mainCamera = useThree((s) => s.camera)
+  const invalidate = useThree((s) => s.invalidate)
   // Holes are cut in a worker; a picture taken before they land would show
   // solid shapes.
   const readyRef = useRef(ready)
   readyRef.current = ready
 
   useEffect(() => {
-    const target = new THREE.WebGLRenderTarget(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, { samples: 4 })
     const camera = new THREE.PerspectiveCamera(35, THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT, 0.01, 100)
-    const pixels = new Uint8Array(THUMBNAIL_WIDTH * THUMBNAIL_HEIGHT * 4)
     const canvas = document.createElement('canvas')
     canvas.width = THUMBNAIL_WIDTH
     canvas.height = THUMBNAIL_HEIGHT
 
-    const frame = () => {
+    // The capture is a center crop of the viewport canvas, so the camera
+    // takes the canvas' aspect and a field of view that makes the crop
+    // read like a 35° 4:3 view.
+    const frame = (canvasAspect: number) => {
+      camera.aspect = canvasAspect
+      const targetAspect = THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT
+      const verticalFraction = canvasAspect >= targetAspect ? 1 : canvasAspect / targetAspect
+      camera.fov = (2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(35 / 2)) / verticalFraction) * 180) / Math.PI
       const { layers, order, bedPresetId, customBedWidth, customBedHeight } = useDocumentStore.getState()
       const bed = getBedPreset(bedPresetId)
       const artboardWidth = bed?.width ?? customBedWidth
@@ -67,49 +74,55 @@ export function ThumbnailCapture({ ready }: { ready: boolean }) {
         center = box.getCenter(new THREE.Vector3())
         radius = Math.max(size.x, size.z, size.y * 1.5, bedWidth * 0.12) * 0.75
       }
-      const dist = radius * 2.3
+      const dist = radius * 2.6
       camera.position.set(center.x + dist * 0.8, center.y + dist * 0.65, center.z + dist * 0.8)
       camera.lookAt(center)
       camera.updateProjectionMatrix()
     }
 
-    const capture = (): CaptureResult => {
+    const capture = async (): Promise<CaptureResult> => {
       if (!readyRef.current) return 'busy'
-      frame()
+      frame(gl.domElement.width / Math.max(1, gl.domElement.height))
       const hidden: THREE.Object3D[] = []
       scene.traverse((obj) => {
         if (obj.visible && isChrome(obj)) hidden.push(obj)
       })
       for (const obj of hidden) obj.visible = false
-      const previousTarget = gl.getRenderTarget()
-      try {
-        gl.setRenderTarget(target)
-        gl.clear()
-        gl.render(scene, camera)
-        gl.readRenderTargetPixels(target, 0, 0, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, pixels)
-      } finally {
-        gl.setRenderTarget(previousTarget)
-        for (const obj of hidden) obj.visible = true
-      }
+      // Draw straight into the viewport's own canvas, not an offscreen
+      // target: a render target disables tone mapping and switches the
+      // color space, which makes three.js compile a second shader variant
+      // for every material — hundreds of ms — and reading back a
+      // multisampled target is slow as well. The visible frame is restored
+      // before this task ends, so the capture view never reaches the screen.
+      const dom = gl.domElement
       const ctx = canvas.getContext('2d')
       if (!ctx) return null
-      const image = ctx.createImageData(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
-      // GL rows run bottom-up; flip while copying.
-      const rowBytes = THUMBNAIL_WIDTH * 4
-      for (let y = 0; y < THUMBNAIL_HEIGHT; y++) {
-        const src = (THUMBNAIL_HEIGHT - 1 - y) * rowBytes
-        image.data.set(pixels.subarray(src, src + rowBytes), y * rowBytes)
+      try {
+        gl.render(scene, camera)
+        // Center-crop the viewport to 4:3 and scale into the thumbnail.
+        const sw = dom.width
+        const sh = dom.height
+        const targetAspect = THUMBNAIL_WIDTH / THUMBNAIL_HEIGHT
+        let cw = sw
+        let ch = Math.round(sw / targetAspect)
+        if (ch > sh) {
+          ch = sh
+          cw = Math.round(sh * targetAspect)
+        }
+        ctx.drawImage(dom, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
+      } finally {
+        for (const obj of hidden) obj.visible = true
+        // Put the real view back in the drawing buffer right away.
+        gl.render(scene, mainCamera)
+        invalidate()
       }
-      ctx.putImageData(image, 0, 0)
-      return canvas.toDataURL('image/webp', 0.86)
+      // Encoded in a worker: compressing a 960×720 WebP would block the
+      // editor for hundreds of ms otherwise.
+      return await encodeCanvas(canvas, 0.86)
     }
 
-    const unregister = registerThumbnailCapture(capture)
-    return () => {
-      unregister()
-      target.dispose()
-    }
-  }, [gl, scene])
+    return registerThumbnailCapture(capture)
+  }, [gl, scene, mainCamera, invalidate])
 
   return null
 }
