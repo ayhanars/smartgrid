@@ -9,6 +9,8 @@ export interface Profile {
   displayName: string
   avatarUrl: string | null
   role: UserRole
+  xp: number
+  level: number
   createdAt: number
 }
 
@@ -17,6 +19,8 @@ interface ProfileRow {
   display_name: string
   avatar_url: string | null
   role: UserRole
+  xp: number
+  level: number
   created_at: string
 }
 
@@ -25,10 +29,12 @@ const toProfile = (row: ProfileRow): Profile => ({
   displayName: row.display_name,
   avatarUrl: row.avatar_url,
   role: row.role,
+  xp: row.xp ?? 0,
+  level: row.level ?? 1,
   createdAt: Date.parse(row.created_at),
 })
 
-const COLUMNS = 'id, display_name, avatar_url, role, created_at'
+const COLUMNS = 'id, display_name, avatar_url, role, xp, level, created_at'
 
 export async function loadProfile(id: string): Promise<Profile | null> {
   const { data, error } = await supabase.from('profiles').select(COLUMNS).eq('id', id).maybeSingle()
@@ -89,4 +95,17 @@ export async function uploadAvatar(userId: string, file: File): Promise<string> 
 export async function removeAvatar(userId: string): Promise<void> {
   const { error } = await supabase.storage.from('avatars').remove([`${userId}/avatar.png`])
   if (error) throw error
+}
+
+/** XP needed to reach `level`: 50 · L · (L − 1). Mirrors xp_to_level in
+ * the database. */
+export const xpForLevel = (level: number) => 50 * level * (level - 1)
+
+/** Progress inside the current level, for a bar. */
+export function levelProgress(xp: number, level: number): { current: number; needed: number; fraction: number } {
+  const start = xpForLevel(level)
+  const end = xpForLevel(level + 1)
+  const current = Math.max(0, xp - start)
+  const needed = end - start
+  return { current, needed, fraction: Math.min(1, current / needed) }
 }

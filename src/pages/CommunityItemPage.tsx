@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Box, Calendar, Copy, Download, Eye, EyeOff, Layers, MessageCircle, Pencil, Star, Trash2 } from 'lucide-react'
+import { ArrowLeft, Box, Calendar, Clock, Copy, Download, Eye, EyeOff, GitBranch, Layers, MessageCircle, Pencil, PencilLine, Star, Trash2, XCircle } from 'lucide-react'
 import {
   deleteCommunityItem,
   getCommunityItem,
   moderateCommunityItem,
   parseTags,
   recordCommunityDownload,
+  reviewCommunityItem,
   updateCommunityItem,
   type CommunityItemFull,
 } from '../lib/supabase/community'
@@ -15,6 +16,12 @@ import { saveLocalThumbnail } from '../lib/persistence/thumbnails'
 import { isNetworkError } from '../lib/connectivity'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { CollectionPicker, CommentsSection, LikeButton } from '../features/community/Social'
+import { DownloadBox } from '../features/community/DownloadBox'
+import { CommunityCard } from '../features/community/CommunityCard'
+import { loadLocalProject } from '../lib/persistence/localProjects'
+import { saveProjectSource } from '../lib/persistence/thumbnails'
+import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
+import { loadCloudProject } from '../lib/supabase/projects'
 import { Avatar } from '../features/community/CommunityCard'
 import { ProjectPreview3D } from './ProjectPreview3D'
 import '../features/community/community.css'
@@ -33,6 +40,25 @@ export function CommunityItemPage() {
   const [live, setLive] = useState(false)
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [versions, setVersions] = useState<CommunityItem[]>([])
+  const [parent, setParent] = useState<CommunityItem | null>(null)
+
+  // Lineage: approved versions of this model, and the model it came from.
+  useEffect(() => {
+    if (!item) return
+    let cancelled = false
+    listCommunityItems({ parentId: item.id })
+      .then((list) => !cancelled && setVersions(list))
+      .catch(() => undefined)
+    if (item.parentId) {
+      getCommunityItem(item.parentId)
+        .then((p) => !cancelled && setParent(p))
+        .catch(() => undefined)
+    } else setParent(null)
+    return () => {
+      cancelled = true
+    }
+  }, [item?.id, item?.parentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!id) return
@@ -55,10 +81,31 @@ export function CommunityItemPage() {
 
   const openCopy = () => {
     if (!item) return
-    const meta = createLocalProject({ ...item.data, name: item.title })
+    const meta = createLocalProject({ ...item.data, name: isOwner ? `${item.title} copy` : item.title })
     if (item.thumbnail) saveLocalThumbnail(meta.id, item.thumbnail)
-    void recordCommunityDownload(item.id)
+    saveProjectSource(meta.id, item.id)
+    if (!isOwner) void recordCommunityDownload(item.id)
     navigate(`/p/${meta.id}`)
+  }
+
+  // The author's source project, in this browser or in the cloud.
+  const editOriginal = async () => {
+    if (!item?.sourceProjectId) return
+    const id = item.sourceProjectId
+    if (loadLocalProject(id)) {
+      navigate(`/p/${id}`)
+      return
+    }
+    try {
+      const remote = await loadCloudProject(id)
+      if (remote) {
+        navigate(`/p/${id}`)
+        return
+      }
+    } catch {
+      /* fall through */
+    }
+    setError('The original project is no longer available; continue as a copy instead.')
   }
 
   const act = async (fn: () => Promise<void>) => {
@@ -84,6 +131,14 @@ export function CommunityItemPage() {
       if (!window.confirm(`Remove "${item.title}" from the community? People who already opened a copy keep theirs.`)) return
       await deleteCommunityItem(item.id)
       navigate('/community')
+    })
+  const review = (approval: 'approved' | 'rejected') =>
+    act(async () => {
+      if (!item) return
+      const note = approval === 'rejected' ? window.prompt('Why is it not approved? The author will see this note.', '') : ''
+      if (approval === 'rejected' && note === null) return
+      await reviewCommunityItem(item.id, approval, note ?? '')
+      setItem({ ...item, approval, reviewNote: note ?? '' })
     })
   const moderate = (patch: { status?: 'published' | 'hidden' | 'removed'; featured?: boolean }) =>
     act(async () => {
@@ -151,7 +206,34 @@ export function CommunityItemPage() {
                   {new Date(item.updatedAt).toLocaleDateString()}
                 </span>
                 {item.status !== 'published' && <span style={{ color: 'var(--warning)' }}>{item.status}</span>}
+                {item.approval === 'pending' && (
+                  <span className="approval-badge approval-badge--pending">
+                    <Clock size={11} /> waiting for review
+                  </span>
+                )}
+                {item.approval === 'rejected' && (
+                  <span className="approval-badge approval-badge--rejected">
+                    <XCircle size={11} /> not approved
+                  </span>
+                )}
               </div>
+              {(isOwner || staff) && item.approval === 'rejected' && (
+                <p className="approval-note">
+                  <strong>Moderator note:</strong> {item.reviewNote || 'No note was left.'}
+                </p>
+              )}
+              {isOwner && item.approval === 'pending' && <p className="approval-note">Only you can see this until a moderator approves it. You will get a notification.</p>}
+              {parent && (
+                <span className="community-item__parent">
+                  <GitBranch size={13} />
+                  A version of{' '}
+                  <button type="button" onClick={() => navigate(`/c/${parent.id}`)}>
+                    {parent.title}
+                  </button>{' '}
+                  by {parent.author.displayName}
+                </span>
+              )}
+              {item.parentId && item.changes && <p className="community-item__changes">{item.changes}</p>}
               {item.tags.length > 0 && (
                 <div className="community-item__tags">
                   {item.tags.map((t) => (
@@ -163,15 +245,33 @@ export function CommunityItemPage() {
               )}
               {item.description && <p className="community-item__desc">{item.description}</p>}
 
-              <button type="button" className="community-item__open" onClick={openCopy}>
-                <Copy size={15} />
-                Open a copy in the editor
-              </button>
+              {isOwner ? (
+                <div className="owner-actions">
+                  <button type="button" className="community-item__open" style={{ flex: 1 }} disabled={!item.sourceProjectId} title={item.sourceProjectId ? 'Open the project this was published from' : 'The source project was deleted'} onClick={() => void editOriginal()}>
+                    <PencilLine size={15} />
+                    Edit the original
+                  </button>
+                  <button type="button" className="page__button" style={{ flex: 1, justifyContent: 'center' }} onClick={openCopy}>
+                    <Copy size={14} />
+                    Continue as a copy
+                  </button>
+                </div>
+              ) : (
+                <button type="button" className="community-item__open" onClick={openCopy}>
+                  <Copy size={15} />
+                  Open a copy in the editor
+                </button>
+              )}
               <div className="social-row">
                 <LikeButton itemId={item.id} count={item.likes} onCount={(likes) => setItem({ ...item, likes })} />
                 <CollectionPicker itemId={item.id} />
               </div>
-              <p className="community-item__hint">The copy is yours: it lands in your projects and edits never touch the shared model.</p>
+              <p className="community-item__hint">
+                {isOwner
+                  ? 'Edits to the original are pushed to the community from the project menu (“Publish to community”). A copy starts a separate project you can publish as a version.'
+                  : 'The copy is yours: it lands in your projects and edits never touch the shared model. Publish it back later as a version of this one.'}
+              </p>
+              <DownloadBox itemId={item.id} title={item.title} snapshot={item.data} />
 
               {item.notes && (
                 <div className="community-item__notes">
@@ -225,10 +325,22 @@ export function CommunityItemPage() {
                 </div>
               )}
 
-              {staff && !isOwner && (
+              {staff && (
                 <div className="community-item__owner">
                   <h2>Moderation</h2>
                   <div className="community-item__owner-actions">
+                    {item.approval !== 'approved' && (
+                      <button type="button" disabled={busy} onClick={() => void review('approved')}>
+                        <Eye size={13} />
+                        Approve
+                      </button>
+                    )}
+                    {item.approval !== 'rejected' && (
+                      <button type="button" className="danger" disabled={busy} onClick={() => void review('rejected')}>
+                        <XCircle size={13} />
+                        Reject…
+                      </button>
+                    )}
                     <button type="button" disabled={busy} onClick={() => void moderate({ featured: !item.featured })}>
                       <Star size={13} />
                       {item.featured ? 'Unfeature' : 'Feature'}
@@ -255,6 +367,17 @@ export function CommunityItemPage() {
               )}
               {error && <p className="account__error" role="alert">{error}</p>}
             </div>
+            {versions.length > 0 && (
+              <section className="versions">
+                <h2>Versions</h2>
+                <p>Models other people published from a copy of this one.</p>
+                <div className="home__grid">
+                  {versions.map((v) => (
+                    <CommunityCard key={v.id} item={v} onOpen={() => navigate(`/c/${v.id}`)} />
+                  ))}
+                </div>
+              </section>
+            )}
             <CommentsSection itemId={item.id} ownerId={item.ownerId} onCount={(comments) => setItem((it) => (it ? { ...it, comments } : it))} />
           </div>
         )}

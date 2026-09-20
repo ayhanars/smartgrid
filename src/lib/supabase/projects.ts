@@ -1,5 +1,6 @@
 import { currentUserId, supabase } from './client'
 import type { DocumentSnapshot } from '../persistence/localProjects'
+import { loadProjectSource, saveProjectSource } from '../persistence/thumbnails'
 
 export interface CloudProjectMeta {
   id: string
@@ -17,6 +18,7 @@ interface ProjectRow {
   name: string
   data: DocumentSnapshot
   thumbnail: string | null
+  source_item_id: string | null
   created_at: string
   updated_at: string
 }
@@ -40,10 +42,11 @@ export async function listCloudProjects(): Promise<CloudProjectMeta[]> {
 }
 
 export async function loadCloudProject(id: string): Promise<{ snapshot: DocumentSnapshot; thumbnail: string | null } | null> {
-  const { data, error } = await supabase.from('projects').select('data, thumbnail').eq('id', id).maybeSingle()
+  const { data, error } = await supabase.from('projects').select('data, thumbnail, source_item_id').eq('id', id).maybeSingle()
   if (error) throw error
-  const row = data as Pick<ProjectRow, 'data' | 'thumbnail'> | null
+  const row = data as Pick<ProjectRow, 'data' | 'thumbnail' | 'source_item_id'> | null
   const snapshot = row?.data
+  if (row?.source_item_id) saveProjectSource(id, row.source_item_id)
   return snapshot && snapshot.version === 1 ? { snapshot, thumbnail: row?.thumbnail ?? null } : null
 }
 
@@ -54,6 +57,8 @@ export async function saveCloudProject(id: string, snapshot: DocumentSnapshot, t
 
   const row: Partial<ProjectRow> = { id, owner_id, name: snapshot.name, data: snapshot }
   if (thumbnail !== undefined) row.thumbnail = thumbnail
+  const source = loadProjectSource(id)
+  if (source) row.source_item_id = source
   const { data, error } = await supabase.from('projects').upsert(row).select(META_COLUMNS).single()
   if (error) throw error
   return toMeta(data as MetaRow)

@@ -256,3 +256,47 @@
   font: inherit;
   font-size: 12px;
 }
+
+.admin__subtitle {
+  margin: 18px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin__muted {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.admin__approve,
+.admin__reject {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.admin__approve {
+  color: #3ecf8e;
+  border-color: rgba(62, 207, 142, 0.45);
+}
+
+.admin__approve:hover {
+  background: rgba(62, 207, 142, 0.12);
+}
+
+.admin__reject {
+  color: var(--danger);
+  border-color: rgba(255, 92, 92, 0.45);
+}
+
+.admin__reject:hover {
+  background: rgba(255, 92, 92, 0.12);
+}

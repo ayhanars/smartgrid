@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, ExternalLink, RefreshCw, Search, ShieldCheck, Star, Trash2 } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Check, Eye, EyeOff, ExternalLink, RefreshCw, Search, ShieldCheck, Star, Trash2, XCircle } from 'lucide-react'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { Avatar } from '../features/community/CommunityCard'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { fetchAdminStats, fetchAdminUsers, setUserRole, type AdminStats, type AdminUser } from '../lib/supabase/admin'
-import { deleteCommunityItem, listCommunityItems, moderateCommunityItem, type CommunityItem, type CommunityStatus } from '../lib/supabase/community'
+import { deleteCommunityItem, listCommunityItems, moderateCommunityItem, reviewCommunityItem, type CommunityItem, type CommunityStatus } from '../lib/supabase/community'
+import { listPendingCollections, reviewCollection, type Collection } from '../lib/supabase/collections'
+import { useNotifications } from '../state/notificationsStore'
 import type { UserRole } from '../lib/supabase/profiles'
 import '../features/community/community.css'
 import './HomePage.css'
 import './AccountPage.css'
 import './AdminPage.css'
 
-type Tab = 'overview' | 'community' | 'users'
+type Tab = 'overview' | 'approvals' | 'community' | 'users'
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Something went wrong')
 
@@ -23,7 +25,15 @@ export function AdminPage() {
   const loading = useAuthStore((s) => s.loading)
   const user = useAuthStore((s) => s.user)
   const profile = useAuthStore((s) => s.profile)
-  const [tab, setTab] = useState<Tab>('overview')
+  const [params, setParams] = useSearchParams()
+  const tabParam = params.get('tab')
+  const tab: Tab = tabParam === 'approvals' || tabParam === 'community' || tabParam === 'users' ? tabParam : 'overview'
+  const setTab = (t: Tab) => {
+    const next = new URLSearchParams(params)
+    if (t === 'overview') next.delete('tab')
+    else next.set('tab', t)
+    setParams(next, { replace: true })
+  }
 
   const staff = isStaffRole(profile)
   const admin = profile?.role === 'admin'
@@ -39,6 +49,7 @@ export function AdminPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
+    { id: 'approvals', label: 'Approvals' },
     { id: 'community', label: 'Community' },
     { id: 'users', label: 'Users' },
   ]
@@ -59,6 +70,7 @@ export function AdminPage() {
           ))}
         </div>
         {tab === 'overview' && <Overview />}
+        {tab === 'approvals' && <Approvals navigate={navigate} />}
         {tab === 'community' && <CommunityAdmin admin={admin} navigate={navigate} />}
         {tab === 'users' && <UsersAdmin admin={admin} selfId={user.id} />}
       </div>
@@ -91,8 +103,10 @@ function Overview() {
   const tiles: { label: string; value: (s: AdminStats) => string; hint?: (s: AdminStats) => string }[] = [
     { label: 'Users', value: (s) => fmt(s.users), hint: (s) => `${fmt(s.users_7d)} joined in the last 7 days` },
     { label: 'Cloud projects', value: (s) => fmt(s.projects), hint: (s) => `${fmt(s.assets)} personal assets` },
+    { label: 'Waiting for review', value: (s) => fmt(s.community_pending), hint: () => 'models and collections' },
     { label: 'Community models', value: (s) => fmt(s.community_published), hint: (s) => `${fmt(s.community_hidden)} hidden · ${fmt(s.community_removed)} removed` },
-    { label: 'Copies opened', value: (s) => fmt(s.community_downloads) },
+    { label: 'Copies opened', value: (s) => fmt(s.community_downloads), hint: (s) => `${fmt(s.community_likes)} likes · ${fmt(s.community_comments)} comments` },
+    { label: 'Collections', value: (s) => fmt(s.collections) },
   ]
   return (
     <section>
@@ -119,6 +133,161 @@ function Toolbar({ busy, onReload, children }: { busy: boolean; onReload: () => 
         <RefreshCw size={14} className={busy ? 'admin__spin' : undefined} />
       </button>
     </div>
+  )
+}
+
+function Approvals({ navigate }: { navigate: (to: string) => void }) {
+  const loadItems = useCallback(() => listCommunityItems({ pendingOnly: true, includeUnpublished: true }), [])
+  const items = useLoader(loadItems)
+  const loadCollections = useCallback(() => listPendingCollections(), [])
+  const collections = useLoader(loadCollections)
+  const refreshNotifications = useNotifications((s) => s.refresh)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const busy = items.busy || collections.busy
+
+  const decideItem = async (item: CommunityItem, approval: 'approved' | 'rejected') => {
+    const note = approval === 'rejected' ? window.prompt(`Why is "${item.title}" not approved? The author will see this.`, '') : ''
+    if (note === null) return
+    try {
+      await reviewCommunityItem(item.id, approval, note)
+      items.setData((list) => (list ? list.filter((i) => i.id !== item.id) : list))
+      void refreshNotifications()
+    } catch (err) {
+      setActionError(errorText(err))
+    }
+  }
+  const decideCollection = async (c: Collection, approval: 'approved' | 'rejected') => {
+    const note = approval === 'rejected' ? window.prompt(`Why is "${c.name}" not approved? The owner will see this.`, '') : ''
+    if (note === null) return
+    try {
+      await reviewCollection(c.id, approval, note)
+      collections.setData((list) => (list ? list.filter((i) => i.id !== c.id) : list))
+      void refreshNotifications()
+    } catch (err) {
+      setActionError(errorText(err))
+    }
+  }
+
+  return (
+    <section>
+      <Toolbar
+        busy={busy}
+        onReload={() => {
+          items.reload()
+          collections.reload()
+        }}
+      >
+        <span className="admin__count">
+          {(items.data?.length ?? 0) + (collections.data?.length ?? 0)} waiting · approving makes it visible to everyone, rejecting sends the author your note
+        </span>
+      </Toolbar>
+      {(items.error || collections.error || actionError) && <p className="account__error">{items.error ?? collections.error ?? actionError}</p>}
+      <h3 className="admin__subtitle">Models</h3>
+      <div className="admin__table-wrap">
+        <table className="admin__table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Author</th>
+              <th>Kind</th>
+              <th>Submitted</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {(items.data ?? []).map((item) => (
+              <tr key={item.id}>
+                <td>
+                  <button type="button" className="admin__link" onClick={() => navigate(`/c/${item.id}`)}>
+                    {item.thumbnail ? <img className="admin__thumb" src={item.thumbnail} alt="" /> : <span className="admin__thumb" />}
+                    <span>{item.title}</span>
+                  </button>
+                </td>
+                <td>
+                  <span className="admin__author">
+                    <Avatar name={item.author.displayName} url={item.author.avatarUrl} />
+                    {item.author.displayName}
+                  </span>
+                </td>
+                <td>{item.parentId ? 'version' : 'new model'}</td>
+                <td>{new Date(item.updatedAt).toLocaleString()}</td>
+                <td className="admin__actions">
+                  <button type="button" className="admin__approve" onClick={() => void decideItem(item, 'approved')}>
+                    <Check size={13} />
+                    Approve
+                  </button>
+                  <button type="button" className="admin__reject" onClick={() => void decideItem(item, 'rejected')}>
+                    <XCircle size={13} />
+                    Reject
+                  </button>
+                  <button type="button" className="admin__icon-btn" title="Open" aria-label="Open" onClick={() => navigate(`/c/${item.id}`)}>
+                    <ExternalLink size={13} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {items.data && items.data.length === 0 && (
+              <tr>
+                <td colSpan={5} className="admin__empty">
+                  No models waiting.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <h3 className="admin__subtitle">Collections</h3>
+      <div className="admin__table-wrap">
+        <table className="admin__table">
+          <thead>
+            <tr>
+              <th>Collection</th>
+              <th>Owner</th>
+              <th>Models</th>
+              <th>Submitted</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {(collections.data ?? []).map((c) => (
+              <tr key={c.id}>
+                <td>
+                  <button type="button" className="admin__link" onClick={() => navigate(`/collections/${c.id}`)}>
+                    <span>{c.name}</span>
+                  </button>
+                  {c.description && <div className="admin__muted">{c.description}</div>}
+                </td>
+                <td>
+                  <span className="admin__author">
+                    <Avatar name={c.owner.displayName} url={c.owner.avatarUrl} />
+                    {c.owner.displayName}
+                  </span>
+                </td>
+                <td>{c.count}</td>
+                <td>{new Date(c.createdAt).toLocaleString()}</td>
+                <td className="admin__actions">
+                  <button type="button" className="admin__approve" onClick={() => void decideCollection(c, 'approved')}>
+                    <Check size={13} />
+                    Approve
+                  </button>
+                  <button type="button" className="admin__reject" onClick={() => void decideCollection(c, 'rejected')}>
+                    <XCircle size={13} />
+                    Reject
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {collections.data && collections.data.length === 0 && (
+              <tr>
+                <td colSpan={5} className="admin__empty">
+                  No collections waiting.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -193,6 +362,7 @@ function CommunityAdmin({ admin, navigate }: { admin: boolean; navigate: (to: st
                 </td>
                 <td>
                   <span className={`admin__status admin__status--${item.status}`}>{item.status}</span>
+                  {item.approval !== 'approved' && <span className={`admin__status admin__status--${item.approval === 'pending' ? 'hidden' : 'removed'}`} style={{ marginLeft: 4 }}>{item.approval}</span>}
                 </td>
                 <td>{item.downloads}</td>
                 <td>{new Date(item.updatedAt).toLocaleDateString()}</td>
@@ -279,6 +449,7 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
             <tr>
               <th>User</th>
               <th>Role</th>
+              <th>Level</th>
               <th>Projects</th>
               <th>Shared</th>
               <th>Joined</th>
@@ -307,6 +478,9 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
                   ) : (
                     <span className={`admin__status admin__status--${u.role}`}>{u.role}</span>
                   )}
+                </td>
+                <td title={`${u.xp} XP`}>
+                  <span className="level-badge">L{u.level}</span> <span className="admin__muted">{u.xp} XP</span>
                 </td>
                 <td>{u.projects}</td>
                 <td>{u.communityItems}</td>

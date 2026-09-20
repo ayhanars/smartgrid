@@ -15,7 +15,7 @@ import './HomePage.css'
 
 const RECENT_PROJECTS = 8
 const RECENT_COMMUNITY = 8
-const RECENT_COLLECTIONS = 4
+const RECENT_COLLECTIONS = 3
 
 /** `/`: the newest of everything: your projects, what the community
  * shared, your collections. */
@@ -70,24 +70,6 @@ export function RecentsPage() {
         <ProjectGrid projects={projects} limit={RECENT_PROJECTS} />
       </section>
 
-      {isSupabaseConfigured && user && collections && collections.length > 0 && (
-        <section className="page__section">
-          <div className="page__section-header">
-            <h2>Collections</h2>
-            <span className="home__hint">Models you saved for later.</span>
-            <button type="button" className="home__see-all" onClick={() => navigate('/collections')}>
-              All collections
-              <ArrowRight size={13} />
-            </button>
-          </div>
-          <div className="home__grid">
-            {collections.slice(0, RECENT_COLLECTIONS).map((c) => (
-              <CollectionCard key={c.id} collection={c} onOpen={() => navigate(`/collections/${c.id}`)} />
-            ))}
-          </div>
-        </section>
-      )}
-
       {isSupabaseConfigured && (
         <section className="page__section">
           <div className="page__section-header">
@@ -117,6 +99,24 @@ export function RecentsPage() {
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {isSupabaseConfigured && user && collections && collections.length > 0 && (
+        <section className="page__section">
+          <div className="page__section-header">
+            <h2>Collections</h2>
+            <span className="home__hint">Models you saved for later.</span>
+            <button type="button" className="home__see-all" onClick={() => navigate('/collections')}>
+              All collections
+              <ArrowRight size={13} />
+            </button>
+          </div>
+          <div className="collection-grid">
+            {collections.slice(0, RECENT_COLLECTIONS).map((c) => (
+              <CollectionCard key={c.id} collection={c} onOpen={() => navigate(`/collections/${c.id}`)} />
+            ))}
+          </div>
         </section>
       )}
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Camera, LogOut, ShieldCheck, Trash2 } from 'lucide-react'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { friendlyAuthError, MIN_PASSWORD_LENGTH } from '../features/auth/authErrors'
-import { removeAvatar, updateProfile, uploadAvatar } from '../lib/supabase/profiles'
+import { levelProgress, removeAvatar, updateProfile, uploadAvatar } from '../lib/supabase/profiles'
 import { deleteAccount } from '../lib/supabase/account'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { deleteAllLocalProjects } from '../lib/persistence/localProjects'
@@ -57,6 +57,8 @@ export function AccountPage() {
           </div>
         </section>
 
+        {profile && <LevelCard xp={profile.xp} level={profile.level} />}
+
         <NameForm userId={user.id} current={profile?.displayName ?? ''} onSaved={(displayName) => profile && setProfile({ ...profile, displayName })} />
         <EmailForm current={email} />
         <PasswordForm hasPassword={hasPassword} email={email} />
@@ -79,6 +81,23 @@ export function AccountPage() {
         <DeleteSection email={email} onDeleted={() => navigate('/')} />
       </main>
     </div>
+  )
+}
+
+function LevelCard({ xp, level }: { xp: number; level: number }) {
+  const p = levelProgress(xp, level)
+  return (
+    <section className="account__card">
+      <h2>
+        Level {level} <span className="account__xp">{xp} XP</span>
+      </h2>
+      <p>
+        {p.needed - p.current} XP to level {level + 1}. Publishing models, getting them approved, likes, opened copies, comments and collections all earn XP.
+      </p>
+      <div className="account__bar" role="progressbar" aria-valuemin={0} aria-valuemax={p.needed} aria-valuenow={p.current}>
+        <div className="account__bar-fill" style={{ width: `${Math.round(p.fraction * 100)}%` }} />
+      </div>
+    </section>
   )
 }
 

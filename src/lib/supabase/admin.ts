@@ -7,9 +7,13 @@ export interface AdminStats {
   projects: number
   assets: number
   community_published: number
+  community_pending: number
   community_hidden: number
   community_removed: number
   community_downloads: number
+  community_likes: number
+  community_comments: number
+  collections: number
 }
 
 export interface AdminUser {
@@ -18,6 +22,8 @@ export interface AdminUser {
   displayName: string
   avatarUrl: string | null
   role: UserRole
+  xp: number
+  level: number
   createdAt: number
   lastSignInAt: number | null
   projects: number
@@ -39,6 +45,8 @@ export async function fetchAdminUsers(query = ''): Promise<AdminUser[]> {
     displayName: (r.display_name as string) ?? '',
     avatarUrl: (r.avatar_url as string | null) ?? null,
     role: ((r.role as UserRole) ?? 'user') as UserRole,
+    xp: (r.xp as number) ?? 0,
+    level: (r.level as number) ?? 1,
     createdAt: Date.parse(r.created_at as string),
     lastSignInAt: r.last_sign_in_at ? Date.parse(r.last_sign_in_at as string) : null,
     projects: (r.projects as number) ?? 0,

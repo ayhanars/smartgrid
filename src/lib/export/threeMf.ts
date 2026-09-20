@@ -40,7 +40,11 @@ function indexTriangles(positions: Float32Array) {
  *   Bambu Studio lands each shape on a filament of its own color rather
  *   than everything on filament 1.
  */
-export function write3mf(meshes: ExportMesh[]): Uint8Array<ArrayBuffer> {
+/** Free-form key/value pairs written as <metadata> in the model file:
+ * slicers show them, and Bambu Studio reads printer / plate hints. */
+export type ThreeMfMetadata = Record<string, string | number | undefined>
+
+export function write3mf(meshes: ExportMesh[], metadata: ThreeMfMetadata = {}): Uint8Array<ArrayBuffer> {
   const colors = [...new Set(meshes.map((m) => normalizeColor(m.color)))]
 
   const baseMaterials = colors
@@ -78,6 +82,10 @@ export function write3mf(meshes: ExportMesh[]): Uint8Array<ArrayBuffer> {
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n` +
     `  <metadata name="Application">smartgrid</metadata>\n` +
+    Object.entries(metadata)
+      .filter(([, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => `  <metadata name="${escapeXml(k)}">${escapeXml(String(v))}</metadata>\n`)
+      .join('') +
     `  <resources>\n    <basematerials id="1">\n${baseMaterials}\n    </basematerials>\n${objects.join('\n')}\n  </resources>\n` +
     `  <build>\n${buildItems.join('\n')}\n  </build>\n</model>\n`
 

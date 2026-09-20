@@ -577,3 +577,492 @@ $$;
 
 drop trigger if exists collection_items_touch on public.collection_items;
 create trigger collection_items_touch after insert or delete on public.collection_items for each row execute function public.touch_collection();
+
+-- ---------------------------------------------------------------------------
+-- Moderation queue, versions, notifications, XP levels, comment replies,
+-- collection covers.
+-- ---------------------------------------------------------------------------
+
+-- Every new community item and collection waits for a moderator unless a
+-- moderator / admin created it.
+alter table public.community_items add column if not exists approval text not null default 'pending' check (approval in ('pending', 'approved', 'rejected'));
+alter table public.community_items add column if not exists review_note text not null default '';
+-- Versions: a model published from a copy of another one.
+alter table public.community_items add column if not exists parent_id uuid references public.community_items (id) on delete set null;
+alter table public.community_items add column if not exists changes text not null default '';
+create index if not exists community_items_parent_idx on public.community_items (parent_id);
+create index if not exists community_items_approval_idx on public.community_items (approval, created_at desc);
+
+alter table public.collections add column if not exists approval text not null default 'pending' check (approval in ('pending', 'approved', 'rejected'));
+alter table public.collections add column if not exists review_note text not null default '';
+alter table public.collections add column if not exists cover_url text;
+
+-- Where a project came from, so "publish" can offer it as a version.
+alter table public.projects add column if not exists source_item_id uuid references public.community_items (id) on delete set null;
+
+alter table public.community_comments add column if not exists parent_id uuid references public.community_comments (id) on delete cascade;
+alter table public.community_comments add column if not exists mentions uuid[] not null default '{}';
+
+alter table public.profiles add column if not exists xp integer not null default 0;
+alter table public.profiles add column if not exists level integer not null default 1;
+
+-- Items already published before moderation existed stay visible.
+update public.community_items set approval = 'approved' where approval = 'pending' and created_at < now() - interval '1 minute';
+update public.collections set approval = 'approved' where approval = 'pending' and created_at < now() - interval '1 minute';
+
+-- Visibility now also needs approval.
+drop policy if exists "Published items are visible to everyone" on public.community_items;
+create policy "Published items are visible to everyone"
+  on public.community_items for select
+  using ((status = 'published' and approval = 'approved') or auth.uid() = owner_id or public.is_staff());
+
+drop policy if exists "Own or public collections are visible" on public.collections;
+create policy "Own or public collections are visible"
+  on public.collections for select
+  using ((is_public and approval = 'approved') or auth.uid() = owner_id or public.is_staff());
+
+drop policy if exists "Items of visible collections are visible" on public.collection_items;
+create policy "Items of visible collections are visible" on public.collection_items for select
+  using (exists (select 1 from public.collections c where c.id = collection_id and ((c.is_public and c.approval = 'approved') or c.owner_id = auth.uid() or public.is_staff())));
+
+-- Staff-authored things skip the queue; only staff change approval.
+create or replace function public.set_initial_approval()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.is_staff() or not public.is_user_request() then
+    new.approval := 'approved';
+  else
+    new.approval := 'pending';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists community_items_initial_approval on public.community_items;
+create trigger community_items_initial_approval before insert on public.community_items for each row execute function public.set_initial_approval();
+drop trigger if exists collections_initial_approval on public.collections;
+create trigger collections_initial_approval before insert on public.collections for each row execute function public.set_initial_approval();
+
+create or replace function public.guard_community_item()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.is_user_request() and not public.is_staff() then
+    if new.featured is distinct from old.featured then new.featured := old.featured; end if;
+    if coalesce(current_setting('smartgrid.counting', true), '') <> 'on' then
+      if new.downloads is distinct from old.downloads then new.downloads := old.downloads; end if;
+      if new.likes is distinct from old.likes then new.likes := old.likes; end if;
+      if new.comments is distinct from old.comments then new.comments := old.comments; end if;
+    end if;
+    if new.status = 'removed' or old.status = 'removed' then new.status := old.status; end if;
+    if new.owner_id is distinct from old.owner_id then new.owner_id := old.owner_id; end if;
+    if new.review_note is distinct from old.review_note then new.review_note := old.review_note; end if;
+    -- The author replacing the model sends it back to the queue.
+    if new.approval is distinct from old.approval then new.approval := old.approval; end if;
+    if new.data is distinct from old.data and old.approval = 'approved' then new.approval := 'pending'; end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create or replace function public.guard_collection()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.is_user_request() and not public.is_staff() then
+    if new.approval is distinct from old.approval then new.approval := old.approval; end if;
+    if new.review_note is distinct from old.review_note then new.review_note := old.review_note; end if;
+    if new.owner_id is distinct from old.owner_id then new.owner_id := old.owner_id; end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+drop trigger if exists collections_set_updated_at on public.collections;
+drop trigger if exists collections_guard on public.collections;
+create trigger collections_guard before update on public.collections for each row execute function public.guard_collection();
+
+-- Collection covers: a public bucket, owner's folder.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('covers', 'covers', true, 4194304, array['image/png', 'image/jpeg', 'image/webp'])
+on conflict (id) do update set public = true, file_size_limit = 4194304, allowed_mime_types = array['image/png', 'image/jpeg', 'image/webp'];
+
+drop policy if exists "Covers are publicly readable" on storage.objects;
+create policy "Covers are publicly readable" on storage.objects for select using (bucket_id = 'covers');
+drop policy if exists "Users manage their own covers" on storage.objects;
+create policy "Users manage their own covers" on storage.objects for all
+  using (bucket_id = 'covers' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'covers' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Notifications ---------------------------------------------------------------
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  kind text not null,
+  title text not null,
+  body text not null default '',
+  link text,
+  read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists notifications_user_idx on public.notifications (user_id, read, created_at desc);
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "Users read their notifications" on public.notifications;
+create policy "Users read their notifications" on public.notifications for select using (auth.uid() = user_id);
+drop policy if exists "Users mark their notifications" on public.notifications;
+create policy "Users mark their notifications" on public.notifications for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Users delete their notifications" on public.notifications;
+create policy "Users delete their notifications" on public.notifications for delete using (auth.uid() = user_id);
+
+create or replace function public.notify(p_user uuid, p_kind text, p_title text, p_body text default '', p_link text default null)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.notifications (user_id, kind, title, body, link)
+  select p_user, p_kind, p_title, p_body, p_link where p_user is not null;
+$$;
+
+create or replace function public.notify_staff(p_kind text, p_title text, p_body text default '', p_link text default null)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.notifications (user_id, kind, title, body, link)
+  select id, p_kind, p_title, p_body, p_link from public.profiles where role in ('admin', 'moderator');
+$$;
+
+-- XP / levels -----------------------------------------------------------------
+-- Level L needs 50 * L * (L - 1) XP: 0, 100, 300, 600, 1000, 1500…
+
+create or replace function public.xp_to_level(p_xp integer)
+returns integer
+language sql
+immutable
+as $$
+  -- 50·L·(L−1) ≤ xp  ⇔  L ≤ (1 + sqrt(1 + 4·xp/50)) / 2
+  select greatest(1, floor((1 + sqrt(1 + 4 * greatest(p_xp, 0) / 50.0)) / 2)::integer);
+$$;
+
+create or replace function public.award_xp(p_user uuid, p_points integer, p_reason text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  old_level integer;
+  new_level integer;
+begin
+  if p_user is null or p_points = 0 then return; end if;
+  select level into old_level from public.profiles where id = p_user;
+  update public.profiles set xp = greatest(0, xp + p_points), level = public.xp_to_level(greatest(0, xp + p_points)) where id = p_user returning level into new_level;
+  if new_level > coalesce(old_level, 1) then
+    perform public.notify(p_user, 'level', format('You reached level %s', new_level), p_reason, '/account');
+  end if;
+end;
+$$;
+
+-- award_xp updates profiles: the role guard must not block it (it only
+-- touches role), and RLS is bypassed by security definer.
+
+-- Events --------------------------------------------------------------------------
+
+create or replace function public.on_community_item_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  author text;
+begin
+  if tg_op = 'INSERT' then
+    perform public.award_xp(new.owner_id, 20, format('Published "%s"', new.title));
+    if new.approval = 'pending' then
+      select display_name into author from public.profiles where id = new.owner_id;
+      perform public.notify_staff('review', format('New model to review: %s', new.title), format('by %s%s', coalesce(author, 'someone'), case when new.parent_id is not null then ' (a version of another model)' else '' end), '/admin?tab=approvals');
+    elsif new.approval = 'approved' then
+      perform public.award_xp(new.owner_id, 30, format('"%s" is live', new.title));
+    end if;
+    if new.parent_id is not null then
+      perform public.notify((select owner_id from public.community_items where id = new.parent_id and owner_id <> new.owner_id), 'version', format('Someone made a version of your model'), new.title, '/c/' || new.id);
+    end if;
+    return new;
+  end if;
+  if new.approval is distinct from old.approval then
+    if new.approval = 'approved' then
+      perform public.notify(new.owner_id, 'approved', format('"%s" was approved', new.title), 'It is now visible to everyone in the community.', '/c/' || new.id);
+      perform public.award_xp(new.owner_id, 30, format('"%s" is live', new.title));
+    elsif new.approval = 'rejected' then
+      perform public.notify(new.owner_id, 'rejected', format('"%s" was not approved', new.title), coalesce(nullif(new.review_note, ''), 'A moderator declined it. You can edit and resubmit from the project.'), '/c/' || new.id);
+    elsif new.approval = 'pending' and old.approval = 'approved' then
+      perform public.notify_staff('review', format('Updated model to review: %s', new.title), 'The author replaced the shared model.', '/admin?tab=approvals');
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists community_items_events on public.community_items;
+create trigger community_items_events after insert or update on public.community_items for each row execute function public.on_community_item_change();
+
+create or replace function public.on_collection_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  author text;
+begin
+  if tg_op = 'INSERT' then
+    perform public.award_xp(new.owner_id, 5, format('Created the collection "%s"', new.name));
+    if new.approval = 'pending' then
+      select display_name into author from public.profiles where id = new.owner_id;
+      perform public.notify_staff('review', format('New collection to review: %s', new.name), format('by %s', coalesce(author, 'someone')), '/admin?tab=approvals');
+    end if;
+    return new;
+  end if;
+  if new.approval is distinct from old.approval then
+    if new.approval = 'approved' then
+      perform public.notify(new.owner_id, 'approved', format('Collection "%s" was approved', new.name), 'You can make it public and share it by link.', '/collections/' || new.id);
+    elsif new.approval = 'rejected' then
+      perform public.notify(new.owner_id, 'rejected', format('Collection "%s" was not approved', new.name), coalesce(nullif(new.review_note, ''), 'A moderator declined it.'), '/collections/' || new.id);
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists collections_events on public.collections;
+create trigger collections_events after insert or update on public.collections for each row execute function public.on_collection_change();
+
+create or replace function public.on_comment_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  item_owner uuid;
+  item_title text;
+  author text;
+  parent_author uuid;
+  m uuid;
+begin
+  select owner_id, title into item_owner, item_title from public.community_items where id = new.item_id;
+  select display_name into author from public.profiles where id = new.author_id;
+  perform public.award_xp(new.author_id, 2, 'Commented');
+  if new.parent_id is not null then
+    select author_id into parent_author from public.community_comments where id = new.parent_id;
+    if parent_author is not null and parent_author <> new.author_id then
+      perform public.notify(parent_author, 'reply', format('%s replied to your comment', coalesce(author, 'Someone')), left(new.body, 140), '/c/' || new.item_id);
+    end if;
+  end if;
+  foreach m in array new.mentions loop
+    if m <> new.author_id and m is distinct from parent_author then
+      perform public.notify(m, 'mention', format('%s mentioned you', coalesce(author, 'Someone')), left(new.body, 140), '/c/' || new.item_id);
+    end if;
+  end loop;
+  if item_owner is not null and item_owner <> new.author_id and item_owner is distinct from parent_author and not (item_owner = any (new.mentions)) then
+    perform public.notify(item_owner, 'comment', format('%s commented on "%s"', coalesce(author, 'Someone'), item_title), left(new.body, 140), '/c/' || new.item_id);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists community_comments_events on public.community_comments;
+create trigger community_comments_events after insert on public.community_comments for each row execute function public.on_comment_insert();
+
+create or replace function public.on_like_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.award_xp((select owner_id from public.community_items where id = new.item_id and owner_id <> new.user_id), 5, 'Your model was liked');
+  return new;
+end;
+$$;
+
+drop trigger if exists community_likes_xp on public.community_likes;
+create trigger community_likes_xp after insert on public.community_likes for each row execute function public.on_like_insert();
+
+create or replace function public.record_community_download(p_item uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform set_config('smartgrid.counting', 'on', true);
+  update public.community_items set downloads = downloads + 1 where id = p_item and status = 'published';
+  perform set_config('smartgrid.counting', '', true);
+  perform public.award_xp((select owner_id from public.community_items where id = p_item and owner_id is distinct from auth.uid()), 3, 'Someone opened a copy of your model');
+end;
+$$;
+
+-- New accounts start with a little XP for showing up.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name, avatar_url, role, xp, level)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'display_name', new.raw_user_meta_data ->> 'full_name', split_part(coalesce(new.email, ''), '@', 1)),
+    new.raw_user_meta_data ->> 'avatar_url',
+    case when exists (select 1 from public.bootstrap_admins where lower(email) = lower(coalesce(new.email, ''))) then 'admin' else 'user' end,
+    10, 1
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+-- Mention lookup: name search over profiles (public columns only).
+create or replace function public.search_profiles(p_query text, p_limit integer default 8)
+returns table (id uuid, display_name text, avatar_url text, level integer)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select id, display_name, avatar_url, level from public.profiles
+  where display_name ilike '%' || p_query || '%'
+  order by display_name
+  limit greatest(1, least(p_limit, 20));
+$$;
+
+grant execute on function public.search_profiles(text, integer) to authenticated;
+
+-- Staff: approve / reject.
+create or replace function public.review_community_item(p_item uuid, p_approval text, p_note text default '')
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_staff() then raise exception 'staff only' using errcode = '42501'; end if;
+  if p_approval not in ('approved', 'rejected', 'pending') then raise exception 'bad approval'; end if;
+  update public.community_items set approval = p_approval, review_note = coalesce(p_note, '') where id = p_item;
+end;
+$$;
+
+create or replace function public.review_collection(p_collection uuid, p_approval text, p_note text default '')
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_staff() then raise exception 'staff only' using errcode = '42501'; end if;
+  if p_approval not in ('approved', 'rejected', 'pending') then raise exception 'bad approval'; end if;
+  update public.collections set approval = p_approval, review_note = coalesce(p_note, '') where id = p_collection;
+end;
+$$;
+
+grant execute on function public.review_community_item(uuid, text, text) to authenticated;
+grant execute on function public.review_collection(uuid, text, text) to authenticated;
+
+-- Staff readers pick up the queue and levels.
+create or replace function public.admin_stats()
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  result json;
+begin
+  if not public.is_staff() then
+    raise exception 'staff only' using errcode = '42501';
+  end if;
+  select json_build_object(
+    'users', (select count(*) from auth.users),
+    'users_7d', (select count(*) from auth.users where created_at > now() - interval '7 days'),
+    'projects', (select count(*) from public.projects),
+    'assets', (select count(*) from public.user_assets),
+    'community_published', (select count(*) from public.community_items where status = 'published' and approval = 'approved'),
+    'community_pending', (select count(*) from public.community_items where approval = 'pending' and status <> 'removed') + (select count(*) from public.collections where approval = 'pending'),
+    'community_hidden', (select count(*) from public.community_items where status = 'hidden'),
+    'community_removed', (select count(*) from public.community_items where status = 'removed'),
+    'community_downloads', (select coalesce(sum(downloads), 0) from public.community_items),
+    'community_likes', (select coalesce(sum(likes), 0) from public.community_items),
+    'community_comments', (select count(*) from public.community_comments),
+    'collections', (select count(*) from public.collections)
+  ) into result;
+  return result;
+end;
+$$;
+
+drop function if exists public.admin_users(text, integer);
+create or replace function public.admin_users(p_query text default '', p_limit integer default 100)
+returns table (
+  id uuid,
+  email text,
+  display_name text,
+  avatar_url text,
+  role text,
+  xp integer,
+  level integer,
+  created_at timestamptz,
+  last_sign_in_at timestamptz,
+  projects integer,
+  community_items integer
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_staff() then
+    raise exception 'staff only' using errcode = '42501';
+  end if;
+  return query
+    select
+      u.id,
+      u.email::text,
+      p.display_name,
+      p.avatar_url,
+      p.role,
+      p.xp,
+      p.level,
+      u.created_at,
+      u.last_sign_in_at,
+      (select count(*)::integer from public.projects pr where pr.owner_id = u.id),
+      (select count(*)::integer from public.community_items ci where ci.owner_id = u.id and ci.status <> 'removed')
+    from auth.users u
+    left join public.profiles p on p.id = u.id
+    where p_query = '' or u.email ilike '%' || p_query || '%' or p.display_name ilike '%' || p_query || '%'
+    order by u.created_at desc
+    limit greatest(1, least(p_limit, 500));
+end;
+$$;
+grant execute on function public.admin_users(text, integer) to authenticated;

@@ -102,6 +102,24 @@ liked, commented on and saved into collections (`community_likes`,
 item row are kept by triggers). A collection is private unless its owner
 makes it public, which makes it shareable by link.
 
+Moderation: every new community model and collection from a regular user
+waits in the admin's Approvals tab (`approval` column: pending / approved /
+rejected; moderators and admins skip the queue). Approvals, rejections
+(with a note), replies, @mentions, comments on your models, new versions
+of your models and level-ups land in the `notifications` table and the
+bell in the sidebar. Email delivery is not wired yet.
+
+Versions: a project opened from a community model remembers its source;
+publishing it offers "a version of …" with a "what changed" note, shown
+on the original's page under Versions. Authors get "Edit the original"
+and "Continue as a copy" on their own models; everyone gets "Print it as
+is": a direct 3MF (with the chosen printer's plate size and the author's
+print settings as metadata) or STL, without creating a project.
+
+Levels: `profiles.xp` / `profiles.level` (level L needs 50·L·(L−1) XP).
+Publishing, approvals, likes, opened copies, comments and collections
+earn XP; the account page shows the bar.
+
 Community: "Publish to community…" in a project's menu stores a *copy* of
 the project with a title, description, print notes and tags; the same menu
 entry later edits the listing or replaces the shared model with the
