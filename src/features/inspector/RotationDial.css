@@ -99,3 +99,9 @@
   color: inherit;
   text-decoration: underline;
 }
+
+.angle-wheel__needle {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}

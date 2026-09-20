@@ -33,6 +33,7 @@ import { computeSafeBevel } from '../../lib/geometry/offset'
 import { bedPresets, CUSTOM_BED_ID, CUSTOM_BED_MAX_Z, getBedPreset } from '../../lib/geometry/bedPresets'
 import { RotationDial } from './RotationDial'
 import { HeightSlider } from './HeightSlider'
+import { AngleWheel } from './AngleWheel'
 import { useAnalysisStore, visibleWarning } from '../../state/analysisStore'
 import { unitDropDelta, unitRest } from '../../lib/geometry/stacking'
 import './InspectorPanel.css'
@@ -687,6 +688,8 @@ function TexturePicker({
  * decorates the cavity walls it leaves. */
 function TextureSection({ layer }: { layer: ShapeLayer }) {
   const setTexture = useDocumentStore((s) => s.setTexture)
+  const beginTransientEdit = useDocumentStore((s) => s.beginTransientEdit)
+  const commitTransientEdit = useDocumentStore((s) => s.commitTransientEdit)
   const setNotice = useViewStore((s) => s.setNotice)
   const fileRef = useRef<HTMLInputElement>(null)
   const texture = layer.texture ?? null
@@ -816,9 +819,12 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
           </div>
           {texture.target !== 'top' && (
             <>
-              <div className="inspector-profile__twist">
-                <Field label="Angle" value={texture.angle ?? 0} suffix="°" decimals={0} onChange={(v) => patch({ angle: v })} />
-                <input type="range" min={-90} max={90} step={5} value={texture.angle ?? 0} aria-label="Texture angle" onChange={(e) => patch({ angle: Number(e.target.value) })} />
+              <div className="inspector-angle">
+                <AngleWheel value={texture.angle ?? 0} onChange={(deg) => patch({ angle: deg })} onStart={beginTransientEdit} onEnd={commitTransientEdit} label="Texture angle" />
+                <div>
+                  <Field label="Angle" value={texture.angle ?? 0} suffix="°" decimals={0} onChange={(v) => patch({ angle: v })} />
+                  <p className="inspector-note">Drag the wheel to lean the pattern; Shift for 1° steps.</p>
+                </div>
               </div>
               <div className="inspector-grid-2">
                 <Field label="Fade out at the ends" value={texture.fade ?? 0} suffix="mm" onChange={(v) => patch({ fade: Math.max(0, v) })} />

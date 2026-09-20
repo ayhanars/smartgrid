@@ -950,3 +950,15 @@
   color: var(--text-muted);
   cursor: default;
 }
+
+.inspector-angle {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.inspector-angle .inspector-note {
+  margin-top: 6px;
+}
