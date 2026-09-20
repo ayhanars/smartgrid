@@ -691,6 +691,7 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const texture = layer.texture ?? null
   const supported = layer.regions.length === 1 && layer.regions[0].holes.length === 0
+  const hasCavity = useDocumentStore((s) => s.order.some((id) => s.layers[id]?.shellOf?.solidId === layer.id))
   const patch = (p: Partial<SurfaceTexture>) => setTexture(layer.id, { ...(texture ?? DEFAULT_TEXTURE), ...p })
   const wallFrom = texture?.wallFrom ?? 0
   const wallTo = texture?.wallTo ?? layer.extrusionDepth
@@ -716,6 +717,13 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
     }
   }
 
+  if (texture?.derived && layer.shellOf) {
+    return (
+      <Section title="Surface Texture">
+        <p className="inspector-note">Follows the outer wall's texture ("Through the wall" on the solid), so the wall keeps its thickness. Change it on the solid.</p>
+      </Section>
+    )
+  }
   if (!supported) {
     return (
       <Section title="Surface Texture">
@@ -806,6 +814,30 @@ function TextureSection({ layer }: { layer: ShapeLayer }) {
             <Field label={texture.pattern === 'custom' && texture.repeat === false ? 'Image width' : 'Pattern size'} value={texture.size} suffix="mm" onChange={(v) => patch({ size: v })} />
             <Field label={texture.relief === 'raised' ? 'Relief height' : 'Groove depth'} value={texture.depth} suffix="mm" onChange={(v) => patch({ depth: v })} />
           </div>
+          {texture.target !== 'top' && (
+            <>
+              <div className="inspector-profile__twist">
+                <Field label="Angle" value={texture.angle ?? 0} suffix="°" decimals={0} onChange={(v) => patch({ angle: v })} />
+                <input type="range" min={-90} max={90} step={5} value={texture.angle ?? 0} aria-label="Texture angle" onChange={(e) => patch({ angle: Number(e.target.value) })} />
+              </div>
+              <div className="inspector-grid-2">
+                <Field label="Fade out at the ends" value={texture.fade ?? 0} suffix="mm" onChange={(v) => patch({ fade: Math.max(0, v) })} />
+              </div>
+              {!layer.isHole && (
+                <>
+                  <label className={`inspector-check ${hasCavity ? '' : 'inspector-check--disabled'}`}>
+                    <input type="checkbox" checked={!!texture.through && hasCavity} disabled={!hasCavity} onChange={(e) => patch({ through: e.target.checked || undefined })} />
+                    Through the wall
+                  </label>
+                  <p className="inspector-note">
+                    {hasCavity
+                      ? 'The inside of the hollow follows the same relief, so the wall stays one thickness (like a fluted lamp shade). Twist and silhouette carry over.'
+                      : 'Hollow out the shape first (3D tab) to show the relief on the inside as well.'}
+                  </p>
+                </>
+              )}
+            </>
+          )}
           {texture.target !== 'top' && (
             <>
               <p className="inspector-field__label">Which walls</p>

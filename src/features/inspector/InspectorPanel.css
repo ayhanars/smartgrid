@@ -931,3 +931,22 @@
 .inspector-profile__twist {
   margin-top: 6px;
 }
+
+.inspector-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.inspector-check input {
+  accent-color: var(--accent);
+}
+
+.inspector-check--disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
