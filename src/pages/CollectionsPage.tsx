@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bookmark, Plus } from 'lucide-react'
+import { Bookmark, Globe, Plus } from 'lucide-react'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { createCollection, listMyCollections, type Collection } from '../lib/supabase/collections'
 import { useAuthStore } from '../features/auth/useAuthStore'
@@ -53,7 +53,11 @@ export function CollectionsPage() {
 
   return (
     <div>
-      <PageHeader title="Collections" hint="Community models you saved, grouped the way you like.">
+      <PageHeader title="My collections" hint="Community models you saved, grouped the way you like. Private unless you make one public.">
+        <button type="button" className="page__button" onClick={() => navigate('/community?view=collections')}>
+          <Globe size={14} />
+          Browse public collections
+        </button>
         <button type="button" className="page__button page__button--primary" onClick={() => setCreating(true)}>
           <Plus size={14} />
           New collection

@@ -15,7 +15,9 @@ export function NotificationBell() {
   const markRead = useNotifications((s) => s.markRead)
   const markAllRead = useNotifications((s) => s.markAllRead)
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const bellRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -40,12 +42,18 @@ export function NotificationBell() {
 
   return (
     <div className="notif" ref={ref}>
-      <button type="button" className="notif__bell" aria-label={unread ? `${unread} unread notifications` : 'Notifications'} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button ref={bellRef} type="button" className="notif__bell" aria-label={unread ? `${unread} unread notifications` : 'Notifications'} aria-haspopup="menu" aria-expanded={open} onClick={() => {
+          const r = bellRef.current?.getBoundingClientRect()
+          // Fixed so the sidebar's scroll clip cannot cut it; kept on-screen.
+          if (r) setPos({ left: Math.min(r.left, window.innerWidth - 356), top: r.bottom + 6 })
+          setOpen((o) => !o)
+        }}
+      >
         <Bell size={17} />
         {unread > 0 && <span className="notif__count">{unread > 99 ? '99+' : unread}</span>}
       </button>
       {open && (
-        <div className="layer-context-menu notif__panel" role="menu">
+        <div className="layer-context-menu notif__panel" role="menu" style={pos ? { left: pos.left, top: pos.top } : undefined}>
           <div className="notif__head">
             <strong>Notifications</strong>
             {unread > 0 && (

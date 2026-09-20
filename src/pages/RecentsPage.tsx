@@ -105,7 +105,7 @@ export function RecentsPage() {
       {isSupabaseConfigured && user && collections && collections.length > 0 && (
         <section className="page__section">
           <div className="page__section-header">
-            <h2>Collections</h2>
+            <h2>My collections</h2>
             <span className="home__hint">Models you saved for later.</span>
             <button type="button" className="home__see-all" onClick={() => navigate('/collections')}>
               All collections
