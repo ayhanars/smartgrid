@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, useMemo } from 'react'
-import { ChevronDown, ChevronRight, Circle, CircleDashed, Eye, EyeOff, Folder, Lock, Pentagon, Plus, Square, Star, Unlock } from 'lucide-react'
+import { ChevronDown, ChevronRight, Circle, CircleDashed, Eye, EyeOff, Folder, Lock, Pentagon, Square, Star, Unlock } from 'lucide-react'
 import { useDocumentStore, orderOnPlate } from '../../state/documentStore'
-import { PlateTabs } from '../plates/PlateTabs'
+import { PlatesList } from '../plates/PlatesList'
 import type { ShapeKind, ShapeLayer } from '../../types/document'
 import { contourBounds, regionsToSvgPath } from '../../lib/geometry/primitives'
 import { LayerContextMenu, type ContextMenuState } from './LayerContextMenu'
@@ -320,15 +320,10 @@ export function LayersPanel() {
 
   return (
     <div className={`layers-panel ${drag ? 'layers-panel--dragging' : ''}`}>
-      <PlateTabs />
+      <PlatesList />
       <div className="layers-panel__header">
         <span className="layers-panel__title">Layers</span>
         <span className="layers-panel__count">{order.length}</span>
-        <div className="layers-panel__header-actions">
-          <button type="button" className="layers-panel__icon-btn" aria-label="Add layer" disabled>
-            <Plus size={14} />
-          </button>
-        </div>
       </div>
 
       <div className="layers-panel__tree">

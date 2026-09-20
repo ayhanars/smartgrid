@@ -136,10 +136,10 @@ the author's print settings as metadata) or STL, without creating a
 project.
 
 Plates: a project has up to 5 build plates (`plates` in the document,
-`plateId` on each shape; shapes without one sit on the first plate). The
-tabs above the layers list (floating over the canvas when that panel is
-hidden) switch, add, rename (double-click) and delete plates; deleting a
-plate moves its shapes to the nearest plate.
+`plateId` on each shape; shapes without one sit on the first plate). A
+Plates list above the layers (compact tabs floating over the canvas when
+that panel is hidden) switches, adds, renames (double-click) and deletes
+plates; deleting a plate moves its shapes to the nearest plate.
 Plates sit in a fixed grid by creation order (`plateLayout.ts`, Bambu
 Studio's spacing): the 2D canvas draws the other plates dimmed around the
 active one (click one to switch, drag a shape onto one to move it there),
