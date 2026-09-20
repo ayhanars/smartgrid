@@ -284,7 +284,7 @@ export function Viewport3DPane() {
             <ExtrudedShapeMesh
               key={id}
               layer={layer}
-              hidden={layer.isHole && activeHoles.has(id) && !selection.includes(id)}
+              hidden={layer.isHole && activeHoles.has(id) && !selection.includes(id) && cutsPending === 0}
               isSelected={selection.includes(id)}
               wireframe={wireframe}
               onSelect={handleSelect}

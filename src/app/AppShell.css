@@ -92,7 +92,7 @@
   pointer-events: none;
 }
 
-.app-shell__toast-link {
+.app-shell__toast .app-shell__toast-link {
   margin-left: 4px;
   padding: 3px 9px;
   border-radius: var(--radius-pill);
@@ -103,6 +103,12 @@
   white-space: nowrap;
 }
 
-.app-shell__toast-link:hover {
+.app-shell__toast .app-shell__toast-link:hover {
+  color: white;
   filter: brightness(1.08);
+}
+
+.app-shell__toast .app-shell__toast-link:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
 }

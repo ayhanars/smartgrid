@@ -1123,3 +1123,125 @@
   background: var(--bg-hover);
   color: var(--text);
 }
+
+/* Tag chips with suggestions */
+.tag-input {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  cursor: text;
+}
+
+.tag-input:focus-within {
+  border-color: var(--accent);
+}
+
+.tag-input__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.tag-input__chip button {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 50%;
+  color: var(--text-muted);
+}
+
+.tag-input__chip button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.tag-input input {
+  flex: 1;
+  min-width: 120px;
+  padding: 4px 2px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.tag-input input:focus {
+  outline: none;
+}
+
+.tag-input .layer-context-menu.tag-input__menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 60;
+}
+
+.tag-input__hint {
+  padding: 6px 10px 4px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tag-input__uses {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.publish-dialog select,
+.community-item__edit select {
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font: inherit;
+}
+
+.category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.category-badge:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.category-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -6px 0 18px;
+}
+
+.category-badge[aria-pressed='true'] {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--text);
+}

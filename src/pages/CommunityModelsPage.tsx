@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search } from 'lucide-react'
-import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
+import { CATEGORIES, listCommunityItems, type CommunityItem } from '../lib/supabase/community'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { isNetworkError } from '../lib/connectivity'
 import { useAuthStore } from '../features/auth/useAuthStore'
@@ -19,6 +19,7 @@ export function CommunityModelsPage() {
   const query = params.get('q') ?? ''
   const mine = params.get('mine') === '1' && user !== null
   const sort = params.get('sort') === 'popular' ? 'popular' : 'newest'
+  const category = params.get('category') ?? ''
   const [items, setItems] = useState<CommunityItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState(query)
@@ -29,7 +30,7 @@ export function CommunityModelsPage() {
     if (!isSupabaseConfigured) return
     let cancelled = false
     setItems(null)
-    listCommunityItems({ query, ownerId: mine ? user?.id : undefined, sort })
+    listCommunityItems({ query, ownerId: mine ? user?.id : undefined, sort, category: category || undefined })
       .then((list) => {
         if (!cancelled) {
           setItems(list)
@@ -42,12 +43,18 @@ export function CommunityModelsPage() {
     return () => {
       cancelled = true
     }
-  }, [query, mine, sort, user?.id])
+  }, [query, mine, sort, category, user?.id])
 
   const setQuery = (q: string) => {
     const next = new URLSearchParams(params)
     if (q.trim()) next.set('q', q.trim())
     else next.delete('q')
+    setParams(next, { replace: true })
+  }
+  const setCategory = (v: string) => {
+    const next = new URLSearchParams(params)
+    if (v) next.set('category', v)
+    else next.delete('category')
     setParams(next, { replace: true })
   }
   const setSort = (v: 'newest' | 'popular') => {
@@ -103,6 +110,16 @@ export function CommunityModelsPage() {
                 </button>
               </div>
             )}
+          </div>
+          <div className="category-row" role="group" aria-label="Category">
+            <button type="button" className="category-badge" aria-pressed={!category} onClick={() => setCategory('')}>
+              All
+            </button>
+            {CATEGORIES.map((c) => (
+              <button key={c.id} type="button" className="category-badge" aria-pressed={category === c.id} onClick={() => setCategory(c.id)}>
+                {c.label}
+              </button>
+            ))}
           </div>
           {!isSupabaseConfigured ? (
             <div className="community-empty">This build has no Supabase project, so there is no community to browse.</div>

@@ -41,7 +41,7 @@ export function deleteLocalThumbnail(id: string): void {
 
 /** 'busy': the viewport is mounted but still cutting holes; ask again. */
 export type CaptureResult = string | null | 'busy'
-type CaptureFn = () => CaptureResult
+type CaptureFn = () => Promise<CaptureResult>
 
 let capture: CaptureFn | null = null
 
@@ -54,10 +54,10 @@ export function registerThumbnailCapture(fn: CaptureFn): () => void {
 
 /** A fresh thumbnail of the open document; null when the 3D viewport is
  * not mounted (or rendering failed), 'busy' while its cuts are pending. */
-export function captureThumbnail(): CaptureResult {
+export async function captureThumbnail(): Promise<CaptureResult> {
   if (!capture) return null
   try {
-    return capture()
+    return await capture()
   } catch (err) {
     console.warn('Thumbnail capture failed', err)
     return null
@@ -85,4 +85,46 @@ export function saveProjectSource(id: string, itemId: string | null): void {
   } catch {
     /* fine */
   }
+}
+
+// --- Off-thread encoding ---------------------------------------------------------
+
+let encoder: Worker | null = null
+let encodeId = 1
+const encodePending = new Map<number, { resolve: (url: string) => void; reject: (e: Error) => void }>()
+
+function getEncoder(): Worker | null {
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return null
+  if (encoder) return encoder
+  try {
+    encoder = new Worker(new URL('./thumbnailEncoder.worker.ts', import.meta.url), { type: 'module' })
+  } catch {
+    return null
+  }
+  encoder.onmessage = (event: MessageEvent<{ id: number; ok: true; dataUrl: string } | { id: number; ok: false; error: string }>) => {
+    const entry = encodePending.get(event.data.id)
+    if (!entry) return
+    encodePending.delete(event.data.id)
+    if (event.data.ok) entry.resolve(event.data.dataUrl)
+    else entry.reject(new Error(event.data.error))
+  }
+  encoder.onerror = () => {
+    for (const entry of encodePending.values()) entry.reject(new Error('Thumbnail encoder failed'))
+    encodePending.clear()
+    encoder?.terminate()
+    encoder = null
+  }
+  return encoder
+}
+
+/** WebP data URL of a canvas, encoded in a worker when the browser can;
+ * falls back to the (blocking) toDataURL. */
+export async function encodeCanvas(canvas: HTMLCanvasElement, quality: number): Promise<string> {
+  const worker = getEncoder()
+  if (!worker) return canvas.toDataURL('image/webp', quality)
+  const bitmap = await createImageBitmap(canvas)
+  const id = encodeId++
+  const promise = new Promise<string>((resolve, reject) => encodePending.set(id, { resolve, reject }))
+  worker.postMessage({ id, bitmap, quality }, [bitmap])
+  return promise
 }

@@ -5,7 +5,6 @@ import {
   deleteCommunityItem,
   getCommunityItem,
   moderateCommunityItem,
-  parseTags,
   recordCommunityDownload,
   reviewCommunityItem,
   updateCommunityItem,
@@ -18,6 +17,8 @@ import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { CollectionPicker, CommentsSection, LikeButton } from '../features/community/Social'
 import { DownloadBox } from '../features/community/DownloadBox'
 import { CommunityCard } from '../features/community/CommunityCard'
+import { TagInput } from '../features/community/TagInput'
+import { CATEGORIES, categoryLabel } from '../lib/supabase/community'
 import { loadLocalProject } from '../lib/persistence/localProjects'
 import { saveProjectSource } from '../lib/persistence/thumbnails'
 import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
@@ -252,6 +253,11 @@ export function CommunityItemPage() {
                 </span>
               )}
               {item.parentId && item.changes && <p className="community-item__changes">{item.changes}</p>}
+              <div className="community-item__tags">
+                <button type="button" className="category-badge" onClick={() => navigate(`/community/models?category=${item.category}`)}>
+                  {categoryLabel(item.category)}
+                </button>
+              </div>
               {item.tags.length > 0 && (
                 <div className="community-item__tags">
                   {item.tags.map((t) => (
@@ -392,17 +398,18 @@ export function CommunityItemPage() {
   )
 }
 
-function EditForm({ item, busy, onCancel, onSave }: { item: CommunityItemFull; busy: boolean; onCancel: () => void; onSave: (patch: { title: string; description: string; notes: string; tags: string[] }) => void }) {
+function EditForm({ item, busy, onCancel, onSave }: { item: CommunityItemFull; busy: boolean; onCancel: () => void; onSave: (patch: { title: string; description: string; notes: string; tags: string[]; category: string }) => void }) {
   const [title, setTitle] = useState(item.title)
   const [description, setDescription] = useState(item.description)
   const [notes, setNotes] = useState(item.notes)
-  const [tags, setTags] = useState(item.tags.join(', '))
+  const [tags, setTags] = useState<string[]>(item.tags)
+  const [category, setCategory] = useState(item.category)
   return (
     <form
       className="community-item__edit"
       onSubmit={(e) => {
         e.preventDefault()
-        onSave({ title: title.trim() || item.title, description: description.trim(), notes: notes.trim(), tags: parseTags(tags) })
+        onSave({ title: title.trim() || item.title, description: description.trim(), notes: notes.trim(), tags, category })
       }}
     >
       <label htmlFor="ci-title">Title</label>
@@ -411,8 +418,16 @@ function EditForm({ item, busy, onCancel, onSave }: { item: CommunityItemFull; b
       <input id="ci-desc" value={description} maxLength={200} onChange={(e) => setDescription(e.target.value)} />
       <label htmlFor="ci-notes">Notes</label>
       <textarea id="ci-notes" value={notes} rows={4} maxLength={2000} onChange={(e) => setNotes(e.target.value)} />
+      <label htmlFor="ci-category">Category</label>
+      <select id="ci-category" value={category} onChange={(e) => setCategory(e.target.value)}>
+        {CATEGORIES.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.label}
+          </option>
+        ))}
+      </select>
       <label htmlFor="ci-tags">Tags</label>
-      <input id="ci-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
+      <TagInput id="ci-tags" value={tags} onChange={setTags} />
       <div className="community-item__owner-actions">
         <button type="button" disabled={busy} onClick={onCancel}>
           Cancel

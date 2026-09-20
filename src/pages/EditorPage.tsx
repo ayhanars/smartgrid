@@ -78,23 +78,32 @@ export function EditorPage() {
     // next cloud save. No-op while the 3D pane is closed; while its hole
     // cuts are still computing, tries again shortly.
     let thumbRetries = 0
+    let capturing = false
     const refreshThumbnail = () => {
-      if (!stillExists()) return
-      const dataUrl = captureThumbnail()
-      if (dataUrl === 'busy') {
-        if (thumbRetries++ < 40) {
-          window.clearTimeout(thumbTimer)
-          thumbTimer = window.setTimeout(() => {
-            thumbTimer = undefined
-            refreshThumbnail()
-          }, 750)
+      if (!stillExists() || capturing) return
+      capturing = true
+      void captureThumbnail().then((dataUrl) => {
+        capturing = false
+        if (dataUrl === 'busy') {
+          if (thumbRetries++ < 40) {
+            window.clearTimeout(thumbTimer)
+            thumbTimer = window.setTimeout(() => {
+              thumbTimer = undefined
+              refreshThumbnail()
+            }, 750)
+          }
+          return
         }
-        return
-      }
-      thumbRetries = 0
-      if (!dataUrl) return
-      saveLocalThumbnail(id, dataUrl)
-      thumbPending = dataUrl
+        thumbRetries = 0
+        if (!dataUrl || !stillExists()) return
+        saveLocalThumbnail(id, dataUrl)
+        thumbPending = dataUrl
+        // Signed in and idle: push the picture without waiting for an edit.
+        if (cloud && !cloudPending) {
+          cloudPending = last
+          flushCloud()
+        }
+      })
     }
     const flushCloud = () => {
       if (!cloudPending || !stillExists()) return
@@ -107,11 +116,6 @@ export function EditorPage() {
         return
       }
       useViewStore.getState().setCloudStatus('syncing')
-      if (thumbTimer !== undefined) {
-        window.clearTimeout(thumbTimer)
-        thumbTimer = undefined
-        refreshThumbnail()
-      }
       const thumbnail = thumbPending ?? undefined
       thumbPending = null
       saveCloudProject(id, snapshot, thumbnail)
@@ -156,19 +160,10 @@ export function EditorPage() {
       thumbTimer = window.setTimeout(() => {
         thumbTimer = undefined
         refreshThumbnail()
-        if (cloud && thumbPending) {
-          cloudPending = cloudPending ?? last
-          flushCloud()
-        }
       }, THUMBNAIL_DELAY_MS)
     }
     const flushAll = () => {
       flush()
-      if (thumbTimer !== undefined) {
-        window.clearTimeout(thumbTimer)
-        thumbTimer = undefined
-        refreshThumbnail()
-      }
       if (cloud && thumbPending && !cloudPending) cloudPending = last
       flushCloud()
     }

@@ -4,6 +4,22 @@ import type { DocumentSnapshot } from '../persistence/localProjects'
 export type CommunityStatus = 'published' | 'hidden' | 'removed'
 export type Approval = 'pending' | 'approved' | 'rejected'
 
+/** Fixed categories a model is filed under. */
+export const CATEGORIES: { id: string; label: string }[] = [
+  { id: 'organizers', label: 'Organizers & storage' },
+  { id: 'desk', label: 'Desk & office' },
+  { id: 'kitchen', label: 'Kitchen' },
+  { id: 'bathroom', label: 'Bathroom' },
+  { id: 'workshop', label: 'Tools & workshop' },
+  { id: 'decor', label: 'Home decor' },
+  { id: 'mounts', label: 'Wall mounts & hooks' },
+  { id: 'electronics', label: 'Electronics & cases' },
+  { id: 'toys', label: 'Toys & games' },
+  { id: 'parts', label: 'Parts & hardware' },
+  { id: 'other', label: 'Other' },
+]
+export const categoryLabel = (id: string) => CATEGORIES.find((c) => c.id === id)?.label ?? 'Other'
+
 /** A shared model as listed on the community pages (no geometry). */
 export interface CommunityItem {
   id: string
@@ -13,6 +29,7 @@ export interface CommunityItem {
   description: string
   notes: string
   tags: string[]
+  category: string
   thumbnail: string | null
   status: CommunityStatus
   featured: boolean
@@ -41,6 +58,7 @@ export interface CommunityDraft {
   description: string
   notes: string
   tags: string[]
+  category: string
 }
 
 interface ItemRow {
@@ -51,6 +69,7 @@ interface ItemRow {
   description: string
   notes: string
   tags: string[]
+  category: string
   thumbnail: string | null
   status: CommunityStatus
   featured: boolean
@@ -67,7 +86,7 @@ interface ItemRow {
   profiles: { display_name: string; avatar_url: string | null; level: number } | null
 }
 
-const LIST_COLUMNS = 'id, owner_id, source_project_id, title, description, notes, tags, thumbnail, status, featured, downloads, likes, comments, approval, review_note, parent_id, changes, created_at, updated_at, shape_count:data->order, profiles!community_items_owner_id_fkey(display_name, avatar_url, level)'
+const LIST_COLUMNS = 'id, owner_id, source_project_id, title, description, notes, tags, category, thumbnail, status, featured, downloads, likes, comments, approval, review_note, parent_id, changes, created_at, updated_at, shape_count:data->order, profiles!community_items_owner_id_fkey(display_name, avatar_url, level)'
 
 const toItem = (row: ItemRow): CommunityItem => ({
   id: row.id,
@@ -77,6 +96,7 @@ const toItem = (row: ItemRow): CommunityItem => ({
   description: row.description,
   notes: row.notes,
   tags: row.tags ?? [],
+  category: row.category ?? 'other',
   thumbnail: row.thumbnail,
   status: row.status,
   featured: row.featured,
@@ -109,6 +129,7 @@ export interface ListOptions {
   parentId?: string
   /** Staff: only items waiting for review. */
   pendingOnly?: boolean
+  category?: string
   limit?: number
 }
 
@@ -119,6 +140,7 @@ export async function listCommunityItems(options: ListOptions = {}): Promise<Com
   if (!options.includeUnpublished && !options.ownerId) q = q.eq('status', 'published').eq('approval', 'approved')
   if (options.pendingOnly) q = q.eq('approval', 'pending').neq('status', 'removed')
   if (options.parentId) q = q.eq('parent_id', options.parentId)
+  if (options.category) q = q.eq('category', options.category)
   if (options.ids) {
     if (options.ids.length === 0) return []
     q = q.in('id', options.ids)
@@ -182,6 +204,7 @@ export async function publishCommunityItem(
       description: draft.description,
       notes: draft.notes,
       tags: draft.tags,
+      category: draft.category,
       data: snapshot,
       thumbnail,
       parent_id: version?.parentId ?? null,
@@ -202,6 +225,7 @@ export async function updateCommunityItem(id: string, patch: Partial<CommunityDr
   if (patch.description !== undefined) row.description = patch.description
   if (patch.notes !== undefined) row.notes = patch.notes
   if (patch.tags !== undefined) row.tags = patch.tags
+  if (patch.category !== undefined) row.category = patch.category
   if (patch.status !== undefined) row.status = patch.status
   if (patch.snapshot !== undefined) row.data = patch.snapshot
   if (patch.thumbnail !== undefined) row.thumbnail = patch.thumbnail
@@ -337,4 +361,11 @@ export async function searchProfiles(query: string): Promise<{ id: string; displ
   const { data, error } = await supabase.rpc('search_profiles', { p_query: query, p_limit: 8 })
   if (error) throw error
   return (data as { id: string; display_name: string; avatar_url: string | null; level: number }[]).map((r) => ({ id: r.id, displayName: r.display_name, avatarUrl: r.avatar_url, level: r.level }))
+}
+
+/** Tags already in use, most common first; `query` narrows by prefix. */
+export async function popularTags(query = '', limit = 12): Promise<{ tag: string; uses: number }[]> {
+  const { data, error } = await supabase.rpc('popular_tags', { p_query: query, p_limit: limit })
+  if (error) throw error
+  return (data as { tag: string; uses: number }[]).map((r) => ({ tag: r.tag, uses: Number(r.uses) }))
 }

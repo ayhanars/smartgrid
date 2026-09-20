@@ -1170,3 +1170,29 @@ create trigger community_items_followers after insert or update on public.commun
 
 -- People search for the global search box (profiles are public).
 grant execute on function public.search_profiles(text, integer) to anon;
+
+-- ---------------------------------------------------------------------------
+-- Categories and tag suggestions for publishing.
+-- ---------------------------------------------------------------------------
+
+alter table public.community_items add column if not exists category text not null default 'other';
+create index if not exists community_items_category_idx on public.community_items (category);
+
+-- Tags people already use, most common first: the publish form suggests
+-- them so spellings do not drift.
+create or replace function public.popular_tags(p_query text default '', p_limit integer default 12)
+returns table (tag text, uses bigint)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select t.tag, count(*) as uses
+  from public.community_items ci, unnest(ci.tags) as t(tag)
+  where ci.status = 'published' and ci.approval = 'approved' and (p_query = '' or t.tag ilike p_query || '%')
+  group by t.tag
+  order by uses desc, t.tag
+  limit greatest(1, least(p_limit, 50));
+$$;
+
+grant execute on function public.popular_tags(text, integer) to anon, authenticated;

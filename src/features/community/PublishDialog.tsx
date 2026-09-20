@@ -5,11 +5,12 @@ import { serializeDocument, useDocumentStore } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { saveLocalProject } from '../../lib/persistence/localProjects'
 import { captureThumbnail, loadLocalThumbnail, loadProjectSource, saveLocalThumbnail } from '../../lib/persistence/thumbnails'
+import { TagInput } from './TagInput'
 import {
+  CATEGORIES,
   deleteCommunityItem,
   findMyCommunityItemForProject,
   getCommunityItem,
-  parseTags,
   publishCommunityItem,
   updateCommunityItem,
   type CommunityItem,
@@ -37,7 +38,8 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
   const [title, setTitle] = useState(projectName)
   const [description, setDescription] = useState('')
   const [notes, setNotes] = useState('')
-  const [tags, setTags] = useState('')
+  const [tags, setTags] = useState<string[]>([])
+  const [category, setCategory] = useState('other')
   const [replaceModel, setReplaceModel] = useState(true)
   const [status, setStatus] = useState<'published' | 'hidden'>('published')
   const [changes, setChanges] = useState('')
@@ -57,7 +59,8 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
           setTitle(item.title)
           setDescription(item.description)
           setNotes(item.notes)
-          setTags(item.tags.join(', '))
+          setTags(item.tags)
+          setCategory(item.category)
           setStatus(item.status === 'hidden' ? 'hidden' : 'published')
           setChanges(item.changes)
         }
@@ -92,26 +95,26 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
   }, [onClose])
 
   /** The document as it is right now, saved, with a fresh picture. */
-  const currentModel = () => {
+  const currentModel = async () => {
     const snapshot = serializeDocument(useDocumentStore.getState())
     saveLocalProject(projectId, snapshot)
-    const fresh = captureThumbnail()
+    const fresh = await captureThumbnail()
     if (fresh && fresh !== 'busy') saveLocalThumbnail(projectId, fresh)
     return { snapshot, thumbnail: fresh && fresh !== 'busy' ? fresh : loadLocalThumbnail(projectId) }
   }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    const draft = { title: title.trim() || projectName, description: description.trim(), notes: notes.trim(), tags: parseTags(tags) }
+    const draft = { title: title.trim() || projectName, description: description.trim(), notes: notes.trim(), tags, category }
     setBusy(true)
     setError(null)
     try {
       if (existing) {
-        const model = replaceModel ? currentModel() : null
+        const model = replaceModel ? await currentModel() : null
         await updateCommunityItem(existing.id, { ...draft, status, changes: changes.trim(), ...(model ? { snapshot: model.snapshot, thumbnail: model.thumbnail } : {}) })
         setNotice(replaceModel && !staff ? 'Community copy updated. A moderator will review the new model before it shows again.' : replaceModel ? 'Community copy updated with the current model.' : 'Community listing updated.', { label: 'View in community', to: `/c/${existing.id}` })
       } else {
-        const model = currentModel()
+        const model = await currentModel()
         const version = source && asVersion ? { parentId: source.id, changes: changes.trim() } : undefined
         const item = await publishCommunityItem(projectId, model.snapshot, model.thumbnail, draft, version)
         setNotice(staff ? `Published "${item.title}" to the community.` : `"${item.title}" was sent for review. You will get a notification once a moderator approves it.`, { label: 'View in community', to: `/c/${item.id}` })
@@ -165,8 +168,16 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
           <input id="publish-desc" value={description} maxLength={200} placeholder="What is it, what does it fit?" onChange={(e) => setDescription(e.target.value)} />
           <label htmlFor="publish-notes">Notes for people who print it</label>
           <textarea id="publish-notes" value={notes} maxLength={2000} rows={4} placeholder="Filament, orientation, tolerances, what to tweak…" onChange={(e) => setNotes(e.target.value)} />
+          <label htmlFor="publish-category">Category</label>
+          <select id="publish-category" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
           <label htmlFor="publish-tags">Tags</label>
-          <input id="publish-tags" value={tags} placeholder="organizer, gridfinity, desk (comma separated)" onChange={(e) => setTags(e.target.value)} />
+          <TagInput id="publish-tags" value={tags} onChange={setTags} />
 
           {!existing && source && (
             <div className="publish-dialog__options">
