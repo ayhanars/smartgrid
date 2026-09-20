@@ -263,6 +263,10 @@ export interface ShapeLayer {
   /** Twist: how far the footprint turns from the bottom to the top,
    * degrees (a twisted vase). Absent or 0 = none. */
   twist?: number
+  /** For a layer that follows another (a shell cavity): the height frame
+   * its profile and twist are measured in — the solid's bottom relative
+   * to this layer's, and the solid's depth — so both bend identically. */
+  bendFrame?: { z: number; depth: number }
   /** For hole cutters only: 'rim' (default) flares the bevels outward so
    * they round/countersink the mouth of the cut; 'shape' keeps the
    * cutter's own beveled edges, so a carved pocket has the tool's exact

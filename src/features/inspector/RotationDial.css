@@ -105,3 +105,10 @@
   stroke-width: 2.5;
   stroke-linecap: round;
 }
+
+.angle-wheel__arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  opacity: 0.5;
+}

@@ -22,6 +22,8 @@ import {
 import { shapeWorldBounds, useDocumentStore, type AlignMode, artboardSize, orderOnPlate, layerPlateId, shellUnitSolid } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { orderedProfile, presetProfile, profileOverhangs, profileScaleAt, type ProfilePreset } from '../../lib/geometry/profile'
+import { layerPrintQuaternion } from '../../lib/geometry/layerGeometry'
+import * as THREE from 'three'
 import type { ProfilePoint, ShapeProfile } from '../../types/document'
 import { InspectorFooter } from './InspectorFooter'
 import { IconButton } from '../../components/IconButton'
@@ -1427,12 +1429,20 @@ const PROFILE_PRESETS: { id: ProfilePreset; label: string; path: string }[] = [
 function ProfileSection({ layer }: { layer: ShapeLayer }) {
   const setProfile = useDocumentStore((s) => s.setProfile)
   const setTwist = useDocumentStore((s) => s.setTwist)
+  const beginTransientEdit = useDocumentStore((s) => s.beginTransientEdit)
+  const commitTransientEdit = useDocumentStore((s) => s.commitTransientEdit)
   const profileEditing = useViewStore((s) => s.profileEditing)
   const setProfileEditing = useViewStore((s) => s.setProfileEditing)
   const depth = Math.max(0.2, layer.extrusionDepth)
   const simple = layer.regions.length === 1 && layer.regions[0].holes.length === 0
   const profile = layer.profile
   const points = profile ? orderedProfile(profile, depth) : []
+  // Rings are listed as they stand on the plate: the topmost first. A
+  // shape printed upside down lists its z=0 ring first, since that is
+  // what ends up on top.
+  const upright = new THREE.Vector3(0, 0, 1).applyQuaternion(layerPrintQuaternion(layer)).z >= 0
+  const ringOrder = points.map((_, i) => i)
+  if (upright) ringOrder.reverse()
   const bounds = shapeWorldBounds(layer)
   const overhangs = profile ? profileOverhangs(profile, depth, Math.max(bounds.width, bounds.height) / 2) : []
   const update = (next: ShapeProfile | undefined) => setProfile(layer.id, next && next.points.length > 0 ? next : undefined)
@@ -1506,23 +1516,28 @@ function ProfileSection({ layer }: { layer: ShapeLayer }) {
       </div>
       {points.length > 0 && (
         <div className="inspector-profile__rings">
-          {points.map((p, i) => (
-            <div key={i} className="inspector-profile__ring">
-              <Field label={i === 0 ? 'Height' : ''} value={p.z} suffix="mm" onChange={(v) => setPoint(i, { z: Math.min(depth, Math.max(0, v)) })} />
-              <Field label={i === 0 ? 'Width' : ''} value={Math.round(p.scale * 100)} suffix="%" onChange={(v) => setPoint(i, { scale: Math.max(5, v) / 100 })} />
-              <button type="button" className="inspector-profile__remove" aria-label="Remove ring" onClick={() => update(profile ? { ...profile, points: points.filter((_, j) => j !== i) } : undefined)}>
-                <X size={12} />
-              </button>
-            </div>
-          ))}
+          {ringOrder.map((i, row) => {
+            const p = points[i]
+            return (
+              <div key={i} className="inspector-profile__ring">
+                <Field label={row === 0 ? 'Height' : ''} value={p.z} suffix="mm" onChange={(v) => setPoint(i, { z: Math.min(depth, Math.max(0, v)) })} />
+                <Field label={row === 0 ? 'Width' : ''} value={Math.round(p.scale * 100)} suffix="%" onChange={(v) => setPoint(i, { scale: Math.max(5, v) / 100 })} />
+                <button type="button" className="inspector-profile__remove" aria-label="Remove ring" onClick={() => update(profile ? { ...profile, points: points.filter((_, j) => j !== i) } : undefined)}>
+                  <X size={12} />
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
       <div className="inspector-profile__subtitle">Twist</div>
-      <div className="inspector-profile__twist">
-        <Field label="Turn, bottom to top" value={layer.twist ?? 0} suffix="°" decimals={0} onChange={(v) => setTwist(layer.id, v)} />
-        <input type="range" min={-180} max={180} step={5} value={layer.twist ?? 0} aria-label="Twist" onChange={(e) => setTwist(layer.id, Number(e.target.value))} />
+      <div className="inspector-angle">
+        <AngleWheel value={layer.twist ?? 0} fold={false} onChange={(deg) => setTwist(layer.id, deg)} onStart={beginTransientEdit} onEnd={commitTransientEdit} label="Twist" />
+        <div>
+          <Field label="Turn, bottom to top" value={layer.twist ?? 0} suffix="°" decimals={0} onChange={(v) => setTwist(layer.id, v)} />
+          <p className="inspector-note">Drag the wheel; Shift for 1° steps. Turns the outline as it rises, like a twisted vase.</p>
+        </div>
       </div>
-      <p className="inspector-note">Turns the outline as it rises, like a twisted vase; works with the silhouettes above.</p>
       {overhangs.length > 0 && <p className="inspector-note inspector-note--warning">Leans out more than 45° between {overhangs.map((o) => `${round(o.from)}–${round(o.to)} mm`).join(', ')}: that part may need support to print.</p>}
       <p className="inspector-note">{profile ? 'Drag a ring on the ruler in 3D: up/down for its height, in/out for its width. Click the ruler to add one.' : 'Pick a silhouette or add a ring, then shape it on the ruler in 3D.'}</p>
     </Section>

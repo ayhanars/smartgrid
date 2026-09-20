@@ -20,10 +20,16 @@ export interface CutPlan {
  * CSG worker. Shared by the viewport, the previews and the exporter so
  * they all build the same thing.
  */
-export function planCut(solid: ShapeLayer, holeLayers: ShapeLayer[], scale: number, toWorld: (layer: ShapeLayer) => { worldX: number; worldY: number; worldZ: number }): CutPlan {
+export function planCut(
+  solid: ShapeLayer,
+  holeLayers: ShapeLayer[],
+  scale: number,
+  toWorld: (layer: ShapeLayer) => { worldX: number; worldY: number; worldZ: number },
+  options: { fastShading?: boolean } = {},
+): CutPlan {
   const flat = holeLayers.filter((h) => isFlatHole(solid, h))
   const rest = holeLayers.filter((h) => !isFlatHole(solid, h))
-  const bodies = flat.length > 0 ? buildFlatCutGeometries(solid, flat, scale) : buildLayerGeometries(solid, scale)
+  const bodies = flat.length > 0 ? buildFlatCutGeometries(solid, flat, scale) : buildLayerGeometries(solid, scale, { fastShading: options.fastShading })
   // Cavities go first and, on a perforated body, are built at the same
   // subdivision: a cavity's few huge faces split against tens of
   // thousands of drilled-wall triangles takes ~40 s instead of 2.
