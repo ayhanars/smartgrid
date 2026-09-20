@@ -57,7 +57,7 @@ export function InspectorFooter() {
         // A 3MF carries every plate: Bambu Studio opens it with the same plates.
         const meshes = await buildExportMeshes(layers, order, { plates, bedWidth: bed.width, bedDepth: bed.height })
         if (meshes.length === 0) return
-        downloadBlob(write3mf(meshes, { plates: plates.map((p) => p.name) }), `${fileBase}.3mf`, 'model/3mf')
+        downloadBlob(write3mf(meshes, { plates: plates.map((p) => p.name), bambu: { bedPresetId: state.bedPresetId, printSettings: state.printSettings } }), `${fileBase}.3mf`, 'model/3mf')
       } else {
         // STL has no plates, so it holds the plate you are looking at.
         const meshes = await buildExportMeshes(layers, orderOnPlate(state, activePlateId))

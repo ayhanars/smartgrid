@@ -148,8 +148,25 @@ Studio's spacing): the 2D canvas draws the other plates dimmed around the
 active one (click one to switch, drag a shape onto one to move it there),
 the layers list, print preview and warnings show the active plate only,
 and "All plates" draws the others beside it in 3D with their beds faded.
-Exports are named after the project. The 2D artboard colour is a
-document setting (Artboard section when nothing is selected). Copy, cut and paste
+Exports are named after the project; a 3MF is written as a Bambu Studio
+project (generator tag, printer / print / filament preset names in
+`Metadata/project_settings.config`), which is what makes Bambu Studio
+open it with its plates and settings instead of as loose geometry — use
+"Open project", not "Import". The 2D artboard colour is a document
+setting (Artboard section when nothing is selected).
+
+Profile: a solid's width along its height (`profile` on the layer:
+rings of height + scale, smooth or straight between them) — a vase, a
+cone, a barrel. The 3D tab's Profile section has presets, a ring list
+and "Ruler in 3D": a ruler beside the shape where rings are dragged up
+and down for height and in and out for width, and a click adds a ring.
+The body is tessellated and scaled per height (`profile.ts`); the shell
+cavity and the perforation cutters follow the same curve. Parts leaning
+out past 45° are flagged on the ruler and in the panel.
+
+The right panel is tabbed: Design / 3D / Effects for a selection (shell,
+pocket, texture, perforation and carve live under Effects), Printer /
+Print for the document. Copy, cut and paste
 (⌘C/⌘X/⌘V, also in the right-click menu) work across plates and from the
 2D canvas, the 3D view and the layer list alike. A shape larger than the bed offers "Split across plates", which
 cuts it into bed-sized pieces, one per plate. A 3MF export carries every

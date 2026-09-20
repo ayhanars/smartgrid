@@ -1,6 +1,6 @@
 import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
-import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type Perforation, type ShapeLayer, type SurfaceTexture } from '../types/document'
+import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type Perforation, type ShapeLayer, type ShapeProfile, type SurfaceTexture } from '../types/document'
 import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
@@ -162,6 +162,8 @@ interface DocumentActions {
   setTexture: (id: string, texture: SurfaceTexture | null) => void
   /** Pattern of real holes on a shape; null removes it. */
   setPerforation: (id: string, perforation: Perforation | null) => void
+  /** The width profile of a solid; its shell cavity follows it. */
+  setProfile: (id: string, profile: ShapeProfile | undefined) => void
   /** How a cutter's bevels are read (see ShapeLayer.bevelMode). */
   setBevelMode: (id: string, mode: 'rim' | 'shape') => void
   /** Carve: turns `toolId` into a hole cutter positioned against `baseId`
@@ -965,8 +967,9 @@ export const useDocumentStore = create<DocumentStore>()(
         if (!solid || solid.isHole) return null
         // The cavity belongs with its solid: join its group, or start one.
         const groupId = solid.groupId ?? generateId()
-        const cavity = makeCavityLayer({ ...solid, groupId }, options, state.printSettings.layerHeight, groupId)
-        if (!cavity) return null
+        const built = makeCavityLayer({ ...solid, groupId }, options, state.printSettings.layerHeight, groupId)
+        if (!built) return null
+        const cavity = solid.profile ? { ...built, profile: solid.profile } : built
         set((s) => {
           const layers = { ...s.layers }
           let groups = s.groups
@@ -1075,6 +1078,18 @@ export const useDocumentStore = create<DocumentStore>()(
             depth: perforation.depth == null ? null : Math.max(0.1, perforation.depth),
           }
           return { layers: { ...state.layers, [id]: { ...layer, perforation: clean } } }
+        }),
+
+      setProfile: (id, profile) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          const layers = { ...state.layers, [id]: { ...layer, profile } }
+          for (const lid of state.order) {
+            const l = state.layers[lid]
+            if (l?.shellOf?.solidId === id) layers[lid] = { ...l, profile }
+          }
+          return { layers }
         }),
 
       setBevelMode: (id, mode) =>
@@ -1326,46 +1341,72 @@ export const useDocumentStore = create<DocumentStore>()(
         set((state) => {
           const targets = ids.map((id) => state.layers[id]).filter((l): l is ShapeLayer => !!l && !l.locked)
           if (targets.length === 0) return {}
-          const boundsById = new Map(targets.map((l) => [l.id, shapeWorldBounds(l)] as const))
+          // A group (a solid with its shell cavity, say) moves as one unit.
+          const unitOf = (l: ShapeLayer) => l.groupId ?? l.id
+          const units = new Map<string, { members: ShapeLayer[]; bounds: Bounds }>()
+          for (const layer of targets) {
+            const key = unitOf(layer)
+            const b = shapeWorldBounds(layer)
+            const unit = units.get(key)
+            if (!unit) units.set(key, { members: [layer], bounds: { ...b } })
+            else {
+              unit.members.push(layer)
+              const minX = Math.min(unit.bounds.x, b.x)
+              const minY = Math.min(unit.bounds.y, b.y)
+              const maxX = Math.max(unit.bounds.x + unit.bounds.width, b.x + b.width)
+              const maxY = Math.max(unit.bounds.y + unit.bounds.height, b.y + b.height)
+              unit.bounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+            }
+          }
+          const list = [...units.values()]
+          const layers = { ...state.layers }
+          const moveUnit = (unit: { members: ShapeLayer[] }, dx: number, dy: number) => {
+            if (!dx && !dy) return
+            for (const layer of unit.members) {
+              layers[layer.id] = { ...layer, transform: { ...layer.transform, x: layer.transform.x + dx, y: layer.transform.y + dy } }
+            }
+          }
+
           if (mode === 'hspace' || mode === 'vspace') {
-            // Equal gaps: the outermost two stay, the rest spread between them.
-            if (targets.length < 3) return {}
+            // Equal gaps: the outermost two stay, the rest spread between
+            // them. When they do not fit without touching, they are laid
+            // out from the first one with a small equal gap instead.
+            if (list.length < 3) return {}
             const horizontal = mode === 'hspace'
-            const sorted = [...targets].sort((a, b) => {
-              const ba = boundsById.get(a.id)!
-              const bb = boundsById.get(b.id)!
-              return horizontal ? ba.x + ba.width / 2 - (bb.x + bb.width / 2) : ba.y + ba.height / 2 - (bb.y + bb.height / 2)
-            })
-            const first = boundsById.get(sorted[0].id)!
-            const last = boundsById.get(sorted[sorted.length - 1].id)!
-            const span = horizontal ? last.x + last.width - first.x : last.y + last.height - first.y
-            const filled = sorted.reduce((n, l) => n + (horizontal ? boundsById.get(l.id)!.width : boundsById.get(l.id)!.height), 0)
-            const gap = (span - filled) / (sorted.length - 1)
-            const layers = { ...state.layers }
-            let cursor = horizontal ? first.x + first.width + gap : first.y + first.height + gap
-            for (const layer of sorted.slice(1, -1)) {
-              const b = boundsById.get(layer.id)!
-              const delta = cursor - (horizontal ? b.x : b.y)
-              layers[layer.id] = { ...layer, transform: { ...layer.transform, x: layer.transform.x + (horizontal ? delta : 0), y: layer.transform.y + (horizontal ? 0 : delta) } }
-              cursor += (horizontal ? b.width : b.height) + gap
+            const size = (b: Bounds) => (horizontal ? b.width : b.height)
+            const pos = (b: Bounds) => (horizontal ? b.x : b.y)
+            const sorted = [...list].sort((u, v) => pos(u.bounds) + size(u.bounds) / 2 - (pos(v.bounds) + size(v.bounds) / 2))
+            const first = sorted[0].bounds
+            const last = sorted[sorted.length - 1].bounds
+            const span = pos(last) + size(last) - pos(first)
+            const filled = sorted.reduce((n, u) => n + size(u.bounds), 0)
+            const MIN_GAP = 4
+            let gap = (span - filled) / (sorted.length - 1)
+            const rest = gap < MIN_GAP ? sorted.slice(1) : sorted.slice(1, -1)
+            if (gap < MIN_GAP) gap = MIN_GAP
+            let cursor = pos(first) + size(first) + gap
+            for (const unit of rest) {
+              const delta = cursor - pos(unit.bounds)
+              moveUnit(unit, horizontal ? delta : 0, horizontal ? 0 : delta)
+              cursor += size(unit.bounds) + gap
             }
             return { layers }
           }
+
+          // One unit aligns to the artboard; several align to their common box.
           let ref: Bounds
-          if (targets.length > 1) {
-            const all = [...boundsById.values()]
-            const minX = Math.min(...all.map((b) => b.x))
-            const minY = Math.min(...all.map((b) => b.y))
-            const maxX = Math.max(...all.map((b) => b.x + b.width))
-            const maxY = Math.max(...all.map((b) => b.y + b.height))
+          if (list.length > 1) {
+            const minX = Math.min(...list.map((u) => u.bounds.x))
+            const minY = Math.min(...list.map((u) => u.bounds.y))
+            const maxX = Math.max(...list.map((u) => u.bounds.x + u.bounds.width))
+            const maxY = Math.max(...list.map((u) => u.bounds.y + u.bounds.height))
             ref = { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
           } else {
             const { width, height } = artboardSize(state)
             ref = { x: 0, y: 0, width, height }
           }
-          const layers = { ...state.layers }
-          for (const layer of targets) {
-            const b = boundsById.get(layer.id)!
+          for (const unit of list) {
+            const b = unit.bounds
             let dx = 0
             let dy = 0
             if (mode === 'left') dx = ref.x - b.x
@@ -1374,10 +1415,7 @@ export const useDocumentStore = create<DocumentStore>()(
             else if (mode === 'top') dy = ref.y - b.y
             else if (mode === 'vcenter') dy = ref.y + ref.height / 2 - (b.y + b.height / 2)
             else dy = ref.y + ref.height - (b.y + b.height)
-            layers[layer.id] = {
-              ...layer,
-              transform: { ...layer.transform, x: layer.transform.x + dx, y: layer.transform.y + dy },
-            }
+            moveUnit(unit, dx, dy)
           }
           return { layers }
         }),

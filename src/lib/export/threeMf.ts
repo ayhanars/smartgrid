@@ -1,5 +1,7 @@
 import { zipSync, strToU8 } from 'fflate'
 import type { ExportMesh } from './exportMeshes'
+import type { PrintSettings } from '../../types/document'
+import { BAMBU_GENERATOR, bambuProjectConfig, isBambuPrinter } from './bambuProject'
 
 function escapeXml(s: string): string {
   return s.replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!)
@@ -50,12 +52,17 @@ export interface ThreeMfOptions {
    * 1-based plate number. Written as Bambu Studio plate blocks so the file
    * opens with the same plates. */
   plates?: string[]
+  /** Written as a Bambu Studio project for this printer (bed preset id):
+   * the file then opens with its plates, print settings and filaments
+   * instead of as loose geometry. */
+  bambu?: { bedPresetId: string; printSettings?: Partial<PrintSettings> }
 }
 
 export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadata | ThreeMfOptions = {}): Uint8Array<ArrayBuffer> {
   const options: ThreeMfOptions = 'metadata' in metadataOrOptions || 'plates' in metadataOrOptions ? (metadataOrOptions as ThreeMfOptions) : { metadata: metadataOrOptions as ThreeMfMetadata }
   const metadata = options.metadata ?? {}
   const plateNames = options.plates && options.plates.length > 1 ? options.plates : null
+  const bambu = options.bambu && isBambuPrinter(options.bambu.bedPresetId) ? options.bambu : null
   const colors = [...new Set(meshes.map((m) => normalizeColor(m.color)))]
 
   const baseMaterials = colors
@@ -91,8 +98,9 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
 
   const model =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n` +
-    `  <metadata name="Application">smartgrid</metadata>\n` +
+    `<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:BambuStudio="http://schemas.bambulab.com/package/2021">\n` +
+    `  <metadata name="Application">${bambu ? BAMBU_GENERATOR : 'smartgrid'}</metadata>\n` +
+    (bambu ? `  <metadata name="BambuStudio:3mfVersion">1</metadata>\n  <metadata name="Generator">smartgrid</metadata>\n` : '') +
     (plateNames ? `  <metadata name="PlateCount">${plateNames.length}</metadata>\n` : '') +
     Object.entries(metadata)
       .filter(([, v]) => v !== undefined && v !== '')
@@ -128,10 +136,12 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
     : []
   const modelSettings = `<?xml version="1.0" encoding="UTF-8"?>\n<config>\n${[...objectSettings, ...plateBlocks].join('\n')}\n</config>\n`
   const projectSettings = JSON.stringify(
-    {
-      filament_colour: colors,
-      filament_type: colors.map(() => 'PLA'),
-    },
+    bambu
+      ? bambuProjectConfig(bambu.bedPresetId, bambu.printSettings ?? {}, colors)
+      : {
+          filament_colour: colors,
+          filament_type: colors.map(() => 'PLA'),
+        },
     null,
     2,
   )

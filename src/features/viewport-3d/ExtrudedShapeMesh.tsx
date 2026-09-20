@@ -89,7 +89,7 @@ export function ExtrudedShapeMesh({
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
-    onSelect(layer.id, e.shiftKey, e.metaKey || e.ctrlKey)
+    onSelect(layer.id, e.shiftKey || e.metaKey || e.ctrlKey, e.metaKey || e.ctrlKey)
   }
 
   const opacity = layer.isHole ? 0.35 : (layer.opacity ?? 100) / 100
