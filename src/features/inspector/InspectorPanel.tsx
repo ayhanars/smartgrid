@@ -85,6 +85,7 @@ export function InspectorPanel() {
       ) : (
         <Tabs
           storageKey="shape"
+          followView
           tabs={[
             { id: 'design', label: 'Design', content: <><AlignmentSection ids={selection} /><DesignTab layer={selectedLayer} multiCount={selection.length} /></> },
             { id: '3d', label: '3D', content: <ThreeDTab layer={selectedLayer} multiCount={selection.length} /> },
@@ -105,7 +106,7 @@ interface TabSpec {
 
 /** The panel's sections as tabs; the chosen tab is remembered per kind of
  * selection (document / shapes) so switching selections keeps your place. */
-function Tabs({ tabs, storageKey }: { tabs: TabSpec[]; storageKey: string }) {
+function Tabs({ tabs, storageKey, followView }: { tabs: TabSpec[]; storageKey: string; followView?: boolean }) {
   const key = `smartgrid:inspector-tab:${storageKey}`
   const [active, setActive] = useState(() => {
     try {
@@ -114,6 +115,13 @@ function Tabs({ tabs, storageKey }: { tabs: TabSpec[]; storageKey: string }) {
       return tabs[0].id
     }
   })
+  // In 3D-only view the 3D tab is the one you want.
+  const viewMode = useViewStore((s) => s.viewMode)
+  const lastMode = useRef(viewMode)
+  useEffect(() => {
+    if (followView && viewMode === '3d' && lastMode.current !== '3d') setActive('3d')
+    lastMode.current = viewMode
+  }, [viewMode, followView])
   const current = tabs.find((t) => t.id === active) ?? tabs[0]
   const choose = (id: string) => {
     setActive(id)
@@ -143,7 +151,7 @@ function Tabs({ tabs, storageKey }: { tabs: TabSpec[]; storageKey: string }) {
  * perforation, carve. */
 function EffectsTab({ layer, ids }: { layer: ShapeLayer | null; ids: string[] }) {
   if (ids.length === 2) return <CarveSection ids={ids} />
-  if (!layer) return <EmptyState text="Select a single shape for shell, texture and perforation, or two shapes to carve one with the other." />
+  if (!layer) return <EmptyState text="Select a single shape for texture and perforation, or two shapes to carve one with the other." />
   return (
     <>
       <TextureSection layer={layer} />
@@ -1356,16 +1364,19 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
         )}
       </Section>
       {!layer.isHole && <ProfileSection layer={layer} />}
+      {!layer.isHole && <ShellSection layer={layer} />}
     </>
   )
 }
 
-const PROFILE_PRESETS: { id: ProfilePreset; label: string }[] = [
-  { id: 'straight', label: 'Straight' },
-  { id: 'bulge', label: 'Bulge' },
-  { id: 'taper', label: 'Taper' },
-  { id: 'flare', label: 'Flare' },
-  { id: 'waist', label: 'Waist' },
+/** Side-view silhouettes (bottom at the bottom), so a shape reads at a
+ * glance without a name for it. */
+const PROFILE_PRESETS: { id: ProfilePreset; label: string; path: string }[] = [
+  { id: 'straight', label: 'Straight walls', path: 'M8 4 H24 V28 H8 Z' },
+  { id: 'bulge', label: 'Wider in the middle', path: 'M10 4 H22 C30 10 30 22 22 28 H10 C2 22 2 10 10 4 Z' },
+  { id: 'taper', label: 'Narrower at the top', path: 'M11 4 H21 L26 28 H6 Z' },
+  { id: 'flare', label: 'Wider at the top', path: 'M6 4 H26 L21 28 H11 Z' },
+  { id: 'waist', label: 'Narrower in the middle', path: 'M6 4 H26 C18 10 18 22 26 28 H6 C14 22 14 10 6 4 Z' },
 ]
 
 /** The width along the height — a vase, a cone, a barrel. Rings are set
@@ -1387,27 +1398,31 @@ function ProfileSection({ layer }: { layer: ShapeLayer }) {
   }
   if (!simple) {
     return (
-      <Section title="Profile">
-        <p className="inspector-note">A profile needs a single-outline shape; this one was combined from several.</p>
+      <Section title="Shape along the height">
+        <p className="inspector-note">This needs a single-outline shape; this one was combined from several.</p>
       </Section>
     )
   }
   return (
-    <Section title="Profile" action={<span className="inspector-section__hint">vase · cone · barrel</span>}>
-      <div className="inspector-preset-chips">
+    <Section title="Shape along the height" action={<span className="inspector-section__hint">profile</span>}>
+      <div className="inspector-profile__presets" role="group" aria-label="Shape along the height">
         {PROFILE_PRESETS.map((p) => {
           const active = p.id === 'straight' ? !profile : false
           return (
             <button
               key={p.id}
               type="button"
-              className={`inspector-preset-chip ${active ? 'inspector-preset-chip--active' : ''}`}
+              className={`inspector-profile__preset ${active ? 'inspector-profile__preset--active' : ''}`}
+              title={p.label}
+              aria-label={p.label}
               onClick={() => {
                 update(presetProfile(p.id, depth))
                 if (p.id !== 'straight') setProfileEditing(true)
               }}
             >
-              {p.label}
+              <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+                <path d={p.path} />
+              </svg>
             </button>
           )
         })}
@@ -1459,7 +1474,7 @@ function ProfileSection({ layer }: { layer: ShapeLayer }) {
         </div>
       )}
       {overhangs.length > 0 && <p className="inspector-note inspector-note--warning">Leans out more than 45° between {overhangs.map((o) => `${round(o.from)}–${round(o.to)} mm`).join(', ')}: that part may need support to print.</p>}
-      <p className="inspector-note">{profile ? 'Drag a ring on the ruler in 3D: up/down for its height, in/out for its width. Click the ruler to add one.' : 'Pick a preset or add a ring, then shape it on the ruler in 3D.'}</p>
+      <p className="inspector-note">{profile ? 'Drag a ring on the ruler in 3D: up/down for its height, in/out for its width. Click the ruler to add one.' : 'Pick a silhouette or add a ring, then shape it on the ruler in 3D.'}</p>
     </Section>
   )
 }

@@ -52,7 +52,8 @@ function Toast() {
 }
 
 export function AppShell() {
-  const [viewMode, setViewMode] = useState<ViewMode>('split')
+  const viewMode = useViewStore((s) => s.viewMode)
+  const setViewMode = useViewStore((s) => s.setViewMode)
   const [leftPanelOpen, setLeftPanelOpen] = useState(true)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
 
@@ -110,7 +111,7 @@ export function AppShell() {
   // 2D-only layout brings the 3D pane back into view.
   const printPreview = useViewStore((s) => s.printPreview)
   useEffect(() => {
-    if (printPreview) setViewMode((mode) => (mode === '2d' ? 'split' : mode))
+    if (printPreview) setViewMode(useViewStore.getState().viewMode === '2d' ? 'split' : useViewStore.getState().viewMode)
   }, [printPreview])
 
   useEffect(() => {

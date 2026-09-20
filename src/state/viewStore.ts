@@ -30,6 +30,10 @@ interface ViewState {
   /** The 3D profile ruler (rings you drag to shape a vase/cone) is shown. */
   profileEditing: boolean
   setProfileEditing: (on: boolean) => void
+  /** Which panes the editor shows; mirrored from the shell so panels can
+   * follow it (the inspector jumps to its 3D tab in 3D-only mode). */
+  viewMode: '2d' | 'split' | '3d'
+  setViewMode: (mode: '2d' | 'split' | '3d') => void
 }
 
 let noticeCounter = 0
@@ -51,4 +55,6 @@ export const useViewStore = create<ViewState>()((set) => ({
   bumpTileVersion: () => set((s) => ({ tileVersion: s.tileVersion + 1 })),
   profileEditing: false,
   setProfileEditing: (on) => set({ profileEditing: on }),
+  viewMode: 'split',
+  setViewMode: (mode) => set({ viewMode: mode }),
 }))
