@@ -119,15 +119,17 @@ rejected; moderators and admins skip the queue). Approvals, rejections
 of your models and level-ups land in the `notifications` table and the
 bell in the sidebar. Email delivery is not wired yet.
 
-Versions: a project opened from a community model remembers its source;
-publishing it offers "a version of …" with a "what changed" note. Authors
-publish new versions of their own models from the project menu
-("Community listing" → "Publish as a new version"); the older version
-stays open and downloadable but leaves the listings (`superseded`).
-Every item carries `root_id` (set by trigger), so each model page lists
-its whole lineage under Versions: original, author versions and other
-people's versions, with author, date, printer, plate count, the change
-note and a direct 3MF download each. Authors get "Edit the original" and
+Versions: authors publish new versions of their own models from the
+project menu ("Community listing" → "Publish as a new version", or a copy
+of your own model published "as a version"): `publish_item_version`
+archives the current model into `community_item_versions` and replaces
+it on the same listing, so likes, comments and downloads stay and the
+community list shows one entry. A project opened from someone else's
+model remembers its source; publishing it "as a version of …" creates a
+separate item with `parent_id` (and `root_id`, set by trigger). Each model
+page lists everything under Versions: the author's archived versions,
+the current one and the models published from copies, with date,
+printer, plate count, the change note and a direct 3MF download each. Authors get "Edit the original" and
 "Continue as a copy" on their own models; everyone gets "Print it as
 is": a direct 3MF (with the chosen printer's plate size, every plate and
 the author's print settings as metadata) or STL, without creating a
@@ -135,10 +137,14 @@ project.
 
 Plates: a project has up to 5 build plates (`plates` in the document,
 `plateId` on each shape; shapes without one sit on the first plate). The
-tabs in the top bar switch, add, rename (double-click) and delete plates;
-the 2D canvas, layers, print preview and warnings show the active plate
-only, and "All plates" draws the others beside it in 3D (click one to
-switch). A shape larger than the bed offers "Split across plates", which
+tabs in the top bar switch, add, rename (double-click) and delete plates.
+Plates sit in a fixed grid by creation order (`plateLayout.ts`, Bambu
+Studio's spacing): the 2D canvas draws the other plates dimmed around the
+active one (click one to switch, drag a shape onto one to move it there),
+the layers list, print preview and warnings show the active plate only,
+and "All plates" draws the others beside it in 3D. Copy, cut and paste
+(⌘C/⌘X/⌘V, also in the right-click menu) work across plates and from the
+2D canvas, the 3D view and the layer list alike. A shape larger than the bed offers "Split across plates", which
 cuts it into bed-sized pieces, one per plate. A 3MF export carries every
 plate as Bambu Studio plates (same 1.2 × bed stride and grid layout as
 Bambu Studio, `<plate>` blocks in `Metadata/model_settings.config`); an STL

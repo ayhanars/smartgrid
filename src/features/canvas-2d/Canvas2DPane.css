@@ -232,3 +232,34 @@
   font-size: 11px;
   color: var(--text-faint);
 }
+
+/* The other plates around the active one: dimmed, click to switch. */
+.canvas-2d__ghost-plate .canvas-2d__artboard {
+  fill: rgba(255, 255, 255, 0.28);
+  stroke: var(--border);
+}
+
+.canvas-2d__ghost-plate-shapes {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.canvas-2d__ghost-plate-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.canvas-2d__ghost-plate:hover .canvas-2d__artboard {
+  fill: rgba(255, 255, 255, 0.4);
+}
+
+.canvas-2d__plate-label {
+  fill: var(--text-faint);
+  font-family: inherit;
+  user-select: none;
+  pointer-events: none;
+}
+
+.canvas-2d__plate-label--active {
+  fill: var(--text-muted);
+}

@@ -59,6 +59,7 @@ export function Viewport3DPane() {
   // The active plate is the one you interact with; the others are drawn
   // beside it, read-only, when every plate is shown.
   const order = useMemo(() => orderOnPlate({ layers, order: allOrder, plates }, activePlateId), [layers, allOrder, plates, activePlateId])
+  const activeIndex = Math.max(0, plates.findIndex((p) => p.id === activePlateId))
   const selection = useDocumentStore((s) => s.selection)
   const setSelection = useDocumentStore((s) => s.setSelection)
   const setRotation = useDocumentStore((s) => s.setRotation)
@@ -75,6 +76,10 @@ export function Viewport3DPane() {
   const artboardHeight = bed?.height ?? customBedHeight
   const bedWidth = artboardWidth * SCENE_SCALE
   const bedDepth = artboardHeight * SCENE_SCALE
+
+  // The plates keep their places (creation order, see plateLayout.ts); the
+  // active one is drawn at the origin, so choosing a plate brings the view
+  // onto it with the same angle and distance.
   const warnings = useAnalysisStore((s) => s.warnings)
   const dismissed = useAnalysisStore((s) => s.dismissed)
   const dismiss = useAnalysisStore((s) => s.dismiss)
@@ -291,7 +296,7 @@ export function Viewport3DPane() {
               <GhostPlate
                 key={p.id}
                 plate={p}
-                offset={plateOffset(plates.findIndex((x) => x.id === p.id) - plates.findIndex((x) => x.id === activePlateId), bedWidth)}
+                offset={plateOffset(plates.findIndex((x) => x.id === p.id), activeIndex, plates.length, artboardWidth, artboardHeight)}
                 layers={layers}
                 order={allOrder.filter((id) => layers[id] && layerPlateId(layers[id], plates) === p.id)}
                 artboardWidth={artboardWidth}

@@ -12,7 +12,7 @@ import { PrinterPlate } from '../features/viewport-3d/PrinterPlate'
 import { shapeWorldBounds } from '../lib/geometry/layerBounds'
 import { layerZRange } from '../lib/geometry/layerGeometry'
 import { type Plate, defaultPlates, layerPlateId } from '../state/documentStore'
-import { plateOffset } from '../features/viewport-3d/GhostPlate'
+import { plateSlot } from '../lib/geometry/plateLayout'
 import type { ShapeLayer } from '../types/document'
 
 /** Slow turntable so the hover preview reads as 3D at a glance. */
@@ -40,7 +40,7 @@ function PreviewPlate({
   tileVersion,
 }: {
   plate: Plate
-  offset: number
+  offset: [number, number]
   layers: Record<string, ShapeLayer>
   order: string[]
   artboardWidth: number
@@ -58,7 +58,7 @@ function PreviewPlate({
   // The same CSG the editor runs, so holes, perforation and hollowing show.
   const { cutGeometriesById, uncutGeometriesById } = useCutGeometries(layers, order, artboardWidth, artboardHeight, tileVersion)
   return (
-    <group position={[offset, 0, 0]}>
+    <group position={[offset[0], 0, offset[1]]}>
       <PrinterPlate width={bedWidth} depth={bedDepth} widthMM={artboardWidth} depthMM={artboardHeight} />
       {visible.map((layer) => (
         <ExtrudedShapeMesh
@@ -98,11 +98,13 @@ export function ProjectPreview3D({ snapshot }: { snapshot: DocumentSnapshot }) {
     for (const id of snapshot.order) {
       const l = snapshot.layers[id]
       if (!l || !l.visible || l.isHole) continue
-      const dx = plateOffset(plates.findIndex((p) => p.id === layerPlateId(l, plates)), bedWidth)
+      const slot = plateSlot(plates.findIndex((p) => p.id === layerPlateId(l, plates)), plates.length, artboardWidth, artboardHeight)
+      const dx = slot.x * SCENE_SCALE
+      const dz = slot.y * SCENE_SCALE
       const b = shapeWorldBounds(l)
       const z = layerZRange(l)
-      box.expandByPoint(new THREE.Vector3((b.x - artboardWidth / 2) * SCENE_SCALE + dx, z.bottomZ * SCENE_SCALE, (b.y - artboardHeight / 2) * SCENE_SCALE))
-      box.expandByPoint(new THREE.Vector3((b.x + b.width - artboardWidth / 2) * SCENE_SCALE + dx, z.topZ * SCENE_SCALE, (b.y + b.height - artboardHeight / 2) * SCENE_SCALE))
+      box.expandByPoint(new THREE.Vector3((b.x - artboardWidth / 2) * SCENE_SCALE + dx, z.bottomZ * SCENE_SCALE, (b.y - artboardHeight / 2) * SCENE_SCALE + dz))
+      box.expandByPoint(new THREE.Vector3((b.x + b.width - artboardWidth / 2) * SCENE_SCALE + dx, z.topZ * SCENE_SCALE, (b.y + b.height - artboardHeight / 2) * SCENE_SCALE + dz))
     }
     if (box.isEmpty()) return { center: new THREE.Vector3(0, 0, 0), radius: Math.max(bedWidth, bedDepth) * 0.6 }
     const size = box.getSize(new THREE.Vector3())
@@ -133,7 +135,7 @@ export function ProjectPreview3D({ snapshot }: { snapshot: DocumentSnapshot }) {
           <PreviewPlate
             key={plate.id}
             plate={plate}
-            offset={plateOffset(i, bedWidth)}
+            offset={[plateSlot(i, plates.length, artboardWidth, artboardHeight).x * SCENE_SCALE, plateSlot(i, plates.length, artboardWidth, artboardHeight).y * SCENE_SCALE]}
             layers={snapshot.layers}
             order={snapshot.order.filter((id) => snapshot.layers[id] && layerPlateId(snapshot.layers[id], plates) === plate.id)}
             artboardWidth={artboardWidth}

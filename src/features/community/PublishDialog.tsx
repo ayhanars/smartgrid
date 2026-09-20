@@ -14,6 +14,7 @@ import {
   publishCommunityItem,
   updateCommunityItem,
   type CommunityItem,
+  publishItemVersion,
 } from '../../lib/supabase/community'
 import { friendlyAuthError } from '../auth/authErrors'
 import { isStaffRole, useAuthStore } from '../auth/useAuthStore'
@@ -49,6 +50,7 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
   const [asVersion, setAsVersion] = useState(true)
   const [source, setSource] = useState<CommunityItem | null>(null)
   const staff = isStaffRole(useAuthStore((s) => s.profile))
+  const user = useAuthStore((s) => s.user)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -113,9 +115,17 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
     setError(null)
     try {
       if (existing && mode === 'version') {
+        // Same listing, new version: the old model is archived under Versions.
         const model = await currentModel()
-        const item = await publishCommunityItem(projectId, model.snapshot, model.thumbnail, draft, { parentId: existing.id, changes: newChanges.trim() })
-        setNotice(staff ? `Published "${item.title}" as a new version; the previous one stays under Versions.` : `"${item.title}" was sent for review as a new version. The previous one stays available meanwhile.`, { label: 'View in community', to: `/c/${item.id}` })
+        const no = await publishItemVersion(existing.id, model.snapshot, model.thumbnail, newChanges.trim())
+        await updateCommunityItem(existing.id, { ...draft, status })
+        setNotice(staff ? `Published version ${no} of "${draft.title}"; the earlier versions stay under Versions.` : `Version ${no} of "${draft.title}" was sent for review. The previous version stays visible meanwhile.`, { label: 'View in community', to: `/c/${existing.id}` })
+      } else if (!existing && source && asVersion && source.ownerId === user?.id) {
+        // A copy of your own model: publish it as its next version.
+        const model = await currentModel()
+        const no = await publishItemVersion(source.id, model.snapshot, model.thumbnail, changes.trim(), projectId)
+        await updateCommunityItem(source.id, draft)
+        setNotice(staff ? `Published version ${no} of "${draft.title}".` : `Version ${no} of "${draft.title}" was sent for review.`, { label: 'View in community', to: `/c/${source.id}` })
       } else if (existing) {
         const replaceModel = mode === 'replace'
         const model = replaceModel ? await currentModel() : null
@@ -191,7 +201,7 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
             <div className="publish-dialog__options">
               <label className="publish-dialog__check">
                 <input type="checkbox" checked={asVersion} onChange={(e) => setAsVersion(e.target.checked)} />
-                Publish as a version of “{source.title}” by {source.author.displayName}
+                Publish as a version of “{source.title}”{source.ownerId === user?.id ? ' (your model: it becomes its next version)' : ` by ${source.author.displayName}`}
               </label>
               {asVersion && (
                 <>

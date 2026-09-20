@@ -4,16 +4,17 @@ import type { ShapeLayer } from '../../types/document'
 import type { Plate } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { SCENE_SCALE } from './sceneScale'
+import { plateSlot } from '../../lib/geometry/plateLayout'
 import { PrinterPlate } from './PrinterPlate'
 import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import { activeHoleIds, useCutGeometries } from './useCutGeometries'
 
-/** Gap between plates when they are shown side by side, in scene units. */
-const PLATE_GAP_MM = 40
-
-/** X offset of a plate `steps` plates to the right of the active one. */
-export function plateOffset(steps: number, bedWidth: number): number {
-  return steps * (bedWidth + PLATE_GAP_MM * SCENE_SCALE)
+/** Scene offset of plate `index` relative to plate `activeIndex`, from the
+ * fixed creation-order layout (see plateLayout.ts). */
+export function plateOffset(index: number, activeIndex: number, count: number, artboardWidth: number, artboardHeight: number): [number, number] {
+  const a = plateSlot(index, count, artboardWidth, artboardHeight)
+  const b = plateSlot(activeIndex, count, artboardWidth, artboardHeight)
+  return [(a.x - b.x) * SCENE_SCALE, (a.y - b.y) * SCENE_SCALE]
 }
 
 /**
@@ -33,7 +34,7 @@ export function GhostPlate({
   onActivate,
 }: {
   plate: Plate
-  offset: number
+  offset: [number, number]
   layers: Record<string, ShapeLayer>
   order: string[]
   artboardWidth: number
@@ -46,7 +47,7 @@ export function GhostPlate({
   const { cutGeometriesById, uncutGeometriesById } = useCutGeometries(layers, order, artboardWidth, artboardHeight, tileVersion)
   const active = useMemo(() => activeHoleIds(layers, order), [layers, order])
   return (
-    <group position={[offset, 0, 0]} onPointerDown={(e) => { e.stopPropagation(); onActivate() }}>
+    <group position={[offset[0], 0, offset[1]]} onPointerDown={(e) => { e.stopPropagation(); onActivate() }}>
       <PrinterPlate width={bedWidth} depth={bedDepth} widthMM={artboardWidth} depthMM={artboardHeight} />
       <Html position={[0, 0.002, bedDepth / 2 + 0.1]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
         <span className="ghost-plate__label">{plate.name}</span>

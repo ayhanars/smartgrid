@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { ArrowDownToLine, ArrowUpToLine, Copy, Eye, EyeOff, Group, Grid2x2, Lock, Scissors, Shapes, Trash2, Ungroup, Unlock } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpToLine, ClipboardPaste, Copy, CopyPlus, Eye, EyeOff, Group, Grid2x2, Lock, Scissors, Shapes, Trash2, Ungroup, Unlock } from 'lucide-react'
 import { useDocumentStore, expandToGroup, artboardSize, shapeWorldBounds } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
+import { useClipboard } from '../../state/clipboardStore'
 import { useUserAssets } from '../../state/userAssetsStore'
 import { captureAsset } from '../../lib/assets/userAssets'
 import { isGuest } from '../auth/authGate'
@@ -44,6 +45,7 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
   const customBedHeight = useDocumentStore((s) => s.customBedHeight)
   const addUserAsset = useUserAssets((s) => s.add)
   const setNotice = useViewStore((s) => s.setNotice)
+  const clipboard = useClipboard()
 
   const layer = layers[menu.layerId]
   const targets = selection.includes(menu.layerId) ? selection : expandToGroup(layers, order, menu.layerId)
@@ -108,9 +110,25 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
         {allLocked ? 'Unlock' : 'Lock'}
       </button>
       <button type="button" role="menuitem" onClick={run(() => duplicateShapes(targets))}>
-        <Copy size={13} />
+        <CopyPlus size={13} />
         Duplicate
         <kbd>⌥ drag</kbd>
+      </button>
+      <div className="layer-context-menu__divider" />
+      <button type="button" role="menuitem" onClick={run(() => clipboard.copy(targets))}>
+        <Copy size={13} />
+        Copy
+        <kbd>⌘C</kbd>
+      </button>
+      <button type="button" role="menuitem" disabled={allLocked} onClick={run(() => clipboard.cut(targets))}>
+        <Scissors size={13} />
+        Cut
+        <kbd>⌘X</kbd>
+      </button>
+      <button type="button" role="menuitem" disabled={clipboard.items.length === 0} title={plates.length > 1 ? `Pastes onto ${plates.find((p) => p.id === activePlateId)?.name ?? 'the active plate'}` : undefined} onClick={run(() => clipboard.paste())}>
+        <ClipboardPaste size={13} />
+        Paste
+        <kbd>⌘V</kbd>
       </button>
       <div className="layer-context-menu__divider" />
       <button type="button" role="menuitem" onClick={run(() => groupShapes(targets))}>

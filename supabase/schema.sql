@@ -1258,3 +1258,65 @@ create trigger community_items_supersede
   after insert on public.community_items
   for each row
   execute function public.supersede_parent_version();
+
+-- ---------------------------------------------------------------------------
+-- Revisions: an author's new version of a model updates the same listing;
+-- the previous state is archived here so every version stays downloadable.
+-- Versions published by other people from a copy stay separate items
+-- (parent_id / root_id above).
+-- ---------------------------------------------------------------------------
+
+drop trigger if exists community_items_supersede on public.community_items;
+drop function if exists public.supersede_parent_version();
+-- The column stays (unused) so app versions that still select it keep working.
+
+create table if not exists public.community_item_versions (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references public.community_items (id) on delete cascade,
+  version integer not null,
+  title text not null default '',
+  data jsonb not null,
+  thumbnail text,
+  changes text not null default '',
+  created_at timestamptz not null default now(),
+  unique (item_id, version)
+);
+create index if not exists community_item_versions_item_idx on public.community_item_versions (item_id, version);
+
+alter table public.community_item_versions enable row level security;
+
+drop policy if exists "Versions of visible items are visible" on public.community_item_versions;
+create policy "Versions of visible items are visible"
+  on public.community_item_versions for select
+  using (exists (
+    select 1 from public.community_items ci
+    where ci.id = item_id and ((ci.status = 'published' and ci.approval = 'approved') or ci.owner_id = auth.uid() or public.is_staff())
+  ));
+
+-- Archives the item's current model as the next version and replaces it
+-- with the new one (which goes back to review for non-staff, like any
+-- model change). Returns the new version number.
+create or replace function public.publish_item_version(p_item uuid, p_data jsonb, p_thumbnail text, p_changes text, p_source_project uuid default null)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cur public.community_items%rowtype;
+  next_no integer;
+begin
+  select * into cur from public.community_items where id = p_item;
+  if cur.id is null then raise exception 'Model not found'; end if;
+  if cur.owner_id <> auth.uid() then raise exception 'Only the author can publish a version'; end if;
+  select coalesce(max(version), 0) + 1 into next_no from public.community_item_versions where item_id = p_item;
+  insert into public.community_item_versions (item_id, version, title, data, thumbnail, changes, created_at)
+    values (p_item, next_no, cur.title, cur.data, cur.thumbnail, cur.changes, cur.updated_at);
+  update public.community_items
+    set data = p_data, thumbnail = p_thumbnail, changes = coalesce(p_changes, ''), source_project_id = coalesce(p_source_project, source_project_id)
+    where id = p_item;
+  return next_no + 1;
+end;
+$$;
+
+grant execute on function public.publish_item_version(uuid, jsonb, text, text, uuid) to authenticated;

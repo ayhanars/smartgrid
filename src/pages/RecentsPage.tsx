@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Bookmark, Globe } from 'lucide-react'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
-import { listMyCollections, type Collection } from '../lib/supabase/collections'
+import { listMyCollections, listPublicCollections, type Collection } from '../lib/supabase/collections'
 import { useAuthStore } from '../features/auth/useAuthStore'
 import { listFollowing } from '../lib/supabase/profiles'
 import { useProjects } from '../features/projects/useProjects'
@@ -17,6 +17,7 @@ import './HomePage.css'
 const RECENT_PROJECTS = 8
 const RECENT_COMMUNITY = 8
 const RECENT_COLLECTIONS = 3
+const COMMUNITY_COLLECTIONS = 3
 
 /** `/`: the newest of everything: your projects, what the community
  * shared, your collections. */
@@ -27,6 +28,19 @@ export function RecentsPage() {
   const [community, setCommunity] = useState<CommunityItem[] | null>(null)
   const [collections, setCollections] = useState<Collection[] | null>(null)
   const [followed, setFollowed] = useState<CommunityItem[] | null>(null)
+  const [publicCollections, setPublicCollections] = useState<Collection[] | null>(null)
+
+  // Collections people curated and shared: the quickest way into the community.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !projects.online) return
+    let cancelled = false
+    listPublicCollections('', COMMUNITY_COLLECTIONS)
+      .then((list) => !cancelled && setPublicCollections(list))
+      .catch(() => !cancelled && setPublicCollections([]))
+    return () => {
+      cancelled = true
+    }
+  }, [projects.online])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !projects.online) return
@@ -97,6 +111,24 @@ export function RecentsPage() {
           <div className="home__grid">
             {followed.map((item) => (
               <CommunityCard key={item.id} item={item} onOpen={() => navigate(`/c/${item.id}`)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {isSupabaseConfigured && publicCollections && publicCollections.length > 0 && (
+        <section className="page__section">
+          <div className="page__section-header">
+            <h2>Community collections</h2>
+            <span className="home__hint">Sets of models people curated: a room, a printer, a hobby.</span>
+            <button type="button" className="home__see-all" onClick={() => navigate('/community/collections')}>
+              All collections
+              <ArrowRight size={13} />
+            </button>
+          </div>
+          <div className="collection-grid">
+            {publicCollections.map((c) => (
+              <CollectionCard key={c.id} collection={c} onOpen={() => navigate(`/collections/${c.id}`)} />
             ))}
           </div>
         </section>

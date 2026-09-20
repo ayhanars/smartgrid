@@ -36,6 +36,7 @@ import {
 } from './geometry2d'
 import { createShapeRegions, pointsToSvgPath } from '../../lib/geometry/primitives'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
+import { plateSlot } from '../../lib/geometry/plateLayout'
 import { flattenPenAnchors, type PenAnchor } from '../../lib/geometry/pen'
 import { RulerTicks } from './RulerTicks'
 import { ASSET_MIME } from '../assets/assetDrag'
@@ -105,7 +106,6 @@ export function Canvas2DPane() {
     mode: 'handle' | 'move'
     original?: PenAnchor
   } | null>(null)
-  const clipboardRef = useRef<ShapeLayer[]>([])
 
   const layers = useDocumentStore((s) => s.layers)
   const allOrder = useDocumentStore((s) => s.order)
@@ -113,13 +113,15 @@ export function Canvas2DPane() {
   const activePlateId = useDocumentStore((s) => s.activePlateId)
   // Only the active plate is drawn and editable here.
   const order = useMemo(() => orderOnPlate({ layers, order: allOrder, plates }, activePlateId), [layers, allOrder, plates, activePlateId])
+  const setActivePlate = useDocumentStore((s) => s.setActivePlate)
+  const moveShapesToPlate = useDocumentStore((s) => s.moveShapesToPlate)
+  const activeIndex = Math.max(0, plates.findIndex((p) => p.id === activePlateId))
   const selection = useDocumentStore((s) => s.selection)
   const setSelection = useDocumentStore((s) => s.setSelection)
   const addShape = useDocumentStore((s) => s.addShape)
   const moveShapesBy = useDocumentStore((s) => s.moveShapesBy)
   const resizeShape = useDocumentStore((s) => s.resizeShape)
   const duplicateShapes = useDocumentStore((s) => s.duplicateShapes)
-  const pasteShapes = useDocumentStore((s) => s.pasteShapes)
   const applyBoolean = useDocumentStore((s) => s.applyBoolean)
   const addPenShape = useDocumentStore((s) => s.addPenShape)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
@@ -174,6 +176,59 @@ export function Canvas2DPane() {
   useLayoutEffect(() => {
     fitToView()
   }, [fitToView])
+
+  // The other plates, drawn dimmed around the active one at their fixed
+  // places (creation order, see plateLayout.ts). Document coordinates are
+  // per plate, so each one is shifted by its slot minus the active slot.
+  const otherPlates = useMemo(() => {
+    const active = plateSlot(activeIndex, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT)
+    return plates
+      .map((plate, index) => {
+        const slot = plateSlot(index, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT)
+        return { plate, index, dx: slot.x - active.x, dy: slot.y - active.y, order: orderOnPlate({ layers, order: allOrder, plates }, plate.id) }
+      })
+      .filter((p) => p.plate.id !== activePlateId)
+  }, [plates, activeIndex, activePlateId, ARTBOARD_WIDTH, ARTBOARD_HEIGHT, layers, allOrder])
+
+  // Switching plates re-bases the coordinates on the new plate: shift the
+  // view by the same amount so every plate stays where it was on screen,
+  // then bring the new active plate into view if it was outside.
+  const lastSlot = useRef<{ x: number; y: number } | null>(null)
+  useLayoutEffect(() => {
+    const slot = plateSlot(activeIndex, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT)
+    const prev = lastSlot.current
+    lastSlot.current = slot
+    if (!prev || (prev.x === slot.x && prev.y === slot.y)) return
+    const nextPan = { x: pan.x + (slot.x - prev.x) * zoom, y: pan.y + (slot.y - prev.y) * zoom }
+    const rect = svgRef.current?.getBoundingClientRect()
+    const visible = rect && nextPan.x >= 0 && nextPan.y >= 0 && nextPan.x + ARTBOARD_WIDTH * zoom <= rect.width && nextPan.y + ARTBOARD_HEIGHT * zoom <= rect.height
+    if (visible || !rect) setPan(nextPan)
+    else setPan({ x: rect.width / 2 - (ARTBOARD_WIDTH / 2) * zoom, y: rect.height / 2 - (ARTBOARD_HEIGHT / 2) * zoom })
+  }, [activeIndex, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A plate added or removed: show the whole set.
+  const plateCountRef = useRef(plates.length)
+  useLayoutEffect(() => {
+    if (plateCountRef.current === plates.length) return
+    plateCountRef.current = plates.length
+    if (plates.length === 1) {
+      fitToView()
+      return
+    }
+    const active = plateSlot(activeIndex, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT)
+    let minX = 0
+    let minY = 0
+    let maxX = ARTBOARD_WIDTH
+    let maxY = ARTBOARD_HEIGHT
+    for (let i = 0; i < plates.length; i++) {
+      const slot = plateSlot(i, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT)
+      minX = Math.min(minX, slot.x - active.x)
+      minY = Math.min(minY, slot.y - active.y)
+      maxX = Math.max(maxX, slot.x - active.x + ARTBOARD_WIDTH)
+      maxY = Math.max(maxY, slot.y - active.y + ARTBOARD_HEIGHT)
+    }
+    zoomToBounds({ x: minX, y: minY, width: maxX - minX, height: maxY - minY }, 40)
+  }, [plates.length, activeIndex, ARTBOARD_WIDTH, ARTBOARD_HEIGHT, fitToView, zoomToBounds])
 
   const zoomAtCenter = (factor: number) => {
     const svg = svgRef.current
@@ -250,21 +305,6 @@ export function Canvas2DPane() {
       } else if (mod && e.key.toLowerCase() === 'r' && !typing) {
         e.preventDefault()
         toggleRulersVisible()
-      } else if (mod && e.key.toLowerCase() === 'c' && !typing) {
-        const { selection: sel, layers: currentLayers } = useDocumentStore.getState()
-        if (sel.length > 0) {
-          e.preventDefault()
-          clipboardRef.current = sel.map((id) => currentLayers[id]).filter((l): l is ShapeLayer => !!l)
-        }
-      } else if (mod && e.key.toLowerCase() === 'v' && !typing) {
-        if (clipboardRef.current.length > 0) {
-          e.preventDefault()
-          const newIds = pasteShapes(clipboardRef.current)
-          // Chain subsequent pastes from where these landed, so repeated
-          // Cmd+V cascades outward instead of stacking in the same spot.
-          const { layers: freshLayers } = useDocumentStore.getState()
-          clipboardRef.current = newIds.map((id) => freshLayers[id]).filter((l): l is ShapeLayer => !!l)
-        }
       } else if (e.key === 'Escape' && tool === 'pen') {
         cancelPenPath()
       }
@@ -279,7 +319,7 @@ export function Canvas2DPane() {
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [zoom, pan, fitToView, zoomToSelection, toggleRulersVisible, pasteShapes, tool])
+  }, [zoom, pan, fitToView, zoomToSelection, toggleRulersVisible, tool])
 
   useEffect(() => {
     const svg = svgRef.current
@@ -652,7 +692,19 @@ export function Canvas2DPane() {
       }
     } else if (gesture.type === 'move') {
       if (gesture.dx || gesture.dy) {
-        moveShapesBy(Object.keys(gesture.originals), gesture.dx, gesture.dy)
+        const ids = Object.keys(gesture.originals)
+        // Dropped onto another plate: the shapes move there, keeping their
+        // place on screen.
+        const bounds = unionBounds(ids.map((id) => layers[id]).filter((l): l is ShapeLayer => !!l).map(shapeWorldBounds))
+        const cx = (bounds?.x ?? 0) + (bounds?.width ?? 0) / 2 + gesture.dx
+        const cy = (bounds?.y ?? 0) + (bounds?.height ?? 0) / 2 + gesture.dy
+        const target = otherPlates.find((p) => cx >= p.dx && cx <= p.dx + ARTBOARD_WIDTH && cy >= p.dy && cy <= p.dy + ARTBOARD_HEIGHT)
+        if (target && !(cx >= 0 && cx <= ARTBOARD_WIDTH && cy >= 0 && cy <= ARTBOARD_HEIGHT)) {
+          moveShapesBy(ids, gesture.dx - target.dx, gesture.dy - target.dy)
+          setActivePlate(target.plate.id)
+          moveShapesToPlate(ids, target.plate.id)
+          setSelection(ids)
+        } else moveShapesBy(ids, gesture.dx, gesture.dy)
       } else if (!gesture.moved && gesture.wasAlreadySelected) {
         setSelection([gesture.clickedId])
       }
@@ -780,7 +832,42 @@ export function Canvas2DPane() {
         onPointerCancel={handlePointerUp}
       >
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
+          {otherPlates.map(({ plate, dx, dy, order: plateOrder }) => (
+            <g key={plate.id} className="canvas-2d__ghost-plate" transform={`translate(${dx} ${dy})`}>
+              <rect className="canvas-2d__artboard" x={0} y={0} width={ARTBOARD_WIDTH} height={ARTBOARD_HEIGHT} />
+              <g className="canvas-2d__ghost-plate-shapes">
+                {plateOrder.map((id) => {
+                  const layer = layers[id]
+                  return layer ? <ShapeElement key={id} layer={layer} isSelected={false} onPointerDown={() => {}} /> : null
+                })}
+              </g>
+              <rect
+                className="canvas-2d__ghost-plate-hit"
+                x={0}
+                y={0}
+                width={ARTBOARD_WIDTH}
+                height={ARTBOARD_HEIGHT}
+                onPointerDown={(e) => {
+                  // A shape drag may end here (handled on pointer-up); a plain
+                  // click on a plate makes it the active one.
+                  if (gesture) return
+                  e.stopPropagation()
+                  setActivePlate(plate.id)
+                }}
+              >
+                <title>{`${plate.name}: click to edit this plate`}</title>
+              </rect>
+              <text className="canvas-2d__plate-label" x={0} y={-6 / zoom} fontSize={12 / zoom}>
+                {plate.name}
+              </text>
+            </g>
+          ))}
           <rect className="canvas-2d__artboard" x={0} y={0} width={ARTBOARD_WIDTH} height={ARTBOARD_HEIGHT} />
+          {plates.length > 1 && (
+            <text className="canvas-2d__plate-label canvas-2d__plate-label--active" x={0} y={-6 / zoom} fontSize={12 / zoom}>
+              {plates[activeIndex]?.name}
+            </text>
+          )}
           {order.map((id) => {
             const layer = layers[id]
             if (!layer) return null
