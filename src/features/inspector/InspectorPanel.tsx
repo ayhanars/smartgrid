@@ -8,6 +8,8 @@ import {
   AlignEndVertical,
   AlignStartHorizontal,
   AlignStartVertical,
+  AlignHorizontalSpaceBetween,
+  AlignVerticalSpaceBetween,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -72,6 +74,7 @@ export function InspectorPanel() {
           <>
             <CollapsibleGroup title="Printer" defaultOpen>
               <BedPresetsSection />
+              <ArtboardSection />
             </CollapsibleGroup>
             <CollapsibleGroup title="Print Settings" defaultOpen>
               <PrintSettingsSection />
@@ -377,6 +380,14 @@ function AlignmentSection({ ids }: { ids: string[] }) {
               <Icon size={16} />
             </IconButton>
           ))}
+        </div>
+        <div className="inspector-align-group" title={ids.length < 3 ? 'Select three or more shapes to space them evenly' : undefined}>
+          <IconButton size="md" aria-label="Space evenly across" disabled={ids.length < 3} onClick={() => alignShapes(ids, 'hspace')}>
+            <AlignHorizontalSpaceBetween size={16} />
+          </IconButton>
+          <IconButton size="md" aria-label="Space evenly down" disabled={ids.length < 3} onClick={() => alignShapes(ids, 'vspace')}>
+            <AlignVerticalSpaceBetween size={16} />
+          </IconButton>
         </div>
       </div>
     </Section>
@@ -1090,6 +1101,43 @@ function HoleSizePresetsSection({ layer }: { layer: ShapeLayer }) {
           </button>
         ))}
       </div>
+    </Section>
+  )
+}
+
+const ARTBOARD_SWATCHES: { color: string; label: string }[] = [
+  { color: '#ffffff', label: 'White' },
+  { color: '#e6e8ee', label: 'Light grey' },
+  { color: '#8a8d99', label: 'Grey' },
+  { color: '#2b2e3a', label: 'Dark' },
+  { color: '#111216', label: 'Black' },
+]
+
+/** The 2D artboard's background: a dark one makes a white design visible. */
+function ArtboardSection() {
+  const artboardColor = useDocumentStore((s) => s.artboardColor)
+  const setArtboardColor = useDocumentStore((s) => s.setArtboardColor)
+  return (
+    <Section title="Artboard" action={<span className="inspector-section__hint">2D only</span>}>
+      <div className="inspector-swatches" role="radiogroup" aria-label="Artboard color">
+        {ARTBOARD_SWATCHES.map((sw) => (
+          <button
+            key={sw.color}
+            type="button"
+            role="radio"
+            aria-checked={artboardColor.toLowerCase() === sw.color}
+            className={`inspector-swatch ${artboardColor.toLowerCase() === sw.color ? 'inspector-swatch--on' : ''}`}
+            style={{ background: sw.color }}
+            title={sw.label}
+            aria-label={sw.label}
+            onClick={() => setArtboardColor(sw.color)}
+          />
+        ))}
+        <label className="inspector-swatch inspector-swatch--custom" title="Custom color" style={{ background: artboardColor }}>
+          <input type="color" value={artboardColor} aria-label="Custom artboard color" onChange={(e) => setArtboardColor(e.target.value)} />
+        </label>
+      </div>
+      <p className="inspector-note">Only how the 2D canvas looks; nothing about the print changes.</p>
     </Section>
   )
 }

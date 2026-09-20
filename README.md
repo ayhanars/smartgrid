@@ -148,7 +148,8 @@ Studio's spacing): the 2D canvas draws the other plates dimmed around the
 active one (click one to switch, drag a shape onto one to move it there),
 the layers list, print preview and warnings show the active plate only,
 and "All plates" draws the others beside it in 3D with their beds faded.
-Exports are named after the project. Copy, cut and paste
+Exports are named after the project. The 2D artboard colour is a
+document setting (Artboard section when nothing is selected). Copy, cut and paste
 (⌘C/⌘X/⌘V, also in the right-click menu) work across plates and from the
 2D canvas, the 3D view and the layer list alike. A shape larger than the bed offers "Split across plates", which
 cuts it into bed-sized pieces, one per plate. A 3MF export carries every

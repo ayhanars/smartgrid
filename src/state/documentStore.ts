@@ -58,6 +58,7 @@ export interface Plate {
 }
 
 export const MAX_PLATES = 5
+export const DEFAULT_ARTBOARD_COLOR = '#ffffff'
 export const FIRST_PLATE_ID = 'plate-1'
 
 /** The plate a layer sits on (older layers carry none and mean the first). */
@@ -88,6 +89,8 @@ export interface DocumentState {
   /** Display-only unit for every mm field in the inspector — the store
    * itself always keeps values in mm regardless of this. */
   displayUnit: 'mm' | 'cm' | 'in'
+  /** Background of the 2D artboard (a dark one for white designs). */
+  artboardColor: string
   /** The local project this document is saved as (null before a project
    * has been opened, e.g. in tests). */
   projectId: string | null
@@ -180,6 +183,7 @@ interface DocumentActions {
   togglePinnedBedPreset: (id: string) => void
   setCustomBedSize: (width: number, height: number) => void
   setDisplayUnit: (unit: DocumentState['displayUnit']) => void
+  setArtboardColor: (color: string) => void
   applyBoolean: (op: BooleanOp) => void
   addGuide: (orientation: Guide['orientation'], position: number) => string
   updateGuidePosition: (id: string, position: number) => void
@@ -199,7 +203,7 @@ export function expandToGroup(layers: Record<string, ShapeLayer>, order: string[
   return order.filter((oid) => layers[oid]?.groupId === groupId)
 }
 
-export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom'
+export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom' | 'hspace' | 'vspace'
 
 /** Current plate size in mm — the artboard every single-shape alignment
  * snaps to. */
@@ -420,6 +424,7 @@ export const useDocumentStore = create<DocumentStore>()(
       guides: [],
       rulersVisible: true,
       displayUnit: 'mm',
+      artboardColor: DEFAULT_ARTBOARD_COLOR,
       projectId: null,
       projectName: 'Untitled project',
       printSettings: DEFAULT_PRINT_SETTINGS,
@@ -454,6 +459,7 @@ export const useDocumentStore = create<DocumentStore>()(
           customBedHeight: snapshot.customBedHeight,
           guides: snapshot.guides ?? [],
           displayUnit: snapshot.displayUnit ?? 'mm',
+          artboardColor: snapshot.artboardColor ?? DEFAULT_ARTBOARD_COLOR,
           printSettings: { ...DEFAULT_PRINT_SETTINGS, ...snapshot.printSettings },
         })
         useDocumentStore.temporal.getState().clear()
@@ -1254,6 +1260,7 @@ export const useDocumentStore = create<DocumentStore>()(
         set({ customBedWidth: Math.max(10, width), customBedHeight: Math.max(10, height) }),
 
       setDisplayUnit: (unit) => set({ displayUnit: unit }),
+      setArtboardColor: (color) => set({ artboardColor: color }),
 
       addGuide: (orientation, position) => {
         const id = generateId()
@@ -1320,6 +1327,30 @@ export const useDocumentStore = create<DocumentStore>()(
           const targets = ids.map((id) => state.layers[id]).filter((l): l is ShapeLayer => !!l && !l.locked)
           if (targets.length === 0) return {}
           const boundsById = new Map(targets.map((l) => [l.id, shapeWorldBounds(l)] as const))
+          if (mode === 'hspace' || mode === 'vspace') {
+            // Equal gaps: the outermost two stay, the rest spread between them.
+            if (targets.length < 3) return {}
+            const horizontal = mode === 'hspace'
+            const sorted = [...targets].sort((a, b) => {
+              const ba = boundsById.get(a.id)!
+              const bb = boundsById.get(b.id)!
+              return horizontal ? ba.x + ba.width / 2 - (bb.x + bb.width / 2) : ba.y + ba.height / 2 - (bb.y + bb.height / 2)
+            })
+            const first = boundsById.get(sorted[0].id)!
+            const last = boundsById.get(sorted[sorted.length - 1].id)!
+            const span = horizontal ? last.x + last.width - first.x : last.y + last.height - first.y
+            const filled = sorted.reduce((n, l) => n + (horizontal ? boundsById.get(l.id)!.width : boundsById.get(l.id)!.height), 0)
+            const gap = (span - filled) / (sorted.length - 1)
+            const layers = { ...state.layers }
+            let cursor = horizontal ? first.x + first.width + gap : first.y + first.height + gap
+            for (const layer of sorted.slice(1, -1)) {
+              const b = boundsById.get(layer.id)!
+              const delta = cursor - (horizontal ? b.x : b.y)
+              layers[layer.id] = { ...layer, transform: { ...layer.transform, x: layer.transform.x + (horizontal ? delta : 0), y: layer.transform.y + (horizontal ? 0 : delta) } }
+              cursor += (horizontal ? b.width : b.height) + gap
+            }
+            return { layers }
+          }
           let ref: Bounds
           if (targets.length > 1) {
             const all = [...boundsById.values()]
@@ -1387,6 +1418,7 @@ export function serializeDocument(state: DocumentState): DocumentSnapshot {
     customBedHeight: state.customBedHeight,
     guides: state.guides,
     displayUnit: state.displayUnit,
+    artboardColor: state.artboardColor,
     printSettings: state.printSettings,
   }
 }
@@ -1406,6 +1438,7 @@ export function emptyDocument(name = 'Untitled project'): DocumentSnapshot {
     customBedHeight: 256,
     guides: [],
     displayUnit: 'mm',
+    artboardColor: DEFAULT_ARTBOARD_COLOR,
     printSettings: DEFAULT_PRINT_SETTINGS,
   }
 }

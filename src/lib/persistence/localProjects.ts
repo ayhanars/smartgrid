@@ -16,6 +16,8 @@ export interface DocumentSnapshot {
   customBedHeight: number
   guides: Guide[]
   displayUnit: 'mm' | 'cm' | 'in'
+  /** 2D artboard background; absent on older saves (white). */
+  artboardColor?: string
   printSettings: PrintSettings
 }
 
