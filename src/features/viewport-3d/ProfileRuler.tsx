@@ -61,13 +61,16 @@ export function ProfileRuler({ layer, artboardWidth, artboardHeight, controls }:
     return pts.map((p) => ({ x: (p.x - mx) * S, y: (p.y - my) * S }))
   }, [layer, S])
 
-  const ringGeometry = (scale: number) => {
+  const ringGeometry = (scale: number, z: number) => {
     const geo = new THREE.BufferGeometry()
     const arr = new Float32Array(outline.length * 3)
+    const a = ((layer.twist ?? 0) * Math.PI * Math.min(1, Math.max(0, z / depth))) / 180
+    const c = Math.cos(a)
+    const sn = Math.sin(a)
     outline.forEach((p, i) => {
-      arr[i * 3] = p.x * scale
+      arr[i * 3] = (p.x * c - p.y * sn) * scale
       arr[i * 3 + 1] = 0
-      arr[i * 3 + 2] = p.y * scale
+      arr[i * 3 + 2] = (p.x * sn + p.y * c) * scale
     })
     geo.setAttribute('position', new THREE.BufferAttribute(arr, 3))
     return geo
@@ -198,7 +201,7 @@ export function ProfileRuler({ layer, artboardWidth, artboardHeight, controls }:
         return (
           <group key={i}>
             {/* the ring itself, drawn on the shape */}
-            <lineLoop geometry={ringGeometry(p.scale)} position={[cx, y, cz]}>
+            <lineLoop geometry={ringGeometry(p.scale, p.z)} position={[cx, y, cz]}>
               <lineBasicMaterial color="#4d8dff" transparent opacity={0.9} depthTest={false} />
             </lineLoop>
             {/* height handle on the ruler */}

@@ -161,8 +161,10 @@ cone, a barrel. The 3D tab's "Shape along the height" section has
 silhouette presets, a ring list
 and "Ruler in 3D": a ruler beside the shape where rings are dragged up
 and down for height and in and out for width, and a click adds a ring.
-The body is tessellated and scaled per height (`profile.ts`); the shell
-cavity and the perforation cutters follow the same curve. Parts leaning
+A Twist angle in the same section turns the outline from the bottom to
+the top (a twisted vase). The body is tessellated and scaled / turned
+per height (`profile.ts`); the shell cavity and the perforation cutters
+follow the same curve. Parts leaning
 out past 45° are flagged on the ruler and in the panel.
 
 A hollowed shape (solid + cavity, selected together) is edited as one

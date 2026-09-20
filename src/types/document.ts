@@ -249,6 +249,9 @@ export interface ShapeLayer {
   /** How wide the shape is along its height (a vase, a cone, a barrel):
    * the footprint scaled per height. Absent = straight walls. */
   profile?: ShapeProfile
+  /** Twist: how far the footprint turns from the bottom to the top,
+   * degrees (a twisted vase). Absent or 0 = none. */
+  twist?: number
   /** For hole cutters only: 'rim' (default) flares the bevels outward so
    * they round/countersink the mouth of the cut; 'shape' keeps the
    * cutter's own beveled edges, so a carved pocket has the tool's exact

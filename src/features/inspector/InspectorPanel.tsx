@@ -1388,6 +1388,7 @@ const PROFILE_PRESETS: { id: ProfilePreset; label: string; path: string }[] = [
  * here or dragged on the ruler beside the shape in 3D. */
 function ProfileSection({ layer }: { layer: ShapeLayer }) {
   const setProfile = useDocumentStore((s) => s.setProfile)
+  const setTwist = useDocumentStore((s) => s.setTwist)
   const profileEditing = useViewStore((s) => s.profileEditing)
   const setProfileEditing = useViewStore((s) => s.setProfileEditing)
   const depth = Math.max(0.2, layer.extrusionDepth)
@@ -1478,6 +1479,11 @@ function ProfileSection({ layer }: { layer: ShapeLayer }) {
           ))}
         </div>
       )}
+      <div className="inspector-profile__twist">
+        <Field label="Twist" value={layer.twist ?? 0} suffix="°" decimals={0} onChange={(v) => setTwist(layer.id, v)} />
+        <input type="range" min={-180} max={180} step={5} value={layer.twist ?? 0} aria-label="Twist" onChange={(e) => setTwist(layer.id, Number(e.target.value))} />
+      </div>
+      <p className="inspector-note">Twist turns the outline from the bottom to the top by this much, like a twisted vase.</p>
       {overhangs.length > 0 && <p className="inspector-note inspector-note--warning">Leans out more than 45° between {overhangs.map((o) => `${round(o.from)}–${round(o.to)} mm`).join(', ')}: that part may need support to print.</p>}
       <p className="inspector-note">{profile ? 'Drag a ring on the ruler in 3D: up/down for its height, in/out for its width. Click the ruler to add one.' : 'Pick a silhouette or add a ring, then shape it on the ruler in 3D.'}</p>
     </Section>

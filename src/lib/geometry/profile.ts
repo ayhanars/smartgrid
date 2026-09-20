@@ -1,11 +1,38 @@
 import * as THREE from 'three'
 import type { Point2, ProfilePoint, ShapeProfile } from '../../types/document'
 
-/** Wall subdivision (mm) a profiled body is built with, so the walls have
- * enough rows to follow the curve. */
-export function profileTessellation(profile: ShapeProfile | undefined, depth: number): number | undefined {
-  if (!profile || profile.points.length === 0) return undefined
-  return Math.min(4, Math.max(1, depth / 24))
+/** Wall subdivision (mm) a profiled or twisted body is built with, so the
+ * walls have enough rows to follow the curve. */
+export function profileTessellation(profile: ShapeProfile | undefined, depth: number, twist = 0): number | undefined {
+  const shaped = (profile && profile.points.length > 0) || Math.abs(twist) > 1e-6
+  if (!shaped) return undefined
+  // A twist also needs the wall split along its length, or a flat side
+  // could only bend at its corners.
+  const step = Math.min(4, Math.max(1, depth / 24))
+  return Math.abs(twist) > 1e-6 ? Math.min(step, 2) : step
+}
+
+/** Turns every vertex of a Y-up geometry about `center` in the plan by the
+ * twist's share of its height: a twisted vase. */
+export function applyTwist(geometry: THREE.BufferGeometry, twistDeg: number, depth: number, center: Point2): THREE.BufferGeometry {
+  if (Math.abs(twistDeg) < 1e-6) return geometry
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute
+  const total = (twistDeg * Math.PI) / 180
+  for (let i = 0; i < pos.count; i++) {
+    const t = Math.min(1, Math.max(0, pos.getY(i) / depth))
+    const a = total * t
+    const c = Math.cos(a)
+    const s = Math.sin(a)
+    const x = pos.getX(i) - center.x
+    const z = pos.getZ(i) - center.y
+    pos.setX(i, center.x + x * c - z * s)
+    pos.setZ(i, center.y + x * s + z * c)
+  }
+  pos.needsUpdate = true
+  geometry.computeVertexNormals()
+  geometry.computeBoundingBox()
+  geometry.computeBoundingSphere()
+  return geometry
 }
 
 /** Rings sorted by height, clamped into [0, depth]. */

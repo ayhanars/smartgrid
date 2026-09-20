@@ -164,6 +164,8 @@ interface DocumentActions {
   setPerforation: (id: string, perforation: Perforation | null) => void
   /** The width profile of a solid; its shell cavity follows it. */
   setProfile: (id: string, profile: ShapeProfile | undefined) => void
+  /** Twist (degrees bottom to top) of a solid; its shell cavity follows. */
+  setTwist: (id: string, twist: number) => void
   /** How a cutter's bevels are read (see ShapeLayer.bevelMode). */
   setBevelMode: (id: string, mode: 'rim' | 'shape') => void
   /** Carve: turns `toolId` into a hole cutter positioned against `baseId`
@@ -982,7 +984,7 @@ export const useDocumentStore = create<DocumentStore>()(
         const groupId = solid.groupId ?? generateId()
         const built = makeCavityLayer({ ...solid, groupId }, options, state.printSettings.layerHeight, groupId)
         if (!built) return null
-        const cavity = solid.profile ? { ...built, profile: solid.profile } : built
+        const cavity = { ...built, ...(solid.profile ? { profile: solid.profile } : {}), ...(solid.twist ? { twist: solid.twist } : {}) }
         set((s) => {
           const layers = { ...s.layers }
           let groups = s.groups
@@ -1101,6 +1103,19 @@ export const useDocumentStore = create<DocumentStore>()(
           for (const lid of state.order) {
             const l = state.layers[lid]
             if (l?.shellOf?.solidId === id) layers[lid] = { ...l, profile }
+          }
+          return { layers }
+        }),
+
+      setTwist: (id, twistIn) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          const twist = Math.abs(twistIn) < 1e-6 ? undefined : Math.max(-360, Math.min(360, twistIn))
+          const layers = { ...state.layers, [id]: { ...layer, twist } }
+          for (const lid of state.order) {
+            const l = state.layers[lid]
+            if (l?.shellOf?.solidId === id) layers[lid] = { ...l, twist }
           }
           return { layers }
         }),

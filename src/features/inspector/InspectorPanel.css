@@ -902,3 +902,17 @@
   border-color: var(--accent);
   background: var(--accent-bg);
 }
+
+.inspector-profile__twist {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  align-items: end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.inspector-profile__twist input[type='range'] {
+  width: 100%;
+  margin-bottom: 10px;
+  accent-color: var(--accent);
+}
