@@ -60,6 +60,7 @@ export function AccountPage() {
         {profile && <LevelCard xp={profile.xp} level={profile.level} />}
 
         <NameForm userId={user.id} current={profile?.displayName ?? ''} onSaved={(displayName) => profile && setProfile({ ...profile, displayName })} />
+        <BioForm userId={user.id} current={profile?.bio ?? ''} onSaved={(bio) => profile && setProfile({ ...profile, bio })} />
         <EmailForm current={email} />
         <PasswordForm hasPassword={hasPassword} email={email} />
 
@@ -198,6 +199,43 @@ function NameForm({ userId, current, onSaved }: { userId: string; current: strin
       <div className="account__row">
         <input value={name} maxLength={60} aria-label="Display name" onChange={(e) => setName(e.target.value)} />
         <button type="submit" className="account__button account__button--primary" disabled={busy || !name.trim() || name.trim() === current}>
+          Save
+        </button>
+      </div>
+      <FlashLine flash={flash} />
+    </form>
+  )
+}
+
+function BioForm({ userId, current, onSaved }: { userId: string; current: string; onSaved: (bio: string) => void }) {
+  const [bio, setBio] = useState(current)
+  const [busy, setBusy] = useState(false)
+  const [flash, setFlash] = useState<Flash>(null)
+  useEffect(() => setBio(current), [current])
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (bio.trim() === current) return
+    setBusy(true)
+    setFlash(null)
+    try {
+      const saved = await updateProfile(userId, { bio: bio.trim() })
+      onSaved(saved.bio)
+      setFlash({ kind: 'ok', text: 'Saved.' })
+    } catch (err) {
+      setFlash({ kind: 'error', text: err instanceof Error ? err.message : 'Could not save' })
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form className="account__card" onSubmit={submit}>
+      <h2>About you</h2>
+      <p>A line or two on your public profile: what you print, what you design.</p>
+      <div className="account__stack">
+        <textarea className="account__textarea" value={bio} rows={3} maxLength={300} aria-label="About you" onChange={(e) => setBio(e.target.value)} />
+      </div>
+      <div className="account__row account__row--end">
+        <button type="submit" className="account__button account__button--primary" disabled={busy || bio.trim() === current}>
           Save
         </button>
       </div>

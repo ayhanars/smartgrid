@@ -101,6 +101,8 @@ export interface ListOptions {
   sort?: 'newest' | 'popular'
   /** Only this author's items (every status the caller may see). */
   ownerId?: string
+  /** Published, approved items by any of these authors. */
+  ownerIds?: string[]
   /** Staff: include hidden / removed items. */
   includeUnpublished?: boolean
   /** Versions of this model. */
@@ -122,6 +124,10 @@ export async function listCommunityItems(options: ListOptions = {}): Promise<Com
     q = q.in('id', options.ids)
   }
   if (options.ownerId) q = q.eq('owner_id', options.ownerId)
+  if (options.ownerIds) {
+    if (options.ownerIds.length === 0) return []
+    q = q.in('owner_id', options.ownerIds)
+  }
   const term = options.query?.trim()
   if (term) {
     const like = `%${term.replace(/[%_]/g, '')}%`

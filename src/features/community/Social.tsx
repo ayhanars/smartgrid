@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bookmark, BookmarkCheck, Check, Heart, Plus, Trash2 } from 'lucide-react'
 import { addComment, deleteComment, listComments, listMyLikes, searchProfiles, setLiked, type CommunityComment } from '../../lib/supabase/community'
 import { collectionsContaining, createCollection, listMyCollections, setInCollection, type Collection } from '../../lib/supabase/collections'
@@ -193,6 +194,7 @@ export function CollectionPicker({ itemId }: { itemId: string }) {
 export function CommentsSection({ itemId, ownerId, onCount }: { itemId: string; ownerId: string; onCount: (n: number) => void }) {
   const user = useAuthStore((s) => s.user)
   const profile = useAuthStore((s) => s.profile)
+  const navigate = useNavigate()
   const [comments, setComments] = useState<CommunityComment[] | null>(null)
   const [draft, setDraft] = useState('')
   const [replyTo, setReplyTo] = useState<CommunityComment | null>(null)
@@ -305,7 +307,7 @@ export function CommentsSection({ itemId, ownerId, onCount }: { itemId: string; 
       <Avatar name={c.author.displayName} url={c.author.avatarUrl} large={!isReply} />
       <div className="comment__body">
         <div className="comment__meta">
-          <strong>{c.author.displayName}</strong>
+          <strong onClick={() => navigate(`/u/${c.authorId}`)}>{c.author.displayName}</strong>
           <span className="level-badge">L{c.author.level}</span>
           {c.authorId === ownerId && <span className="comment__author-tag">author</span>}
           <span>{relativeTime(c.createdAt)}</span>

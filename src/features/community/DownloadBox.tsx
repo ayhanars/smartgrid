@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
-import { Download } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, Download } from 'lucide-react'
+import '../layers/LayerContextMenu.css'
 import type { DocumentSnapshot } from '../../lib/persistence/localProjects'
 import { bedPresets, getBedPreset } from '../../lib/geometry/bedPresets'
 import { shapeWorldBounds } from '../../lib/geometry/layerBounds'
@@ -48,6 +49,21 @@ export function DownloadBox({ itemId, title, snapshot }: { itemId: string; title
   const defaultPrinter = fits(snapshot.bedPresetId) ? snapshot.bedPresetId : (bedPresets.find((p) => fits(p.id))?.id ?? snapshot.bedPresetId)
   const [printer, setPrinter] = useState(defaultPrinter)
   const [busy, setBusy] = useState<'3mf' | 'stl' | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setMenuOpen(false)
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', key)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', key)
+    }
+  }, [menuOpen])
   const supported = bedPresets.filter((p) => fits(p.id)).length
   const slug = title.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'model'
 
@@ -94,14 +110,40 @@ export function DownloadBox({ itemId, title, snapshot }: { itemId: string; title
           </button>
         ))}
       </div>
-      <div className="download-box__row">
-        <button type="button" disabled={busy !== null || size.width === 0} onClick={() => void exportAs('3mf')}>
-          <Download size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />
-          {busy === '3mf' ? 'Preparing…' : 'Download 3MF'}
+      <div className="download-box__split" ref={menuRef}>
+        <button type="button" className="download-box__primary" disabled={busy !== null || size.width === 0} onClick={() => void exportAs('3mf')}>
+          <Download size={15} />
+          {busy ? 'Preparing…' : 'Download 3MF'}
         </button>
-        <button type="button" disabled={busy !== null || size.width === 0} onClick={() => void exportAs('stl')}>
-          {busy === 'stl' ? 'Preparing…' : 'Download STL'}
+        <button type="button" className="download-box__more" aria-label="Other formats" aria-haspopup="menu" aria-expanded={menuOpen} disabled={busy !== null || size.width === 0} onClick={() => setMenuOpen((o) => !o)}>
+          <ChevronDown size={15} />
         </button>
+        {menuOpen && (
+          <div className="layer-context-menu download-box__menu" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false)
+                void exportAs('3mf')
+              }}
+            >
+              Download 3MF
+              <span className="download-box__menu-hint">plate + print settings</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false)
+                void exportAs('stl')
+              }}
+            >
+              Download STL
+              <span className="download-box__menu-hint">geometry only</span>
+            </button>
+          </div>
+        )}
       </div>
       <p className="download-box__hint">
         {Math.round(size.width)} × {Math.round(size.depth)} × {Math.round(size.height)} mm · fits {supported} of {bedPresets.length} printers. The 3MF carries the chosen plate size and the author's print settings; nothing is added to your projects.

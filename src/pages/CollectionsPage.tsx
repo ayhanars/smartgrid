@@ -54,7 +54,7 @@ export function CollectionsPage() {
   return (
     <div>
       <PageHeader title="My collections" hint="Community models you saved, grouped the way you like. Private unless you make one public.">
-        <button type="button" className="page__button" onClick={() => navigate('/community?view=collections')}>
+        <button type="button" className="page__button" onClick={() => navigate('/community/collections')}>
           <Globe size={14} />
           Browse public collections
         </button>

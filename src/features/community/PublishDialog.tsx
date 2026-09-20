@@ -109,12 +109,12 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
       if (existing) {
         const model = replaceModel ? currentModel() : null
         await updateCommunityItem(existing.id, { ...draft, status, changes: changes.trim(), ...(model ? { snapshot: model.snapshot, thumbnail: model.thumbnail } : {}) })
-        setNotice(replaceModel && !staff ? 'Community copy updated. A moderator will review the new model before it shows again.' : replaceModel ? 'Community copy updated with the current model.' : 'Community listing updated.')
+        setNotice(replaceModel && !staff ? 'Community copy updated. A moderator will review the new model before it shows again.' : replaceModel ? 'Community copy updated with the current model.' : 'Community listing updated.', { label: 'View in community', to: `/c/${existing.id}` })
       } else {
         const model = currentModel()
         const version = source && asVersion ? { parentId: source.id, changes: changes.trim() } : undefined
         const item = await publishCommunityItem(projectId, model.snapshot, model.thumbnail, draft, version)
-        setNotice(staff ? `Published "${item.title}" to the community.` : `"${item.title}" was sent for review. You will get a notification once a moderator approves it.`)
+        setNotice(staff ? `Published "${item.title}" to the community.` : `"${item.title}" was sent for review. You will get a notification once a moderator approves it.`, { label: 'View in community', to: `/c/${item.id}` })
       }
       onClose()
     } catch (err) {

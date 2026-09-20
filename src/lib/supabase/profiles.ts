@@ -1,4 +1,4 @@
-import { supabase } from './client'
+import { currentUserId, supabase } from './client'
 
 export type UserRole = 'user' | 'moderator' | 'admin'
 
@@ -11,6 +11,9 @@ export interface Profile {
   role: UserRole
   xp: number
   level: number
+  bio: string
+  followers: number
+  following: number
   createdAt: number
 }
 
@@ -21,6 +24,9 @@ interface ProfileRow {
   role: UserRole
   xp: number
   level: number
+  bio: string | null
+  followers: number | null
+  following: number | null
   created_at: string
 }
 
@@ -31,10 +37,13 @@ const toProfile = (row: ProfileRow): Profile => ({
   role: row.role,
   xp: row.xp ?? 0,
   level: row.level ?? 1,
+  bio: row.bio ?? '',
+  followers: row.followers ?? 0,
+  following: row.following ?? 0,
   createdAt: Date.parse(row.created_at),
 })
 
-const COLUMNS = 'id, display_name, avatar_url, role, xp, level, created_at'
+const COLUMNS = 'id, display_name, avatar_url, role, xp, level, bio, followers, following, created_at'
 
 export async function loadProfile(id: string): Promise<Profile | null> {
   const { data, error } = await supabase.from('profiles').select(COLUMNS).eq('id', id).maybeSingle()
@@ -42,8 +51,9 @@ export async function loadProfile(id: string): Promise<Profile | null> {
   return data ? toProfile(data as ProfileRow) : null
 }
 
-export async function updateProfile(id: string, patch: { displayName?: string; avatarUrl?: string | null }): Promise<Profile> {
+export async function updateProfile(id: string, patch: { displayName?: string; avatarUrl?: string | null; bio?: string }): Promise<Profile> {
   const row: Partial<ProfileRow> = {}
+  if (patch.bio !== undefined) row.bio = patch.bio
   if (patch.displayName !== undefined) row.display_name = patch.displayName
   if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl
   const { data, error } = await supabase.from('profiles').update(row).eq('id', id).select(COLUMNS).single()
@@ -108,4 +118,41 @@ export function levelProgress(xp: number, level: number): { current: number; nee
   const current = Math.max(0, xp - start)
   const needed = end - start
   return { current, needed, fraction: Math.min(1, current / needed) }
+}
+
+// --- Following -----------------------------------------------------------------
+
+export async function isFollowing(userId: string): Promise<boolean> {
+  const me = await currentUserId()
+  if (!me || me === userId) return false
+  const { data, error } = await supabase.from('follows').select('followee_id').eq('follower_id', me).eq('followee_id', userId).maybeSingle()
+  if (error) throw error
+  return !!data
+}
+
+export async function setFollowing(userId: string, follow: boolean): Promise<void> {
+  const me = await currentUserId()
+  if (!me) throw new Error('Not signed in')
+  if (follow) {
+    const { error } = await supabase.from('follows').upsert({ follower_id: me, followee_id: userId })
+    if (error) throw error
+  } else {
+    const { error } = await supabase.from('follows').delete().eq('follower_id', me).eq('followee_id', userId)
+    if (error) throw error
+  }
+}
+
+/** Ids of the people the signed-in user follows. */
+export async function listFollowing(): Promise<string[]> {
+  const me = await currentUserId()
+  if (!me) return []
+  const { data, error } = await supabase.from('follows').select('followee_id').eq('follower_id', me)
+  if (error) throw error
+  return (data as { followee_id: string }[]).map((r) => r.followee_id)
+}
+
+export async function listFollowers(userId: string): Promise<Profile[]> {
+  const { data, error } = await supabase.from('follows').select(`profiles!follows_follower_id_fkey(${COLUMNS})`).eq('followee_id', userId).limit(60)
+  if (error) throw error
+  return (data as unknown as { profiles: ProfileRow | null }[]).map((r) => r.profiles).filter((p): p is ProfileRow => !!p).map(toProfile)
 }

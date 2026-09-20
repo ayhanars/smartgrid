@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from '../lib/supabase/client'
 import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
 import { listMyCollections, type Collection } from '../lib/supabase/collections'
 import { useAuthStore } from '../features/auth/useAuthStore'
+import { listFollowing } from '../lib/supabase/profiles'
 import { useProjects } from '../features/projects/useProjects'
 import { ProjectBanners, ProjectGrid } from '../features/projects/ProjectCards'
 import { CommunityCard } from '../features/community/CommunityCard'
@@ -25,6 +26,7 @@ export function RecentsPage() {
   const user = useAuthStore((s) => s.user)
   const [community, setCommunity] = useState<CommunityItem[] | null>(null)
   const [collections, setCollections] = useState<Collection[] | null>(null)
+  const [followed, setFollowed] = useState<CommunityItem[] | null>(null)
 
   useEffect(() => {
     if (!isSupabaseConfigured || !projects.online) return
@@ -36,6 +38,22 @@ export function RecentsPage() {
       cancelled = true
     }
   }, [projects.online])
+
+  // What the people you follow published lately.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !user || !projects.online) {
+      setFollowed(null)
+      return
+    }
+    let cancelled = false
+    listFollowing()
+      .then((ids) => (ids.length ? listCommunityItems({ ownerIds: ids, limit: RECENT_COMMUNITY }) : []))
+      .then((l) => !cancelled && setFollowed(l))
+      .catch(() => !cancelled && setFollowed([]))
+    return () => {
+      cancelled = true
+    }
+  }, [user, projects.online])
 
   useEffect(() => {
     if (!isSupabaseConfigured || !user || !projects.online) {
@@ -53,7 +71,7 @@ export function RecentsPage() {
 
   return (
     <div>
-      <PageHeader title="Recents" hint="Pick up where you left off." />
+      <PageHeader title="Home" hint="Pick up where you left off." />
       <ProjectBanners projects={projects} />
 
       <section className="page__section">
@@ -69,6 +87,20 @@ export function RecentsPage() {
         </div>
         <ProjectGrid projects={projects} limit={RECENT_PROJECTS} />
       </section>
+
+      {isSupabaseConfigured && user && followed && followed.length > 0 && (
+        <section className="page__section">
+          <div className="page__section-header">
+            <h2>From people you follow</h2>
+            <span className="home__hint">Their newest approved models.</span>
+          </div>
+          <div className="home__grid">
+            {followed.map((item) => (
+              <CommunityCard key={item.id} item={item} onOpen={() => navigate(`/c/${item.id}`)} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {isSupabaseConfigured && (
         <section className="page__section">

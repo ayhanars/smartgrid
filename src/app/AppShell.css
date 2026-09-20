@@ -91,3 +91,18 @@
   font-weight: 600;
   pointer-events: none;
 }
+
+.app-shell__toast-link {
+  margin-left: 4px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.app-shell__toast-link:hover {
+  filter: brightness(1.08);
+}

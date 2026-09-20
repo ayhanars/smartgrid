@@ -16,13 +16,13 @@ interface ViewState {
    * the browser has no network and a save is waiting. */
   cloudStatus: 'off' | 'syncing' | 'synced' | 'error' | 'offline'
   /** One-line transient message (import results etc.), shown as a toast. */
-  notice: { id: number; text: string } | null
+  notice: { id: number; text: string; link?: { label: string; to: string } } | null
   setPrintPreview: (on: boolean) => void
   setPreviewHeight: (height: number | null) => void
   setGizmoMode: (mode: 'translate' | 'rotate') => void
   setSaveStatus: (status: 'idle' | 'saving' | 'saved') => void
   setCloudStatus: (status: ViewState['cloudStatus']) => void
-  setNotice: (text: string | null) => void
+  setNotice: (text: string | null, link?: { label: string; to: string }) => void
   /** Bumped when a custom texture tile finishes decoding, so meshes that
    * sampled it too early rebuild. */
   tileVersion: number
@@ -43,7 +43,7 @@ export const useViewStore = create<ViewState>()((set) => ({
   setGizmoMode: (mode) => set({ gizmoMode: mode }),
   setSaveStatus: (status) => set({ saveStatus: status }),
   setCloudStatus: (status) => set({ cloudStatus: status }),
-  setNotice: (text) => set({ notice: text ? { id: ++noticeCounter, text } : null }),
+  setNotice: (text, link) => set({ notice: text ? { id: ++noticeCounter, text, link } : null }),
   tileVersion: 0,
   bumpTileVersion: () => set((s) => ({ tileVersion: s.tileVersion + 1 })),
 }))

@@ -1,4 +1,5 @@
 import { Box, Download, Heart, Star } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import type { CommunityItem } from '../../lib/supabase/community'
 import './community.css'
 
@@ -9,6 +10,7 @@ export function Avatar({ name, url, large }: { name: string; url: string | null;
 /** One shared model in a grid; `showStatus` marks hidden / removed items
  * for their owner and staff. */
 export function CommunityCard({ item, onOpen, showStatus }: { item: CommunityItem; onOpen: () => void; showStatus?: boolean }) {
+  const navigate = useNavigate()
   return (
     <div className="community-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => e.key === 'Enter' && onOpen()}>
       <div className="community-card__thumb">
@@ -24,8 +26,25 @@ export function CommunityCard({ item, onOpen, showStatus }: { item: CommunityIte
       <div className="community-card__body">
         <span className="community-card__title">{item.title}</span>
         <span className="community-card__meta">
-          <Avatar name={item.author.displayName} url={item.author.avatarUrl} />
-          <span>{item.author.displayName}</span>
+          <span
+            className="community-card__author"
+            role="link"
+            tabIndex={0}
+            title={`${item.author.displayName} · level ${item.author.level}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`/u/${item.ownerId}`)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.stopPropagation()
+                navigate(`/u/${item.ownerId}`)
+              }
+            }}
+          >
+            <Avatar name={item.author.displayName} url={item.author.avatarUrl} />
+            <span>{item.author.displayName}</span>
+          </span>
           <span className="community-card__downloads" title="Copies opened">
             <Download size={11} />
             {item.downloads}

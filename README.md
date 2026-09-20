@@ -102,6 +102,16 @@ liked, commented on and saved into collections (`community_likes`,
 item row are kept by triggers). A collection is private unless its owner
 makes it public, which makes it shareable by link.
 
+Home & community: the sidebar's Home page shows your newest projects,
+what the people you follow published, new community models and your
+collections. `/community` is an overview (new models, popular models,
+public collections) with full pages at `/community/models` and
+`/community/collections`. `/search?q=` looks across your projects,
+community models, public collections and people. `/u/<id>` is a public
+profile (models, public collections, level, bio, follow button); the
+`follows` table notifies followers when someone they follow gets a model
+approved.
+
 Moderation: every new community model and collection from a regular user
 waits in the admin's Approvals tab (`approval` column: pending / approved /
 rejected; moderators and admins skip the queue). Approvals, rejections
