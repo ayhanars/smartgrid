@@ -5,7 +5,7 @@ import { ContactShadows, Environment, GizmoHelper, GizmoViewcube, Grid, Lightfor
 import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib'
 import { ArrowDownToLine, Box, Layers2, Maximize, Move3d, Rotate3d, ZoomIn, ZoomOut } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
-import { expandToGroup, useDocumentStore } from '../../state/documentStore'
+import { expandToGroup, useDocumentStore, orderOnPlate, layerPlateId } from '../../state/documentStore'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
 import {
   buildLayerGeometries,
@@ -20,6 +20,7 @@ import { ExtrudedShapeMesh } from './ExtrudedShapeMesh'
 import { activeHoleIds, useCutGeometries } from './useCutGeometries'
 import { PrinterPlate } from './PrinterPlate'
 import { ThumbnailCapture, THUMBNAIL_HIDE } from './ThumbnailCapture'
+import { GhostPlate, plateOffset } from './GhostPlate'
 import { LayerContextMenu, type ContextMenuState } from '../layers/LayerContextMenu'
 import { PrintPreviewSlider } from './PrintPreviewSlider'
 import { PreviewCaps, type PreviewCapItem } from './PreviewCaps'
@@ -50,7 +51,14 @@ export function Viewport3DPane() {
   const lastGizmoDragEnd = useRef(0)
 
   const layers = useDocumentStore((s) => s.layers)
-  const order = useDocumentStore((s) => s.order)
+  const allOrder = useDocumentStore((s) => s.order)
+  const plates = useDocumentStore((s) => s.plates)
+  const activePlateId = useDocumentStore((s) => s.activePlateId)
+  const showAllPlates = useDocumentStore((s) => s.showAllPlates)
+  const setActivePlate = useDocumentStore((s) => s.setActivePlate)
+  // The active plate is the one you interact with; the others are drawn
+  // beside it, read-only, when every plate is shown.
+  const order = useMemo(() => orderOnPlate({ layers, order: allOrder, plates }, activePlateId), [layers, allOrder, plates, activePlateId])
   const selection = useDocumentStore((s) => s.selection)
   const setSelection = useDocumentStore((s) => s.setSelection)
   const setRotation = useDocumentStore((s) => s.setRotation)
@@ -70,7 +78,8 @@ export function Viewport3DPane() {
   const warnings = useAnalysisStore((s) => s.warnings)
   const dismissed = useAnalysisStore((s) => s.dismissed)
   const dismiss = useAnalysisStore((s) => s.dismiss)
-  const activeWarnings = warnings.filter((w) => layers[w.id] && !(w.severity === 'partial' && dismissed.includes(w.id)))
+  // Only the active plate's warnings; the others belong to plates not shown.
+  const activeWarnings = warnings.filter((w) => layers[w.id] && layerPlateId(layers[w.id], plates) === activePlateId && !(w.severity === 'partial' && dismissed.includes(w.id)))
   const warningById = new Map(activeWarnings.map((w) => [w.id, w.severity] as const))
 
   const printPreview = useViewStore((s) => s.printPreview)
@@ -274,6 +283,24 @@ export function Viewport3DPane() {
         <ContactShadows position={[0, 0.0015, 0]} opacity={0.55} scale={bedWidth * 1.6} blur={2.2} far={bedWidth * 0.6} resolution={512} frames={1} key={shadowKey} />
 
         <PrinterPlate width={bedWidth} depth={bedDepth} widthMM={artboardWidth} depthMM={artboardHeight} />
+        {showAllPlates &&
+          !printPreview &&
+          plates
+            .filter((p) => p.id !== activePlateId)
+            .map((p) => (
+              <GhostPlate
+                key={p.id}
+                plate={p}
+                offset={plateOffset(plates.findIndex((x) => x.id === p.id) - plates.findIndex((x) => x.id === activePlateId), bedWidth)}
+                layers={layers}
+                order={allOrder.filter((id) => layers[id] && layerPlateId(layers[id], plates) === p.id)}
+                artboardWidth={artboardWidth}
+                artboardHeight={artboardHeight}
+                bedWidth={bedWidth}
+                bedDepth={bedDepth}
+                onActivate={() => setActivePlate(p.id)}
+              />
+            ))}
 
         {order.map((id) => {
           const layer = layers[id]

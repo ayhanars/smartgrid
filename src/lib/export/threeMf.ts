@@ -44,7 +44,18 @@ function indexTriangles(positions: Float32Array) {
  * slicers show them, and Bambu Studio reads printer / plate hints. */
 export type ThreeMfMetadata = Record<string, string | number | undefined>
 
-export function write3mf(meshes: ExportMesh[], metadata: ThreeMfMetadata = {}): Uint8Array<ArrayBuffer> {
+export interface ThreeMfOptions {
+  metadata?: ThreeMfMetadata
+  /** Plate names, in order, for a multi-plate project; meshes carry their
+   * 1-based plate number. Written as Bambu Studio plate blocks so the file
+   * opens with the same plates. */
+  plates?: string[]
+}
+
+export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadata | ThreeMfOptions = {}): Uint8Array<ArrayBuffer> {
+  const options: ThreeMfOptions = 'metadata' in metadataOrOptions || 'plates' in metadataOrOptions ? (metadataOrOptions as ThreeMfOptions) : { metadata: metadataOrOptions as ThreeMfMetadata }
+  const metadata = options.metadata ?? {}
+  const plateNames = options.plates && options.plates.length > 1 ? options.plates : null
   const colors = [...new Set(meshes.map((m) => normalizeColor(m.color)))]
 
   const baseMaterials = colors
@@ -82,6 +93,7 @@ export function write3mf(meshes: ExportMesh[], metadata: ThreeMfMetadata = {}): 
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n` +
     `  <metadata name="Application">smartgrid</metadata>\n` +
+    (plateNames ? `  <metadata name="PlateCount">${plateNames.length}</metadata>\n` : '') +
     Object.entries(metadata)
       .filter(([, v]) => v !== undefined && v !== '')
       .map(([k, v]) => `  <metadata name="${escapeXml(k)}">${escapeXml(String(v))}</metadata>\n`)
@@ -102,7 +114,19 @@ export function write3mf(meshes: ExportMesh[], metadata: ThreeMfMetadata = {}): 
     `  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" />\n` +
     `</Relationships>\n`
 
-  const modelSettings = `<?xml version="1.0" encoding="UTF-8"?>\n<config>\n${objectSettings.join('\n')}\n</config>\n`
+  const plateBlocks = plateNames
+    ? plateNames.map((name, i) => {
+        const instances = meshes
+          .map((m, mi) => ({ m, objectId: mi + 2 }))
+          .filter(({ m }) => (m.plate ?? 1) === i + 1)
+          .map(({ objectId }) => `    <model_instance>\n      <metadata key="object_id" value="${objectId}"/>\n      <metadata key="instance_id" value="0"/>\n    </model_instance>`)
+        return (
+          `  <plate>\n    <metadata key="plater_id" value="${i + 1}"/>\n    <metadata key="plater_name" value="${escapeXml(name)}"/>\n` +
+          `    <metadata key="locked" value="false"/>\n${instances.join('\n')}${instances.length ? '\n' : ''}  </plate>`
+        )
+      })
+    : []
+  const modelSettings = `<?xml version="1.0" encoding="UTF-8"?>\n<config>\n${[...objectSettings, ...plateBlocks].join('\n')}\n</config>\n`
   const projectSettings = JSON.stringify(
     {
       filament_colour: colors,

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { ShapeLayer } from '../../types/document'
-import { shapeWorldBounds } from '../../state/documentStore'
+import { type Plate, layerPlateId, shapeWorldBounds } from '../../state/documentStore'
 import { buildLayerCutters, buildLayerGeometries, perforationTessellation } from '../geometry/layerGeometry'
 import { cutHolesAsync } from '../geometry/csgClient'
 
@@ -10,6 +10,28 @@ export interface ExportMesh {
   color: string
   /** Flat, non-indexed triangle list in mm, Z-up (slicer convention). */
   positions: Float32Array
+  /** 1-based build plate the mesh sits on; absent for single-plate exports. */
+  plate?: number
+}
+
+/** How the plates of a multi-plate export are laid out in slicer space. */
+export interface PlateLayout {
+  plates: Plate[]
+  /** Bed size in mm; each plate is a copy of the same bed. */
+  bedWidth: number
+  bedDepth: number
+}
+
+/** Bambu Studio keeps its plates one fifth of a plate apart, in a grid of
+ * ceil(sqrt(n)) columns running right and then down (−Y). Objects are
+ * stored in that global space, so every plate but the first is shifted. */
+export const PLATE_GAP_RATIO = 1 / 5
+
+export function plateOrigin(index: number, count: number, bedWidth: number, bedDepth: number): { x: number; y: number } {
+  const cols = Math.ceil(Math.sqrt(Math.max(1, count)))
+  const row = Math.floor(index / cols)
+  const col = index % cols
+  return { x: col * bedWidth * (1 + PLATE_GAP_RATIO), y: -row * bedDepth * (1 + PLATE_GAP_RATIO) }
 }
 
 function rectsOverlap(a: { x: number; y: number; width: number; height: number }, b: typeof a): boolean {
@@ -25,9 +47,11 @@ const Y_UP_TO_Z_UP = new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0
  * overlapping hole already subtracted, exactly as the viewport shows them,
  * in mm at the shape's real plate position. Holes are cutters, so they
  * never appear as objects of their own. */
-export async function buildExportMeshes(layers: Record<string, ShapeLayer>, order: string[]): Promise<ExportMesh[]> {
+export async function buildExportMeshes(layers: Record<string, ShapeLayer>, order: string[], layout?: PlateLayout): Promise<ExportMesh[]> {
   const holeIds = order.filter((id) => layers[id]?.isHole && layers[id]?.visible)
   const toWorld = (layer: ShapeLayer) => ({ worldX: layer.transform.x, worldY: layer.transform.z, worldZ: layer.transform.y })
+  const multi = layout && layout.plates.length > 1 ? layout : null
+  const plateIndex = (layer: ShapeLayer) => (multi ? Math.max(0, multi.plates.findIndex((p) => p.id === layerPlateId(layer, multi.plates))) : 0)
 
   const meshes: ExportMesh[] = []
   for (const id of order) {
@@ -35,7 +59,8 @@ export async function buildExportMeshes(layers: Record<string, ShapeLayer>, orde
     if (!layer || layer.isHole || !layer.visible) continue
 
     const solidBounds = shapeWorldBounds(layer)
-    const overlapping = holeIds.filter((hid) => rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
+    // Only cutters on the same plate can cut a solid.
+    const overlapping = holeIds.filter((hid) => plateIndex(layers[hid]) === plateIndex(layer) && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
     const solidWorld = toWorld(layer)
     const holeLayers = overlapping.map((hid) => layers[hid])
     const tessellate = perforationTessellation(layer)
@@ -58,7 +83,14 @@ export async function buildExportMeshes(layers: Record<string, ShapeLayer>, orde
       const placed = (finalGeo.index ? finalGeo.toNonIndexed() : finalGeo.clone())
         .translate(solidWorld.worldX, solidWorld.worldY, solidWorld.worldZ)
         .applyMatrix4(Y_UP_TO_Z_UP)
-      meshes.push({ name: layer.name, color: layer.color, positions: placed.getAttribute('position').array as Float32Array })
+      const mesh: ExportMesh = { name: layer.name, color: layer.color, positions: placed.getAttribute('position').array as Float32Array }
+      if (multi) {
+        const idx = plateIndex(layer)
+        const origin = plateOrigin(idx, multi.plates.length, multi.bedWidth, multi.bedDepth)
+        placed.translate(origin.x, origin.y, 0)
+        mesh.plate = idx + 1
+      }
+      meshes.push(mesh)
     }
   }
   return meshes

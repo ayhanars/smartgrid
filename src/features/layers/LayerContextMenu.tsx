@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { ArrowDownToLine, ArrowUpToLine, Copy, Eye, EyeOff, Group, Lock, Shapes, Trash2, Ungroup, Unlock } from 'lucide-react'
-import { useDocumentStore, expandToGroup } from '../../state/documentStore'
+import { ArrowDownToLine, ArrowUpToLine, Copy, Eye, EyeOff, Group, Grid2x2, Lock, Scissors, Shapes, Trash2, Ungroup, Unlock } from 'lucide-react'
+import { useDocumentStore, expandToGroup, artboardSize, shapeWorldBounds } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { useUserAssets } from '../../state/userAssetsStore'
 import { captureAsset } from '../../lib/assets/userAssets'
@@ -35,6 +35,13 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
   const ungroupShapes = useDocumentStore((s) => s.ungroupShapes)
   const reorderLayer = useDocumentStore((s) => s.reorderLayer)
   const groups = useDocumentStore((s) => s.groups)
+  const plates = useDocumentStore((s) => s.plates)
+  const activePlateId = useDocumentStore((s) => s.activePlateId)
+  const moveShapesToPlate = useDocumentStore((s) => s.moveShapesToPlate)
+  const splitForBed = useDocumentStore((s) => s.splitForBed)
+  const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const customBedWidth = useDocumentStore((s) => s.customBedWidth)
+  const customBedHeight = useDocumentStore((s) => s.customBedHeight)
   const addUserAsset = useUserAssets((s) => s.add)
   const setNotice = useViewStore((s) => s.setNotice)
 
@@ -65,6 +72,9 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
   const allHidden = targets.every((id) => layers[id] && !layers[id].visible)
   const allLocked = targets.every((id) => layers[id]?.locked)
   const inGroup = targets.some((id) => layers[id]?.groupId)
+  const bed = artboardSize({ bedPresetId, customBedWidth, customBedHeight })
+  const bounds = shapeWorldBounds(layer)
+  const tooBig = !layer.isHole && (bounds.width > bed.width + 1e-6 || bounds.height > bed.height + 1e-6)
 
   // Named after the group when the whole selection is one group, else the
   // clicked layer.
@@ -117,6 +127,35 @@ export function LayerContextMenu({ menu, onClose }: LayerContextMenuProps) {
         <Shapes size={13} />
         Save as asset
       </button>
+      {plates.length > 1 && (
+        <>
+          <div className="layer-context-menu__divider" />
+          <div className="layer-context-menu__heading">
+            <Grid2x2 size={12} />
+            Move to plate
+          </div>
+          {plates
+            .filter((p) => p.id !== activePlateId)
+            .map((p) => (
+              <button key={p.id} type="button" role="menuitem" onClick={run(() => moveShapesToPlate(targets, p.id))}>
+                {p.name}
+              </button>
+            ))}
+        </>
+      )}
+      {tooBig && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={run(() => {
+            const pieces = splitForBed(menu.layerId)
+            setNotice(pieces ? `Split into ${pieces.length} pieces, one per plate.` : 'Could not split: not enough free plates (5 at most).')
+          })}
+        >
+          <Scissors size={13} />
+          Split across plates
+        </button>
+      )}
       <div className="layer-context-menu__divider" />
       <button type="button" role="menuitem" onClick={run(() => reorderLayer(menu.layerId, 'front'))}>
         <ArrowUpToLine size={13} />

@@ -208,6 +208,8 @@ export interface ShapeLayer {
   id: string
   kind: ShapeKind
   name: string
+  /** The build plate the shape sits on; missing means the first plate. */
+  plateId?: string
   visible: boolean
   locked: boolean
   color: string

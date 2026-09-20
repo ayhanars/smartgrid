@@ -49,9 +49,30 @@ export interface ShapeGroup {
   name: string
 }
 
+/** One build plate: the printer bed printed once. A project can have up
+ * to MAX_PLATES; every layer belongs to exactly one. */
+export interface Plate {
+  id: string
+  name: string
+}
+
+export const MAX_PLATES = 5
+export const FIRST_PLATE_ID = 'plate-1'
+
+/** The plate a layer sits on (older layers carry none and mean the first). */
+export const layerPlateId = (layer: Pick<ShapeLayer, 'plateId'>, plates: Plate[]) => layer.plateId ?? plates[0]?.id ?? FIRST_PLATE_ID
+
+export const defaultPlates = (): Plate[] => [{ id: FIRST_PLATE_ID, name: 'Plate 1' }]
+
 export interface DocumentState {
   layers: Record<string, ShapeLayer>
   groups: Record<string, ShapeGroup>
+  plates: Plate[]
+  /** The plate being edited: the 2D canvas, the layers panel and the
+   * print preview show it alone. */
+  activePlateId: string
+  /** 3D view: every plate side by side (true) or the active one (false). */
+  showAllPlates: boolean
   /** Back-to-front draw order (also top-to-bottom in the Layers panel, reversed for display). */
   order: string[]
   selection: string[]
@@ -144,6 +165,17 @@ interface DocumentActions {
    * so the pair reads and moves as one object. */
   carveWith: (baseId: string, toolId: string, options: CarveOptions) => void
   setBedPreset: (id: string) => void
+  setActivePlate: (id: string) => void
+  setShowAllPlates: (on: boolean) => void
+  addPlate: () => string | null
+  renamePlate: (id: string, name: string) => void
+  /** Deletes the plate and everything on it. */
+  removePlate: (id: string) => void
+  moveShapesToPlate: (ids: string[], plateId: string) => void
+  /** Cuts a shape that is larger than the bed into pieces that fit, one per
+   * new plate (up to MAX_PLATES). Returns the piece ids, or null when it
+   * already fits or there are not enough plates. */
+  splitForBed: (id: string) => string[] | null
   togglePinnedBedPreset: (id: string) => void
   setCustomBedSize: (width: number, height: number) => void
   setDisplayUnit: (unit: DocumentState['displayUnit']) => void
@@ -170,6 +202,17 @@ export type AlignMode = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bott
 
 /** Current plate size in mm — the artboard every single-shape alignment
  * snaps to. */
+/** `plateId` for a layer created while a plate other than the first is
+ * active (the first plate is the implicit default). */
+function platePatch(state: Pick<DocumentState, 'plates' | 'activePlateId'>): { plateId?: string } {
+  return state.activePlateId === state.plates[0]?.id ? {} : { plateId: state.activePlateId }
+}
+
+/** Layer ids on one plate, in draw order. */
+export function orderOnPlate(state: Pick<DocumentState, 'layers' | 'order' | 'plates'>, plateId: string): string[] {
+  return state.order.filter((id) => state.layers[id] && layerPlateId(state.layers[id], state.plates) === plateId)
+}
+
 export function artboardSize(state: Pick<DocumentState, 'bedPresetId' | 'customBedWidth' | 'customBedHeight'>) {
   const preset = getBedPreset(state.bedPresetId)
   return { width: preset?.width ?? state.customBedWidth, height: preset?.height ?? state.customBedHeight }
@@ -182,9 +225,10 @@ export type DocumentStore = DocumentState & DocumentActions
  * invisibly inside the bigger solid. Only near-complete containment
  * triggers this; a big plate drawn over small parts stays on the bed. */
 const AUTO_REST_MIN_CONTAINMENT = 0.9
-function perfectFitOnCreate(layer: ShapeLayer, state: Pick<DocumentState, 'layers' | 'order'>): ShapeLayer {
+function perfectFitOnCreate(layer: ShapeLayer, state: Pick<DocumentState, 'layers' | 'order' | 'plates'>): ShapeLayer {
   if (layer.isHole) return layer
-  const z = restingHeight(layer, state.layers, state.order, AUTO_REST_MIN_CONTAINMENT)
+  // Only shapes on the same plate can be under it.
+  const z = restingHeight(layer, state.layers, orderOnPlate(state, layerPlateId(layer, state.plates)), AUTO_REST_MIN_CONTAINMENT)
   return z == null ? layer : { ...layer, transform: { ...layer.transform, z } }
 }
 
@@ -254,6 +298,7 @@ function makeCavityLayer(solid: ShapeLayer, options: ShellOptions, layerHeight: 
     bevelMode: 'shape',
     isHole: true,
     ...(groupId ? { groupId } : {}),
+    ...(solid.plateId ? { plateId: solid.plateId } : {}),
     shellOf: { solidId: solid.id, wall: options.wall, floor, openFrom: options.openFrom },
   }
 }
@@ -362,6 +407,9 @@ export const useDocumentStore = create<DocumentStore>()(
       return {
       layers: {},
       groups: {},
+      plates: defaultPlates(),
+      activePlateId: FIRST_PLATE_ID,
+      showAllPlates: false,
       order: [],
       selection: [],
       bedPresetId: DEFAULT_BED_ID,
@@ -389,12 +437,16 @@ export const useDocumentStore = create<DocumentStore>()(
         }),
 
       loadDocument: (projectId, snapshot) => {
+        const plates = snapshot.plates && snapshot.plates.length > 0 ? snapshot.plates : defaultPlates()
         set({
           projectId,
           projectName: snapshot.name,
           layers: snapshot.layers,
           order: snapshot.order,
           groups: snapshot.groups ?? {},
+          plates,
+          activePlateId: plates[0].id,
+          showAllPlates: false,
           selection: [],
           bedPresetId: snapshot.bedPresetId,
           customBedWidth: snapshot.customBedWidth,
@@ -429,7 +481,7 @@ export const useDocumentStore = create<DocumentStore>()(
           ...(kind === 'star' ? { starPoints: 5, starInnerRatio: 0.45 } : {}),
         }
         set((state) => ({
-          layers: { ...state.layers, [id]: perfectFitOnCreate(layer, state) },
+          layers: { ...state.layers, [id]: perfectFitOnCreate({ ...layer, ...platePatch(state) }, state) },
           order: [...state.order, id],
           selection: [id],
         }))
@@ -494,6 +546,7 @@ export const useDocumentStore = create<DocumentStore>()(
           bevelBottom: 0,
           bevelTop: 0,
           isHole: false,
+          ...platePatch(get()),
         }
         set((state) => ({
           layers: { ...state.layers, [id]: perfectFitOnCreate(layer, state) },
@@ -599,6 +652,7 @@ export const useDocumentStore = create<DocumentStore>()(
               ...source,
               id: newId,
               transform: { ...source.transform, x: source.transform.x + 10, y: source.transform.y + 10 },
+              plateId: state.activePlateId,
             }
             idRemap.set(source.id, newId)
             order.push(newId)
@@ -638,6 +692,7 @@ export const useDocumentStore = create<DocumentStore>()(
               bevelTop: 0,
               isHole: false,
               ...(groupId ? { groupId } : {}),
+              ...platePatch(state),
             }
             order.push(id)
           }
@@ -785,7 +840,7 @@ export const useDocumentStore = create<DocumentStore>()(
         set((state) => {
           const movable = ids.filter((id) => state.layers[id] && !state.layers[id].locked)
           if (movable.length === 0) return {}
-          const rest = unitRest(movable, state.layers, state.order)
+          const rest = unitRest(movable, state.layers, orderOnPlate(state, layerPlateId(state.layers[movable[0]], state.plates)))
           if (!rest || Math.abs(rest.delta) < 1e-6) return {}
           const layers = { ...state.layers }
           for (const id of movable) {
@@ -926,8 +981,10 @@ export const useDocumentStore = create<DocumentStore>()(
         set((state) => {
           const built = buildAssetLayers(asset, origin, state.printSettings.layerHeight)
           ids.push(...built.order)
+          const plate = platePatch(state)
+          const placed = Object.fromEntries(Object.entries(built.layers).map(([id, l]) => [id, { ...l, ...plate }]))
           return {
-            layers: { ...state.layers, ...built.layers },
+            layers: { ...state.layers, ...placed },
             order: [...state.order, ...built.order],
             groups: built.group ? { ...state.groups, [built.group.id]: built.group } : state.groups,
             selection: built.order,
@@ -1065,6 +1122,118 @@ export const useDocumentStore = create<DocumentStore>()(
         }),
 
       setBedPreset: (id) => set({ bedPresetId: id }),
+      setActivePlate: (id) =>
+        set((state) => (state.plates.some((p) => p.id === id) && id !== state.activePlateId ? { activePlateId: id, selection: [] } : {})),
+      setShowAllPlates: (on) => set({ showAllPlates: on }),
+      addPlate: () => {
+        const state = get()
+        if (state.plates.length >= MAX_PLATES) return null
+        const id = `plate-${generateId()}`
+        const taken = new Set(state.plates.map((p) => p.name))
+        let n = state.plates.length + 1
+        while (taken.has(`Plate ${n}`)) n++
+        set({ plates: [...state.plates, { id, name: `Plate ${n}` }], activePlateId: id, selection: [] })
+        return id
+      },
+      renamePlate: (id, name) =>
+        set((state) => ({ plates: state.plates.map((p) => (p.id === id ? { ...p, name: name.trim() || p.name } : p)) })),
+      removePlate: (id) =>
+        set((state) => {
+          if (state.plates.length <= 1) return {}
+          const plates = state.plates.filter((p) => p.id !== id)
+          const gone = new Set(state.order.filter((lid) => layerPlateId(state.layers[lid], state.plates) === id))
+          const layers = { ...state.layers }
+          for (const lid of gone) delete layers[lid]
+          return {
+            plates,
+            layers,
+            order: state.order.filter((lid) => !gone.has(lid)),
+            selection: state.selection.filter((lid) => !gone.has(lid)),
+            activePlateId: state.activePlateId === id ? plates[0].id : state.activePlateId,
+          }
+        }),
+      moveShapesToPlate: (ids, plateId) =>
+        set((state) => {
+          if (!state.plates.some((p) => p.id === plateId)) return {}
+          const layers = { ...state.layers }
+          // A group moves as a whole, and a shell cavity with its solid.
+          const targets = new Set(ids.flatMap((id) => expandToGroup(state.layers, state.order, id)))
+          for (const id of [...targets]) {
+            for (const lid of state.order) {
+              const l = state.layers[lid]
+              if (l?.shellOf?.solidId === id) targets.add(lid)
+            }
+          }
+          for (const id of targets) if (layers[id]) layers[id] = { ...layers[id], plateId }
+          return { layers, selection: [] }
+        }),
+      splitForBed: (id) => {
+        const state = get()
+        const layer = state.layers[id]
+        if (!layer || layer.isHole) return null
+        const bed = artboardSize(state)
+        const bounds = shapeWorldBounds(layer)
+        const nx = Math.max(1, Math.ceil(bounds.width / bed.width - 1e-6))
+        const ny = Math.max(1, Math.ceil(bounds.height / bed.height - 1e-6))
+        if (nx === 1 && ny === 1) return null
+        const pieces = nx * ny
+        // The original's plate is reused for the first piece.
+        if (state.plates.length - 1 + pieces > MAX_PLATES) return null
+        const pieceW = bounds.width / nx
+        const pieceH = bounds.height / ny
+        const holes = state.order.filter((hid) => state.layers[hid]?.isHole && layerPlateId(state.layers[hid], state.plates) === layerPlateId(layer, state.plates))
+        const plates = [...state.plates]
+        const layers = { ...state.layers }
+        const order = state.order.filter((lid) => lid !== id)
+        const ids: string[] = []
+        let plateIdx = 0
+        const ownPlate = layerPlateId(layer, state.plates)
+        for (let iy = 0; iy < ny; iy++) {
+          for (let ix = 0; ix < nx; ix++) {
+            const cut = { x: bounds.x + ix * pieceW, y: bounds.y + iy * pieceH, width: pieceW, height: pieceH }
+            const knife: ShapeLayer = { ...layer, id: 'knife', kind: 'rect', regions: createShapeRegions('rect', cut.width, cut.height), transform: { ...layer.transform, x: cut.x, y: cut.y, rotation: 0 }, cornerRadius: 0, smartPolish: 0 }
+            const result = applyBooleanOp('intersect', [layer, knife])
+            if (!result || result.regions.length === 0) continue
+            const plateId = plateIdx === 0 ? ownPlate : (plates[plateIdx]?.id ?? (plates.push({ id: `plate-${generateId()}`, name: `Plate ${plates.length + 1}` }), plates[plates.length - 1].id))
+            plateIdx++
+            const pieceId = generateId()
+            const pb = contourBounds(result.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)]))
+            // Each piece is centred on its plate, with its outline re-based at 0,0.
+            const regions = result.regions.map((r) => ({ outer: { points: r.outer.points.map((pt) => ({ x: pt.x - pb.x, y: pt.y - pb.y })) }, holes: r.holes.map((h) => ({ points: h.points.map((pt) => ({ x: pt.x - pb.x, y: pt.y - pb.y })) })) }))
+            const piece: ShapeLayer = {
+              ...layer,
+              id: pieceId,
+              name: `${layer.name} ${iy * nx + ix + 1}/${pieces}`,
+              kind: 'polygon',
+              regions,
+              transform: { ...layer.transform, x: (bed.width - pb.width) / 2, y: (bed.height - pb.height) / 2, rotation: 0 },
+              cornerRadius: 0,
+              smartPolish: 0,
+              plateId,
+              groupId: undefined,
+              shellOf: undefined,
+            }
+            layers[pieceId] = piece
+            order.push(pieceId)
+            ids.push(pieceId)
+            // Cutters that overlap this piece follow it, keeping their relative position.
+            for (const hid of holes) {
+              const hole = state.layers[hid]
+              const hb = shapeWorldBounds(hole)
+              const overlaps = hb.x < pb.x + pb.width && hb.x + hb.width > pb.x && hb.y < pb.y + pb.height && hb.y + hb.height > pb.y
+              if (!overlaps) continue
+              const cid = generateId()
+              layers[cid] = { ...hole, id: cid, plateId, groupId: undefined, transform: { ...hole.transform, x: hole.transform.x - pb.x + piece.transform.x, y: hole.transform.y - pb.y + piece.transform.y } }
+              order.push(cid)
+            }
+          }
+        }
+        delete layers[id]
+        // Cavities of the original go with it.
+        for (const lid of state.order) if (state.layers[lid]?.shellOf?.solidId === id) { delete layers[lid]; const i = order.indexOf(lid); if (i >= 0) order.splice(i, 1) }
+        set({ layers, order, plates, selection: ids.slice(0, 1), activePlateId: ownPlate })
+        return ids
+      },
 
       togglePinnedBedPreset: (id) =>
         set((state) => {
@@ -1178,12 +1347,12 @@ export const useDocumentStore = create<DocumentStore>()(
     {
       // Selection is transient UI state, not something Cmd+Z should walk
       // back through — only the shape data itself belongs in history.
-      partialize: (state) => ({ layers: state.layers, order: state.order, groups: state.groups }),
+      partialize: (state) => ({ layers: state.layers, order: state.order, groups: state.groups, plates: state.plates }),
       // Without this zundo records an entry on EVERY set — including a
       // plain selection change that leaves the document untouched — so
       // undo would sometimes appear to do nothing. Store updates are
       // immutable, so reference equality of the tracked slices is exact.
-      equality: (a, b) => a.layers === b.layers && a.order === b.order && a.groups === b.groups,
+      equality: (a, b) => a.layers === b.layers && a.order === b.order && a.groups === b.groups && a.plates === b.plates,
       limit: 100,
     },
   ),
@@ -1204,6 +1373,7 @@ export function serializeDocument(state: DocumentState): DocumentSnapshot {
     layers: state.layers,
     order: state.order,
     groups: state.groups,
+    plates: state.plates,
     bedPresetId: state.bedPresetId,
     customBedWidth: state.customBedWidth,
     customBedHeight: state.customBedHeight,
@@ -1222,6 +1392,7 @@ export function emptyDocument(name = 'Untitled project'): DocumentSnapshot {
     layers: {},
     order: [],
     groups: {},
+    plates: defaultPlates(),
     bedPresetId: s.pinnedBedPresetId ?? DEFAULT_BED_ID,
     customBedWidth: 256,
     customBedHeight: 256,

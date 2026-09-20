@@ -1,5 +1,5 @@
 import type { PrintSettings, ShapeLayer } from '../../types/document'
-import type { Guide, ShapeGroup } from '../../state/documentStore'
+import type { Guide, Plate, ShapeGroup } from '../../state/documentStore'
 
 /** Everything about a project worth keeping between sessions — the
  * document itself, never the transient bits (selection, undo history). */
@@ -9,6 +9,8 @@ export interface DocumentSnapshot {
   layers: Record<string, ShapeLayer>
   order: string[]
   groups: Record<string, ShapeGroup>
+  /** Build plates; absent on older saves (one plate). */
+  plates?: Plate[]
   bedPresetId: string
   customBedWidth: number
   customBedHeight: number

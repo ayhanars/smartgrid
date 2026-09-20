@@ -126,6 +126,17 @@ and "Continue as a copy" on their own models; everyone gets "Print it as
 is": a direct 3MF (with the chosen printer's plate size and the author's
 print settings as metadata) or STL, without creating a project.
 
+Plates: a project has up to 5 build plates (`plates` in the document,
+`plateId` on each shape; shapes without one sit on the first plate). The
+tabs in the top bar switch, add, rename (double-click) and delete plates;
+the 2D canvas, layers, print preview and warnings show the active plate
+only, and "All plates" draws the others beside it in 3D (click one to
+switch). A shape larger than the bed offers "Split across plates", which
+cuts it into bed-sized pieces, one per plate. A 3MF export carries every
+plate as Bambu Studio plates (same 1.2 × bed stride and grid layout as
+Bambu Studio, `<plate>` blocks in `Metadata/model_settings.config`); an STL
+holds the active plate.
+
 Levels: `profiles.xp` / `profiles.level` (level L needs 50·L·(L−1) XP).
 Publishing, approvals, likes, opened copies, comments and collections
 earn XP; the account page shows the bar.

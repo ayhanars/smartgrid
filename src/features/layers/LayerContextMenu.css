@@ -48,3 +48,14 @@
 .layer-context-menu__danger {
   color: var(--danger) !important;
 }
+
+.layer-context-menu__heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 2px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}

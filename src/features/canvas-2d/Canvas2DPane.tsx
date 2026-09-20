@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react'
 import {
   Circle,
   Combine,
@@ -19,7 +19,7 @@ import {
   ZoomOut,
 } from 'lucide-react'
 import { IconButton } from '../../components/IconButton'
-import { useDocumentStore, shapeWorldBounds, expandToGroup, type Guide } from '../../state/documentStore'
+import { useDocumentStore, shapeWorldBounds, expandToGroup, type Guide, orderOnPlate } from '../../state/documentStore'
 import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../../types/document'
 import type { BooleanOp } from '../../lib/geometry/boolean'
 import { isTextEntryTarget } from '../../lib/dom/isTextEntryTarget'
@@ -108,7 +108,11 @@ export function Canvas2DPane() {
   const clipboardRef = useRef<ShapeLayer[]>([])
 
   const layers = useDocumentStore((s) => s.layers)
-  const order = useDocumentStore((s) => s.order)
+  const allOrder = useDocumentStore((s) => s.order)
+  const plates = useDocumentStore((s) => s.plates)
+  const activePlateId = useDocumentStore((s) => s.activePlateId)
+  // Only the active plate is drawn and editable here.
+  const order = useMemo(() => orderOnPlate({ layers, order: allOrder, plates }, activePlateId), [layers, allOrder, plates, activePlateId])
   const selection = useDocumentStore((s) => s.selection)
   const setSelection = useDocumentStore((s) => s.setSelection)
   const addShape = useDocumentStore((s) => s.addShape)

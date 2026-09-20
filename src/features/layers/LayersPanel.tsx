@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, useMemo } from 'react'
 import { ChevronDown, ChevronRight, Circle, CircleDashed, Eye, EyeOff, Folder, Lock, Pentagon, Plus, Square, Star, Unlock } from 'lucide-react'
-import { useDocumentStore } from '../../state/documentStore'
+import { useDocumentStore, orderOnPlate } from '../../state/documentStore'
 import type { ShapeKind, ShapeLayer } from '../../types/document'
 import { contourBounds, regionsToSvgPath } from '../../lib/geometry/primitives'
 import { LayerContextMenu, type ContextMenuState } from './LayerContextMenu'
@@ -53,7 +53,10 @@ const DRAG_THRESHOLD_PX = 4
 export function LayersPanel() {
   const layers = useDocumentStore((s) => s.layers)
   const groups = useDocumentStore((s) => s.groups)
-  const order = useDocumentStore((s) => s.order)
+  const allOrder = useDocumentStore((s) => s.order)
+  const plates = useDocumentStore((s) => s.plates)
+  const activePlateId = useDocumentStore((s) => s.activePlateId)
+  const order = useMemo(() => orderOnPlate({ layers, order: allOrder, plates }, activePlateId), [layers, allOrder, plates, activePlateId])
   const selection = useDocumentStore((s) => s.selection)
   const setSelection = useDocumentStore((s) => s.setSelection)
   const toggleVisibility = useDocumentStore((s) => s.toggleVisibility)
