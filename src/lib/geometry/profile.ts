@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { mergeVertices, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Point2, ProfilePoint, ShapeProfile } from '../../types/document'
 
 /** Wall subdivision (mm) a profiled or twisted body is built with, so the
@@ -29,10 +30,7 @@ export function applyTwist(geometry: THREE.BufferGeometry, twistDeg: number, dep
     pos.setZ(i, center.y + x * s + z * c)
   }
   pos.needsUpdate = true
-  geometry.computeVertexNormals()
-  geometry.computeBoundingBox()
-  geometry.computeBoundingSphere()
-  return geometry
+  return reshade(geometry)
 }
 
 /** Rings sorted by height, clamped into [0, depth]. */
@@ -83,6 +81,19 @@ export function profileScaleAt(profile: ShapeProfile, depth: number, z: number):
   return h00 * a.scale + h10 * span * ma + h01 * b.scale + h11 * span * mb
 }
 
+/** After bending the vertices, shade the surface again: smooth across the
+ * bend, crisp only at real corners (the same rule the plain body uses).
+ * Plain computeVertexNormals on the unindexed body would give every
+ * triangle its own normal — a faceted, "paper-folded" look. */
+function reshade(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+  const welded = mergeVertices(geometry, 1e-6)
+  geometry.dispose()
+  const creased = toCreasedNormals(welded, Math.PI / 3)
+  creased.computeBoundingBox()
+  creased.computeBoundingSphere()
+  return creased
+}
+
 /** Centre of a footprint (its bounding box), the point the profile scales
  * about — the same for a body and the cutters drilled into it. */
 export function footprintCenter(contour: Point2[]): Point2 {
@@ -110,10 +121,7 @@ export function applyProfile(geometry: THREE.BufferGeometry, profile: ShapeProfi
     pos.setZ(i, center.y + (pos.getZ(i) - center.y) * s)
   }
   pos.needsUpdate = true
-  geometry.computeVertexNormals()
-  geometry.computeBoundingBox()
-  geometry.computeBoundingSphere()
-  return geometry
+  return reshade(geometry)
 }
 
 /** Height ranges where the wall leans out more than 45°, which a printer
