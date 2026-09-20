@@ -71,16 +71,16 @@ export function PrinterPlate({ width, depth, widthMM, depthMM, dim = false }: Pr
       {/* metal carrier slab under the sheet, slightly larger, lighter rim */}
       <mesh position={[0, -thickness * 1.5, 0]} receiveShadow>
         <boxGeometry args={[width * 1.02, thickness, depth * 1.02]} />
-        <meshStandardMaterial color="#4a4d59" metalness={0.55} roughness={0.5} transparent={dim} opacity={dim ? 0.35 : 1} />
+        <meshStandardMaterial color="#4a4d59" metalness={0.55} roughness={0.5} transparent={dim} opacity={dim ? 0.3 : 1} />
       </mesh>
       {/* the textured print sheet itself */}
       <mesh position={[0, -thickness * 0.5, 0]} receiveShadow>
         <boxGeometry args={[width, thickness, depth]} />
-        <meshStandardMaterial color="#3a3d4a" metalness={0.2} roughness={0.75} transparent={dim} opacity={dim ? 0.35 : 1} />
+        <meshStandardMaterial color="#3a3d4a" metalness={0.2} roughness={0.75} transparent={dim} opacity={dim ? 0.3 : 1} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.0005, 0]} receiveShadow>
         <planeGeometry args={[width, depth]} />
-        <meshStandardMaterial map={texture} metalness={0.15} roughness={0.85} transparent={dim} opacity={dim ? 0.4 : 1} />
+        <meshStandardMaterial map={texture} metalness={0.15} roughness={0.85} transparent={dim} opacity={dim ? 0.3 : 1} />
       </mesh>
     </group>
   )

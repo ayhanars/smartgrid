@@ -258,8 +258,8 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
   // are subtracted one after another — a self-intersecting cutter is what
   // makes a boolean produce garbage.
   const groups = new Map<string, THREE.BufferGeometry[]>()
-  const addPart = (axis: THREE.Vector3, geometry: THREE.BufferGeometry) => {
-    const key = `${axis.x.toFixed(3)},${axis.y.toFixed(3)},${axis.z.toFixed(3)}`
+  const addPart = (axis: THREE.Vector3, geometry: THREE.BufferGeometry, group?: string) => {
+    const key = group ?? `${axis.x.toFixed(3)},${axis.y.toFixed(3)},${axis.z.toFixed(3)}`
     const list = groups.get(key) ?? []
     list.push(geometry)
     groups.set(key, list)
@@ -321,30 +321,81 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
       const dot = Math.max(-1, Math.min(1, prev.x * next.x + prev.y * next.y))
       return Math.min(Math.PI / 2, Math.acos(dot))
     }
-    for (let i = 0; i < n; i++) {
-      const a = contour[i]
+    // Walls are runs of segments between sharp corners: a curved outline
+    // (an oval, a rounded corner) is one continuous wall, so holes and
+    // slots follow it around instead of being confined to single tiny
+    // segments none of them fits on.
+    const SHARP = (20 * Math.PI) / 180
+    const segLen = contour.map((a, i) => {
       const b = contour[(i + 1) % n]
-      const len = Math.hypot(b.x - a.x, b.y - a.y)
-      if (len < ext.u) continue
-      const dir = dirs[i]
+      return Math.hypot(b.x - a.x, b.y - a.y)
+    })
+    const turnAbs = (i: number) => {
+      const prev = dirs[(i - 1 + n) % n]
+      const next = dirs[i]
+      return Math.acos(Math.max(-1, Math.min(1, prev.x * next.x + prev.y * next.y)))
+    }
+    const corners: number[] = []
+    for (let i = 0; i < n; i++) if (turnAbs(i) > SHARP) corners.push(i)
+    interface Chain {
+      segments: number[]
+      start: number | null
+      end: number | null
+    }
+    const chains: Chain[] = []
+    if (corners.length === 0) chains.push({ segments: Array.from({ length: n }, (_, i) => i), start: null, end: null })
+    else {
+      for (let k = 0; k < corners.length; k++) {
+        const from = corners[k]
+        const to = corners[(k + 1) % corners.length]
+        const segments: number[] = []
+        for (let i = from; ; i = (i + 1) % n) {
+          segments.push(i)
+          if ((i + 1) % n === to) break
+          if (segments.length > n) break
+        }
+        chains.push({ segments, start: from, end: to })
+      }
+    }
+    chains.forEach((chain, chainIndex) => {
+      const cum: number[] = []
+      let total = 0
+      for (const si of chain.segments) {
+        cum.push(total)
+        total += segLen[si]
+      }
+      if (total < ext.u) return
       // Along-wall clearance a tunnel of this reach needs from each end so
       // it can't meet the next wall's tunnels inside the corner.
-      const clearStart = Math.tan(turnAt(i) / 2)
-      const clearEnd = Math.tan(turnAt((i + 1) % n) / 2)
-      // outward normal for a positive-area (screen-space) contour
-      const nrm = { x: dir.y, y: -dir.x }
-      if (sides && !sides.has(sideOf(nrm.x, nrm.y))) continue
-      const inward = { x: -nrm.x, y: -nrm.y }
-      const axis = new THREE.Vector3(inward.x, 0, inward.y).normalize()
-      const U = new THREE.Vector3(dir.x, 0, dir.y)
+      const clearStart = chain.start == null ? 0 : Math.tan(turnAt(chain.start) / 2)
+      const clearEnd = chain.end == null ? 0 : Math.tan(turnAt(chain.end) / 2)
       rows.forEach((z, rowIndex) => {
         const stagger = perforation.pattern === 'staggered' && rowIndex % 2 === 1
-        for (const u of centersAlong(len, ext.u, colSpacing, stagger)) {
-          const px = a.x + dir.x * u
-          const py = a.y + dir.y * u
+        for (const u of centersAlong(total, ext.u, colSpacing, stagger)) {
+          // The segment this centre lies on, and the wall's direction there.
+          let k = chain.segments.length - 1
+          while (k > 0 && cum[k] > u) k--
+          const si = chain.segments[k]
+          const a = contour[si]
+          const dir = dirs[si]
+          const t = u - cum[k]
+          const px = a.x + dir.x * t
+          const py = a.y + dir.y * t
+          // outward normal for a positive-area (screen-space) contour
+          const nrm = { x: dir.y, y: -dir.x }
+          if (sides && !sides.has(sideOf(nrm.x, nrm.y))) continue
+          const inward = { x: -nrm.x, y: -nrm.y }
+          const axis = new THREE.Vector3(inward.x, 0, inward.y).normalize()
+          const U = new THREE.Vector3(dir.x, 0, dir.y)
+          // On a curve the flat hole face sits on a chord: reach further
+          // out by the sagitta so the surface is always broken through.
+          const bend = Math.max(turnAbs(si), turnAbs((si + 1) % n))
+          const curvature = bend / Math.max(segLen[si], 1e-6)
+          const overshoot = OVERSHOOT_MM + (curvature * (ext.u / 2) ** 2) / 2
           // How deep this hole goes: the set depth, else to the nearest
           // cavity behind this wall, else out the far side of the solid.
           let reach = holeDepth
+          let throughWall = false
           if (reach == null) {
             const cavity = rayToRings({ x: px, y: py }, inward, innerContours, 0)
             const exit = rayToRings({ x: px, y: py }, inward, [contour], 1e-6)
@@ -354,20 +405,25 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
             // pathological boolean.
             const blind = Math.min(BLIND_DEPTH_FACTOR * size, exit != null ? exit / 2 : Infinity)
             reach = cavity != null ? cavity + OVERSHOOT_MM : blind
+            throughWall = cavity != null
           }
-          if (u - ext.u / 2 < reach * clearStart || u + ext.u / 2 > len - reach * clearEnd) continue
+          if (u - ext.u / 2 < reach * clearStart || u + ext.u / 2 > total - reach * clearEnd) continue
           if (obstacles.length) {
             // Plan view of the tunnel, padded by the clearance.
             const hw = ext.u / 2 + POCKET_CLEARANCE_MM
-            const corner = (s: number, w: number) => ({ x: px + inward.x * s + dir.x * w, y: py + inward.y * s + dir.y * w })
+            const corner = (sd: number, w: number) => ({ x: px + inward.x * sd + dir.x * w, y: py + inward.y * sd + dir.y * w })
             const tunnel = [corner(-POCKET_CLEARANCE_MM, -hw), corner(-POCKET_CLEARANCE_MM, hw), corner(reach, hw), corner(reach, -hw)]
             if (blocked(tunnel, z - ext.v / 2 - POCKET_CLEARANCE_MM, z + ext.v / 2 + POCKET_CLEARANCE_MM)) continue
           }
           const center = new THREE.Vector3(px, z, py)
-          addPart(axis, prism(outline, center, U, up, axis, -OVERSHOOT_MM, reach))
+          // Tunnels through one wall into the cavity never meet each other
+          // (they stop at the cavity), so a whole wall — a curved one with
+          // a different direction per hole included — is one cutter and
+          // one boolean instead of one per direction.
+          addPart(axis, prism(outline, center, U, up, axis, -overshoot, reach), throughWall ? `wall:${chainIndex}` : undefined)
         }
       })
-    }
+    })
   }
 
   if (perforation.target === 'top' || perforation.target === 'both') {

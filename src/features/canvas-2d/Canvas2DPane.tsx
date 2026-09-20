@@ -114,6 +114,8 @@ export function Canvas2DPane() {
   // Only the active plate is drawn and editable here.
   const order = useMemo(() => orderOnPlate({ layers, order: allOrder, plates }, activePlateId), [layers, allOrder, plates, activePlateId])
   const setActivePlate = useDocumentStore((s) => s.setActivePlate)
+  const showAllPlates = useDocumentStore((s) => s.showAllPlates)
+  const artboardColor = useDocumentStore((s) => s.artboardColor)
   const moveShapesToPlate = useDocumentStore((s) => s.moveShapesToPlate)
   const activeIndex = Math.max(0, plates.findIndex((p) => p.id === activePlateId))
   const selection = useDocumentStore((s) => s.selection)
@@ -187,8 +189,8 @@ export function Canvas2DPane() {
         const slot = plateSlot(index, plates.length, ARTBOARD_WIDTH, ARTBOARD_HEIGHT)
         return { plate, index, dx: slot.x - active.x, dy: slot.y - active.y, order: orderOnPlate({ layers, order: allOrder, plates }, plate.id) }
       })
-      .filter((p) => p.plate.id !== activePlateId)
-  }, [plates, activeIndex, activePlateId, ARTBOARD_WIDTH, ARTBOARD_HEIGHT, layers, allOrder])
+      .filter((p) => p.plate.id !== activePlateId && showAllPlates)
+  }, [plates, activeIndex, activePlateId, ARTBOARD_WIDTH, ARTBOARD_HEIGHT, layers, allOrder, showAllPlates])
 
   // Switching plates re-bases the coordinates on the new plate: shift the
   // view by the same amount so every plate stays where it was on screen,
@@ -823,7 +825,7 @@ export function Canvas2DPane() {
         <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`}>
           {otherPlates.map(({ plate, dx, dy, order: plateOrder }) => (
             <g key={plate.id} className="canvas-2d__ghost-plate" transform={`translate(${dx} ${dy})`}>
-              <rect className="canvas-2d__artboard" x={0} y={0} width={ARTBOARD_WIDTH} height={ARTBOARD_HEIGHT} />
+              <rect className="canvas-2d__artboard" x={0} y={0} width={ARTBOARD_WIDTH} height={ARTBOARD_HEIGHT} style={{ fill: artboardColor, fillOpacity: 0.3 }} />
               <g className="canvas-2d__ghost-plate-shapes">
                 {plateOrder.map((id) => {
                   const layer = layers[id]
@@ -851,7 +853,7 @@ export function Canvas2DPane() {
               </text>
             </g>
           ))}
-          <rect className="canvas-2d__artboard" x={0} y={0} width={ARTBOARD_WIDTH} height={ARTBOARD_HEIGHT} />
+          <rect className="canvas-2d__artboard" x={0} y={0} width={ARTBOARD_WIDTH} height={ARTBOARD_HEIGHT} style={{ fill: artboardColor }} />
           {plates.length > 1 && (
             <text className="canvas-2d__plate-label canvas-2d__plate-label--active" x={0} y={-6 / zoom} fontSize={12 / zoom}>
               {plates[activeIndex]?.name}

@@ -749,3 +749,38 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Artboard colour swatches */
+.inspector-swatches {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inspector-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+}
+
+.inspector-swatch--on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+.inspector-swatch--custom {
+  display: inline-flex;
+  overflow: hidden;
+  background-image: conic-gradient(#f66, #fc6, #6f6, #6cf, #66f, #f6f, #f66);
+}
+
+.inspector-swatch--custom input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
