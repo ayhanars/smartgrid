@@ -1,4 +1,4 @@
-import { supabase } from './client'
+import { currentUserId, supabase } from './client'
 import type { DocumentSnapshot } from '../persistence/localProjects'
 
 export interface CloudProjectMeta {
@@ -49,8 +49,7 @@ export async function loadCloudProject(id: string): Promise<{ snapshot: Document
 
 /** Upserts the document; `thumbnail` is left untouched when undefined. */
 export async function saveCloudProject(id: string, snapshot: DocumentSnapshot, thumbnail?: string | null): Promise<CloudProjectMeta> {
-  const { data: userData } = await supabase.auth.getUser()
-  const owner_id = userData.user?.id
+  const owner_id = await currentUserId()
   if (!owner_id) throw new Error('Not signed in')
 
   const row: Partial<ProjectRow> = { id, owner_id, name: snapshot.name, data: snapshot }

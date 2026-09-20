@@ -1,4 +1,4 @@
-import { supabase } from './client'
+import { currentUserId, supabase } from './client'
 import type { AssetDefinition } from '../assets/types'
 
 interface AssetRow {
@@ -18,8 +18,7 @@ export async function listCloudAssets(): Promise<AssetDefinition[]> {
 
 export async function upsertCloudAssets(assets: AssetDefinition[]): Promise<void> {
   if (assets.length === 0) return
-  const { data: userData } = await supabase.auth.getUser()
-  const owner_id = userData.user?.id
+  const owner_id = await currentUserId()
   if (!owner_id) throw new Error('Not signed in')
   const rows = assets.map((a) => ({ id: a.id, owner_id, name: a.name, data: a }))
   const { error } = await supabase.from('user_assets').upsert(rows)

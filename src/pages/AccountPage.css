@@ -1,7 +1,11 @@
 .account {
-  min-height: 100vh;
-  background: var(--bg-app);
-  overflow-y: auto;
+  max-width: 640px;
+}
+
+.account__title h1 {
+  margin: 0 0 18px;
+  font-size: 22px;
+  font-weight: 600;
 }
 
 .account__header {
@@ -43,9 +47,7 @@
   flex-direction: column;
   gap: 16px;
   width: 100%;
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 32px 16px 80px;
+  padding: 0 0 40px;
 }
 
 .account__card {

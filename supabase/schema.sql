@@ -412,3 +412,168 @@ revoke all on function public.admin_stats() from public;
 revoke all on function public.admin_users(text, integer) from public;
 grant execute on function public.admin_stats() to authenticated;
 grant execute on function public.admin_users(text, integer) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Likes, comments and collections on community items.
+-- ---------------------------------------------------------------------------
+
+alter table public.community_items add column if not exists likes integer not null default 0;
+alter table public.community_items add column if not exists comments integer not null default 0;
+
+create table if not exists public.community_likes (
+  item_id uuid not null references public.community_items (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (item_id, user_id)
+);
+
+alter table public.community_likes enable row level security;
+
+drop policy if exists "Likes are visible to everyone" on public.community_likes;
+create policy "Likes are visible to everyone" on public.community_likes for select using (true);
+drop policy if exists "Users like as themselves" on public.community_likes;
+create policy "Users like as themselves" on public.community_likes for insert with check (auth.uid() = user_id);
+drop policy if exists "Users remove their own likes" on public.community_likes;
+create policy "Users remove their own likes" on public.community_likes for delete using (auth.uid() = user_id);
+
+create table if not exists public.community_comments (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references public.community_items (id) on delete cascade,
+  author_id uuid not null references public.profiles (id) on delete cascade,
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists community_comments_item_idx on public.community_comments (item_id, created_at);
+
+alter table public.community_comments enable row level security;
+
+drop policy if exists "Comments are visible to everyone" on public.community_comments;
+create policy "Comments are visible to everyone" on public.community_comments for select using (true);
+drop policy if exists "Signed-in users comment as themselves" on public.community_comments;
+create policy "Signed-in users comment as themselves" on public.community_comments for insert with check (auth.uid() = author_id);
+drop policy if exists "Authors edit their own comments" on public.community_comments;
+create policy "Authors edit their own comments" on public.community_comments for update using (auth.uid() = author_id) with check (auth.uid() = author_id);
+drop policy if exists "Authors, item owners and staff delete comments" on public.community_comments;
+create policy "Authors, item owners and staff delete comments" on public.community_comments for delete
+  using (auth.uid() = author_id or public.is_staff() or auth.uid() = (select owner_id from public.community_items ci where ci.id = item_id));
+
+drop trigger if exists community_comments_set_updated_at on public.community_comments;
+create trigger community_comments_set_updated_at
+  before update on public.community_comments
+  for each row
+  execute function public.set_updated_at();
+
+-- Counters on the item row, kept by triggers (the item guard lets these
+-- through via the same setting the download counter uses).
+create or replace function public.bump_community_counter()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target uuid := coalesce(new.item_id, old.item_id);
+  col text := case when tg_table_name = 'community_likes' then 'likes' else 'comments' end;
+begin
+  perform set_config('smartgrid.counting', 'on', true);
+  execute format('update public.community_items set %I = greatest(0, (select count(*) from public.%I where item_id = $1)) where id = $1', col, tg_table_name) using target;
+  perform set_config('smartgrid.counting', '', true);
+  return null;
+end;
+$$;
+
+drop trigger if exists community_likes_count on public.community_likes;
+create trigger community_likes_count after insert or delete on public.community_likes for each row execute function public.bump_community_counter();
+drop trigger if exists community_comments_count on public.community_comments;
+create trigger community_comments_count after insert or delete on public.community_comments for each row execute function public.bump_community_counter();
+
+-- The item guard must also let the counters move.
+create or replace function public.guard_community_item()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.is_user_request() and not public.is_staff() then
+    if new.featured is distinct from old.featured then new.featured := old.featured; end if;
+    if coalesce(current_setting('smartgrid.counting', true), '') <> 'on' then
+      if new.downloads is distinct from old.downloads then new.downloads := old.downloads; end if;
+      if new.likes is distinct from old.likes then new.likes := old.likes; end if;
+      if new.comments is distinct from old.comments then new.comments := old.comments; end if;
+    end if;
+    if new.status = 'removed' or old.status = 'removed' then new.status := old.status; end if;
+    if new.owner_id is distinct from old.owner_id then new.owner_id := old.owner_id; end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- Collections: a person's named sets of community models ("IKEA
+-- organizers", "desk gadgets"). Private by default; a public one can be
+-- shared by link.
+create table if not exists public.collections (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references public.profiles (id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 80),
+  description text not null default '',
+  is_public boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists collections_owner_idx on public.collections (owner_id, updated_at desc);
+
+alter table public.collections enable row level security;
+
+drop policy if exists "Own or public collections are visible" on public.collections;
+create policy "Own or public collections are visible" on public.collections for select using (is_public or auth.uid() = owner_id or public.is_staff());
+drop policy if exists "Users create their own collections" on public.collections;
+create policy "Users create their own collections" on public.collections for insert with check (auth.uid() = owner_id);
+drop policy if exists "Owners update their collections" on public.collections;
+create policy "Owners update their collections" on public.collections for update using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
+drop policy if exists "Owners and admins delete collections" on public.collections;
+create policy "Owners and admins delete collections" on public.collections for delete using (auth.uid() = owner_id or public.is_admin());
+
+drop trigger if exists collections_set_updated_at on public.collections;
+create trigger collections_set_updated_at before update on public.collections for each row execute function public.set_updated_at();
+
+create table if not exists public.collection_items (
+  collection_id uuid not null references public.collections (id) on delete cascade,
+  item_id uuid not null references public.community_items (id) on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (collection_id, item_id)
+);
+
+create index if not exists collection_items_item_idx on public.collection_items (item_id);
+
+alter table public.collection_items enable row level security;
+
+drop policy if exists "Items of visible collections are visible" on public.collection_items;
+create policy "Items of visible collections are visible" on public.collection_items for select
+  using (exists (select 1 from public.collections c where c.id = collection_id and (c.is_public or c.owner_id = auth.uid() or public.is_staff())));
+drop policy if exists "Owners add to their collections" on public.collection_items;
+create policy "Owners add to their collections" on public.collection_items for insert
+  with check (exists (select 1 from public.collections c where c.id = collection_id and c.owner_id = auth.uid()));
+drop policy if exists "Owners remove from their collections" on public.collection_items;
+create policy "Owners remove from their collections" on public.collection_items for delete
+  using (exists (select 1 from public.collections c where c.id = collection_id and c.owner_id = auth.uid()));
+
+-- Touch the collection so lists sort by recent activity.
+create or replace function public.touch_collection()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.collections set updated_at = now() where id = coalesce(new.collection_id, old.collection_id);
+  return null;
+end;
+$$;
+
+drop trigger if exists collection_items_touch on public.collection_items;
+create trigger collection_items_touch after insert or delete on public.collection_items for each row execute function public.touch_collection();

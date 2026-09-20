@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Camera, LogOut, ShieldCheck, Trash2 } from 'lucide-react'
+import { Camera, LogOut, ShieldCheck, Trash2 } from 'lucide-react'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { friendlyAuthError, MIN_PASSWORD_LENGTH } from '../features/auth/authErrors'
 import { removeAvatar, updateProfile, uploadAvatar } from '../lib/supabase/profiles'
@@ -34,14 +34,9 @@ export function AccountPage() {
 
   return (
     <div className="account">
-      <header className="account__header">
-        <button type="button" className="account__back" onClick={() => navigate('/')}>
-          <ArrowLeft size={15} />
-          All projects
-        </button>
+      <div className="account__title">
         <h1>Account</h1>
-      </header>
-
+      </div>
       <main className="account__main">
         <section className="account__card account__identity">
           <AvatarField userId={user.id} avatarUrl={avatarUrl} initial={name.slice(0, 1)} onChange={(url) => profile && setProfile({ ...profile, avatarUrl: url })} />

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Globe, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { isNetworkError } from '../lib/connectivity'
 import { useAuthStore } from '../features/auth/useAuthStore'
-import { UserMenu } from '../features/auth/UserMenu'
+import { PageHeader } from './HomeLayout'
 import { CommunityCard } from '../features/community/CommunityCard'
 import '../features/community/community.css'
 import './HomePage.css'
@@ -18,6 +18,7 @@ export function CommunityPage() {
   const user = useAuthStore((s) => s.user)
   const query = params.get('q') ?? ''
   const mine = params.get('mine') === '1' && user !== null
+  const sort = params.get('sort') === 'popular' ? 'popular' : 'newest'
   const [items, setItems] = useState<CommunityItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState(query)
@@ -28,7 +29,7 @@ export function CommunityPage() {
     if (!isSupabaseConfigured) return
     let cancelled = false
     setItems(null)
-    listCommunityItems({ query, ownerId: mine ? user?.id : undefined })
+    listCommunityItems({ query, ownerId: mine ? user?.id : undefined, sort })
       .then((list) => {
         if (!cancelled) {
           setItems(list)
@@ -41,12 +42,18 @@ export function CommunityPage() {
     return () => {
       cancelled = true
     }
-  }, [query, mine, user?.id])
+  }, [query, mine, sort, user?.id])
 
   const setQuery = (q: string) => {
     const next = new URLSearchParams(params)
     if (q.trim()) next.set('q', q.trim())
     else next.delete('q')
+    setParams(next, { replace: true })
+  }
+  const setSort = (v: 'newest' | 'popular') => {
+    const next = new URLSearchParams(params)
+    if (v === 'popular') next.set('sort', 'popular')
+    else next.delete('sort')
     setParams(next, { replace: true })
   }
   const setMine = (on: boolean) => {
@@ -57,27 +64,9 @@ export function CommunityPage() {
   }
 
   return (
-    <div className="home">
-      <header className="home__header">
-        <div className="home__brand">
-          <button type="button" className="account__back" onClick={() => navigate('/')}>
-            <ArrowLeft size={15} />
-            All projects
-          </button>
-        </div>
-        <div className="home__header-actions">
-          <UserMenu />
-        </div>
-      </header>
-      <main className="home__main">
-        <section className="home__section">
-          <div className="home__section-header">
-            <h2>
-              <Globe size={16} style={{ verticalAlign: '-2px', marginRight: 8 }} />
-              Community
-            </h2>
-            <span className="home__hint">Models people shared. Open a copy and make it yours.</span>
-          </div>
+    <div>
+      <PageHeader title="Community" hint="Models people shared. Open a copy and make it yours." />
+      <section>
           <div className="community-toolbar">
             <form
               className="community-search"
@@ -89,6 +78,14 @@ export function CommunityPage() {
               <Search size={14} />
               <input value={draft} placeholder="Search titles, descriptions and tags" aria-label="Search the community" onChange={(e) => setDraft(e.target.value)} onBlur={() => setQuery(draft)} />
             </form>
+            <div className="community-filter" role="group" aria-label="Sort">
+              <button type="button" aria-pressed={sort === 'newest'} onClick={() => setSort('newest')}>
+                Newest
+              </button>
+              <button type="button" aria-pressed={sort === 'popular'} onClick={() => setSort('popular')}>
+                Popular
+              </button>
+            </div>
             {user && (
               <div className="community-filter" role="group" aria-label="Filter">
                 <button type="button" aria-pressed={!mine} onClick={() => setMine(false)}>
@@ -115,8 +112,7 @@ export function CommunityPage() {
               ))}
             </div>
           )}
-        </section>
-      </main>
+      </section>
     </div>
   )
 }

@@ -509,3 +509,237 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Like / save / open row on the item page */
+.social-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.social-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.social-btn:hover {
+  background: var(--bg-hover);
+}
+
+.social-btn--liked {
+  color: #ff6b8a;
+  border-color: rgba(255, 107, 138, 0.45);
+}
+
+.social-btn--saved {
+  color: var(--accent);
+  border-color: rgba(77, 141, 255, 0.45);
+}
+
+.social-picker {
+  position: relative;
+}
+
+.social-picker .layer-context-menu.social-picker__menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  min-width: 240px;
+  z-index: 60;
+}
+
+.social-picker__title,
+.social-picker__empty {
+  padding: 6px 10px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.social-picker__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  color: white;
+}
+
+.social-picker__check--on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.social-picker__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.social-picker__count {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.social-picker__new {
+  display: flex;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.social-picker__new input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.social-picker__new button {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: white;
+  font-size: 12px;
+}
+
+.social-picker__new button:disabled {
+  opacity: 0.5;
+}
+
+/* Comments */
+.comments {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.comments h2 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.comments h2 span {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.comments__form {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 720px;
+  margin-bottom: 18px;
+}
+
+.comments__form textarea {
+  flex: 1;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.comments__form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.comments__none {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
+.comments__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+}
+
+.comment {
+  display: flex;
+  gap: 10px;
+}
+
+.comment__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.comment__meta strong {
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.comment__author-tag {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.comment__delete {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: 4px;
+  color: var(--text-faint);
+}
+
+.comment__delete:hover {
+  color: var(--danger);
+  background: var(--bg-hover);
+}
+
+.comment p {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.community-card__likes {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}

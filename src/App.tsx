@@ -1,6 +1,10 @@
 import { useEffect } from 'react'
 import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { HomePage } from './pages/HomePage'
+import { HomeLayout } from './pages/HomeLayout'
+import { RecentsPage } from './pages/RecentsPage'
+import { ProjectsPage } from './pages/ProjectsPage'
+import { CollectionsPage } from './pages/CollectionsPage'
+import { CollectionPage } from './pages/CollectionPage'
 import { EditorPage } from './pages/EditorPage'
 import { AccountPage } from './pages/AccountPage'
 import { CommunityPage } from './pages/CommunityPage'
@@ -25,13 +29,18 @@ function App() {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<HomePage />} />
         <Route path="/new" element={<NewProjectRedirect />} />
         <Route path="/p/:id" element={<EditorPage />} />
-        <Route path="/account" element={<AccountPage />} />
-        <Route path="/community" element={<CommunityPage />} />
-        <Route path="/c/:id" element={<CommunityItemPage />} />
-        <Route path="/admin" element={<AdminPage />} />
+        <Route element={<HomeLayout />}>
+          <Route path="/" element={<RecentsPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/collections" element={<CollectionsPage />} />
+          <Route path="/collections/:id" element={<CollectionPage />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/community" element={<CommunityPage />} />
+          <Route path="/c/:id" element={<CommunityItemPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <AuthGate />

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Box, Calendar, Copy, Download, Eye, EyeOff, Layers, Pencil, Star, Trash2 } from 'lucide-react'
+import { ArrowLeft, Box, Calendar, Copy, Download, Eye, EyeOff, Layers, MessageCircle, Pencil, Star, Trash2 } from 'lucide-react'
 import {
   deleteCommunityItem,
   getCommunityItem,
@@ -14,7 +14,7 @@ import { createLocalProject } from '../lib/persistence/localProjects'
 import { saveLocalThumbnail } from '../lib/persistence/thumbnails'
 import { isNetworkError } from '../lib/connectivity'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
-import { UserMenu } from '../features/auth/UserMenu'
+import { CollectionPicker, CommentsSection, LikeButton } from '../features/community/Social'
 import { Avatar } from '../features/community/CommunityCard'
 import { ProjectPreview3D } from './ProjectPreview3D'
 import '../features/community/community.css'
@@ -93,19 +93,12 @@ export function CommunityItemPage() {
     })
 
   return (
-    <div className="home">
-      <header className="home__header">
-        <div className="home__brand">
-          <button type="button" className="account__back" onClick={() => navigate('/community')}>
-            <ArrowLeft size={15} />
-            Community
-          </button>
-        </div>
-        <div className="home__header-actions">
-          <UserMenu />
-        </div>
-      </header>
-      <main className="home__main">
+    <div>
+      <button type="button" className="account__back" style={{ marginBottom: 12 }} onClick={() => navigate('/community')}>
+        <ArrowLeft size={15} />
+        Community
+      </button>
+      <div>
         {item === undefined ? (
           <div className="community-empty">Loading…</div>
         ) : item === null ? (
@@ -146,6 +139,10 @@ export function CommunityItemPage() {
                   {item.downloads} {item.downloads === 1 ? 'copy opened' : 'copies opened'}
                 </span>
                 <span>
+                  <MessageCircle size={12} />
+                  {item.comments} comment{item.comments === 1 ? '' : 's'}
+                </span>
+                <span>
                   <Layers size={12} />
                   {item.shapeCount} shape{item.shapeCount === 1 ? '' : 's'}
                 </span>
@@ -170,6 +167,10 @@ export function CommunityItemPage() {
                 <Copy size={15} />
                 Open a copy in the editor
               </button>
+              <div className="social-row">
+                <LikeButton itemId={item.id} count={item.likes} onCount={(likes) => setItem({ ...item, likes })} />
+                <CollectionPicker itemId={item.id} />
+              </div>
               <p className="community-item__hint">The copy is yours: it lands in your projects and edits never touch the shared model.</p>
 
               {item.notes && (
@@ -254,9 +255,10 @@ export function CommunityItemPage() {
               )}
               {error && <p className="account__error" role="alert">{error}</p>}
             </div>
+            <CommentsSection itemId={item.id} ownerId={item.ownerId} onCount={(comments) => setItem((it) => (it ? { ...it, comments } : it))} />
           </div>
         )}
-      </main>
+      </div>
     </div>
   )
 }
