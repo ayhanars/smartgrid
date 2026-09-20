@@ -238,13 +238,13 @@ export function CommunityItemPage() {
                   by {parent.author.displayName}
                 </span>
               )}
-              {item.parentId && item.changes && <p className="community-item__changes">{item.changes}</p>}
-              {item.superseded && (
+              {item.versionCount > 1 && (
                 <span className="community-item__parent">
                   <GitBranch size={13} />
-                  The author has published a newer version; see Versions below the picture.
+                  Version {item.versionCount} · earlier versions are under Versions below the picture
                 </span>
               )}
+              {(item.parentId || item.versionCount > 1) && item.changes && <p className="community-item__changes">{item.changes}</p>}
               <div className="community-item__tags">
                 <button type="button" className="category-badge" onClick={() => navigate(`/community/models?category=${item.category}`)}>
                   {categoryLabel(item.category)}

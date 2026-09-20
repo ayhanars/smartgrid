@@ -10,6 +10,7 @@ import { useAnalysisStore } from '../state/analysisStore'
 import { useViewStore } from '../state/viewStore'
 import { analyzeSupport } from '../lib/geometry/support'
 import { isTextEntryTarget } from '../lib/dom/isTextEntryTarget'
+import { useClipboard } from '../state/clipboardStore'
 import './AppShell.css'
 
 export type ViewMode = 'split' | '2d' | '3d'
@@ -75,6 +76,15 @@ export function AppShell() {
         const temporal = useDocumentStore.temporal.getState()
         if (e.shiftKey) temporal.redo()
         else temporal.undo()
+      } else if (mod && e.key.toLowerCase() === 'c' && selection.length) {
+        e.preventDefault()
+        useClipboard.getState().copy(selection)
+      } else if (mod && e.key.toLowerCase() === 'x' && selection.length) {
+        e.preventDefault()
+        useClipboard.getState().cut(selection)
+      } else if (mod && e.key.toLowerCase() === 'v' && useClipboard.getState().items.length) {
+        e.preventDefault()
+        useClipboard.getState().paste()
       }
     }
     window.addEventListener('keydown', onKeyDown)

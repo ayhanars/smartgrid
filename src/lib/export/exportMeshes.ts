@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type { ShapeLayer } from '../../types/document'
 import { type Plate, layerPlateId, shapeWorldBounds } from '../../state/documentStore'
+import { plateOrigin } from '../geometry/plateLayout'
 import { buildLayerCutters, buildLayerGeometries, perforationTessellation } from '../geometry/layerGeometry'
 import { cutHolesAsync } from '../geometry/csgClient'
 
@@ -20,18 +21,6 @@ export interface PlateLayout {
   /** Bed size in mm; each plate is a copy of the same bed. */
   bedWidth: number
   bedDepth: number
-}
-
-/** Bambu Studio keeps its plates one fifth of a plate apart, in a grid of
- * ceil(sqrt(n)) columns running right and then down (−Y). Objects are
- * stored in that global space, so every plate but the first is shifted. */
-export const PLATE_GAP_RATIO = 1 / 5
-
-export function plateOrigin(index: number, count: number, bedWidth: number, bedDepth: number): { x: number; y: number } {
-  const cols = Math.ceil(Math.sqrt(Math.max(1, count)))
-  const row = Math.floor(index / cols)
-  const col = index % cols
-  return { x: col * bedWidth * (1 + PLATE_GAP_RATIO), y: -row * bedDepth * (1 + PLATE_GAP_RATIO) }
 }
 
 function rectsOverlap(a: { x: number; y: number; width: number; height: number }, b: typeof a): boolean {

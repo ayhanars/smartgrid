@@ -2,47 +2,133 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Box, Clock, Download, ExternalLink, GitBranch } from 'lucide-react'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
-import { getCommunityItem, listCommunityItems, recordCommunityDownload, type CommunityItem } from '../../lib/supabase/community'
+import type { DocumentSnapshot } from '../../lib/persistence/localProjects'
+import {
+  getCommunityItem,
+  getItemVersionData,
+  listCommunityItems,
+  listItemVersions,
+  recordCommunityDownload,
+  type CommunityItem,
+  type CommunityItemFull,
+  type ItemVersion,
+} from '../../lib/supabase/community'
 import { useAuthStore } from '../auth/useAuthStore'
 import { defaultPrinterFor, downloadSnapshot } from './downloadModel'
 import { Avatar } from './CommunityCard'
 
+/** One row of the list: an archived version, the current model, or a
+ * model someone else published from a copy. */
+interface Row {
+  key: string
+  label: string
+  title: string
+  thumbnail: string | null
+  changes: string
+  bedPresetId: string
+  plateCount: number
+  shapeCount: number
+  createdAt: number
+  author?: CommunityItem['author'] & { id: string }
+  pending?: boolean
+  current?: boolean
+  /** Where to open it: nothing for the archived versions of this page. */
+  itemId?: string
+  load: () => Promise<{ snapshot: DocumentSnapshot; title: string } | null>
+  countDownload?: string
+}
+
 /**
- * Every model of one lineage — the original and each version published
- * from a copy of it, by its author or by anyone else — oldest first, with
- * a direct 3MF download for each. Shown on every page of the family.
+ * Every version of a model: the author's earlier versions (archived when
+ * they publish a new one), the current one, and the models other people
+ * published from a copy of it — each with a direct 3MF download.
  */
-export function VersionsPanel({ item }: { item: CommunityItem }) {
+export function VersionsPanel({ item }: { item: CommunityItemFull }) {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
-  const [family, setFamily] = useState<CommunityItem[]>([])
+  const [versions, setVersions] = useState<ItemVersion[]>([])
+  const [others, setOthers] = useState<CommunityItem[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    listItemVersions(item.id)
+      .then((list) => !cancelled && setVersions(list))
+      .catch(() => undefined)
     listCommunityItems({ rootId: item.rootId })
-      .then((list) => {
-        if (cancelled) return
-        // The page's own item is always in the list, even while it waits for review.
-        setFamily(list.some((v) => v.id === item.id) ? list : [...list, item].sort((a, b) => a.createdAt - b.createdAt))
-      })
+      .then((list) => !cancelled && setOthers(list.filter((v) => v.id !== item.id)))
       .catch(() => undefined)
     return () => {
       cancelled = true
     }
-  }, [item.id, item.rootId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item.id, item.rootId, item.versionCount])
 
-  if (family.length < 2) return null
+  const rows: Row[] = [
+    ...versions.map<Row>((v) => ({
+      key: v.id,
+      label: `v${v.version}`,
+      title: v.title,
+      thumbnail: v.thumbnail,
+      changes: v.changes,
+      bedPresetId: v.bedPresetId,
+      plateCount: v.plateCount,
+      shapeCount: v.shapeCount,
+      createdAt: v.createdAt,
+      load: async () => {
+        const snapshot = await getItemVersionData(v.id)
+        return snapshot ? { snapshot, title: `${v.title} v${v.version}` } : null
+      },
+      countDownload: item.id,
+    })),
+    {
+      key: item.id,
+      label: `v${item.versionCount}`,
+      title: item.title,
+      thumbnail: item.thumbnail,
+      changes: item.versionCount > 1 ? item.changes : '',
+      bedPresetId: item.bedPresetId,
+      plateCount: item.plateCount,
+      shapeCount: item.shapeCount,
+      createdAt: item.updatedAt,
+      pending: item.approval === 'pending',
+      current: true,
+      load: async () => ({ snapshot: item.data, title: item.title }),
+      countDownload: item.id,
+    },
+    ...others.map<Row>((v) => ({
+      key: v.id,
+      label: v.id === item.parentId ? 'Original' : v.parentId === item.id ? 'From this' : 'Related',
+      title: v.title,
+      thumbnail: v.thumbnail,
+      changes: v.changes,
+      bedPresetId: v.bedPresetId,
+      plateCount: v.plateCount,
+      shapeCount: v.shapeCount,
+      createdAt: v.createdAt,
+      author: { ...v.author, id: v.ownerId },
+      pending: v.approval === 'pending',
+      itemId: v.id,
+      load: async () => {
+        const full = await getCommunityItem(v.id)
+        return full ? { snapshot: full.data, title: full.title } : null
+      },
+      countDownload: user?.id === v.ownerId ? undefined : v.id,
+    })),
+  ]
 
-  const download = async (v: CommunityItem) => {
+  if (rows.length < 2) return null
+
+  const download = async (row: Row) => {
     if (busy) return
-    setBusy(v.id)
+    setBusy(row.key)
     setError(null)
     try {
-      const full = v.id === item.id && 'data' in item ? (item as CommunityItem & { data: Parameters<typeof downloadSnapshot>[0] }) : await getCommunityItem(v.id)
-      if (!full) throw new Error('This version is no longer available')
-      if (await downloadSnapshot(full.data, full.title, '3mf', defaultPrinterFor(full.data)) && user?.id !== v.ownerId) void recordCommunityDownload(v.id)
+      const loaded = await row.load()
+      if (!loaded) throw new Error('This version is no longer available')
+      if ((await downloadSnapshot(loaded.snapshot, loaded.title, '3mf', defaultPrinterFor(loaded.snapshot))) && row.countDownload && user?.id !== item.ownerId) {
+        void recordCommunityDownload(row.countDownload)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Download failed')
     } finally {
@@ -54,51 +140,55 @@ export function VersionsPanel({ item }: { item: CommunityItem }) {
     <section className="versions">
       <h2>
         <GitBranch size={15} />
-        Versions <span className="versions__count">{family.length}</span>
+        Versions <span className="versions__count">{rows.length}</span>
       </h2>
-      <p>The original and every version published from a copy of it. Download any of them as is, or open its page.</p>
+      <p>
+        {versions.length > 0 ? `${item.author.displayName} has published ${item.versionCount} versions of this model` : 'Every version of this model'}
+        {others.length > 0 ? `${versions.length > 0 ? ', and' : ':'} ${others.length} ${others.length === 1 ? 'model was' : 'models were'} published from a copy of it` : ''}. Download any of them as is.
+      </p>
       {error && <p className="auth-dialog__error">{error}</p>}
       <ol className="versions__list">
-        {family.map((v, i) => {
-          const current = v.id === item.id
-          const bed = getBedPreset(v.bedPresetId)
+        {rows.map((row) => {
+          const bed = getBedPreset(row.bedPresetId)
           return (
-            <li key={v.id} className={`versions__row ${current ? 'versions__row--current' : ''}`}>
-              <button type="button" className="versions__thumb" title={current ? 'This page' : `Open ${v.title}`} disabled={current} onClick={() => navigate(`/c/${v.id}`)}>
-                {v.thumbnail ? <img src={v.thumbnail} alt="" /> : <Box size={20} />}
+            <li key={row.key} className={`versions__row ${row.current ? 'versions__row--current' : ''}`}>
+              <button type="button" className="versions__thumb" title={row.itemId ? `Open ${row.title}` : row.title} disabled={!row.itemId} onClick={() => row.itemId && navigate(`/c/${row.itemId}`)}>
+                {row.thumbnail ? <img src={row.thumbnail} alt="" /> : <Box size={20} />}
               </button>
               <div className="versions__body">
                 <div className="versions__head">
-                  <span className="versions__tag">{i === 0 ? 'Original' : `v${i + 1}`}</span>
-                  <strong>{v.title}</strong>
-                  {current && <span className="versions__here">this page</span>}
-                  {v.approval === 'pending' && (
+                  <span className="versions__tag">{row.label}</span>
+                  <strong>{row.title}</strong>
+                  {row.current && <span className="versions__here">current</span>}
+                  {row.pending && (
                     <span className="approval-badge approval-badge--pending">
                       <Clock size={11} /> waiting for review
                     </span>
                   )}
                 </div>
                 <div className="versions__meta">
-                  <button type="button" className="versions__author" onClick={() => navigate(`/u/${v.ownerId}`)}>
-                    <Avatar name={v.author.displayName} url={v.author.avatarUrl} />
-                    {v.author.displayName}
-                  </button>
-                  <span>{new Date(v.createdAt).toLocaleDateString()}</span>
+                  {row.author && (
+                    <button type="button" className="versions__author" onClick={() => navigate(`/u/${row.author?.id}`)}>
+                      <Avatar name={row.author.displayName} url={row.author.avatarUrl} />
+                      {row.author.displayName}
+                    </button>
+                  )}
+                  <span>{new Date(row.createdAt).toLocaleDateString()}</span>
                   {bed && <span>{bed.label}</span>}
-                  {v.plateCount > 1 && <span>{v.plateCount} plates</span>}
+                  {row.plateCount > 1 && <span>{row.plateCount} plates</span>}
                   <span>
-                    {v.shapeCount} shape{v.shapeCount === 1 ? '' : 's'}
+                    {row.shapeCount} shape{row.shapeCount === 1 ? '' : 's'}
                   </span>
                 </div>
-                {v.changes && <p className="versions__changes">{v.changes}</p>}
+                {row.changes && <p className="versions__changes">{row.changes}</p>}
               </div>
               <div className="versions__actions">
-                <button type="button" className="versions__download" disabled={busy !== null} onClick={() => void download(v)}>
+                <button type="button" className="versions__download" disabled={busy !== null} onClick={() => void download(row)}>
                   <Download size={13} />
-                  {busy === v.id ? 'Preparing…' : '3MF'}
+                  {busy === row.key ? 'Preparing…' : '3MF'}
                 </button>
-                {!current && (
-                  <button type="button" className="versions__open" onClick={() => navigate(`/c/${v.id}`)}>
+                {row.itemId && (
+                  <button type="button" className="versions__open" onClick={() => navigate(`/c/${row.itemId}`)}>
                     <ExternalLink size={13} />
                     Open
                   </button>

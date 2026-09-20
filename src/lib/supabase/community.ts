@@ -44,9 +44,9 @@ export interface CommunityItem {
   changes: string
   /** The first model of this lineage (itself for an original). */
   rootId: string
-  /** The author published a newer version: still open and downloadable,
-   * but no longer in the listings. */
-  superseded: boolean
+  /** How many versions the author has published of this listing (1 = the
+   * first); older ones are archived in community_item_versions. */
+  versionCount: number
   /** Bed preset the model was designed for, from the stored document. */
   bedPresetId: string
   /** Number of build plates in the stored document. */
@@ -90,7 +90,7 @@ interface ItemRow {
   parent_id: string | null
   changes: string
   root_id: string | null
-  superseded: boolean | null
+  versions: { count: number }[] | null
   bed_preset_id: string | null
   plates: unknown
   created_at: string
@@ -99,7 +99,7 @@ interface ItemRow {
   profiles: { display_name: string; avatar_url: string | null; level: number } | null
 }
 
-const LIST_COLUMNS = 'id, owner_id, source_project_id, title, description, notes, tags, category, thumbnail, status, featured, downloads, likes, comments, approval, review_note, parent_id, changes, root_id, superseded, bed_preset_id:data->>bedPresetId, plates:data->plates, created_at, updated_at, shape_count:data->order, profiles!community_items_owner_id_fkey(display_name, avatar_url, level)'
+const LIST_COLUMNS = 'id, owner_id, source_project_id, title, description, notes, tags, category, thumbnail, status, featured, downloads, likes, comments, approval, review_note, parent_id, changes, root_id, versions:community_item_versions(count), bed_preset_id:data->>bedPresetId, plates:data->plates, created_at, updated_at, shape_count:data->order, profiles!community_items_owner_id_fkey(display_name, avatar_url, level)'
 
 const toItem = (row: ItemRow): CommunityItem => ({
   id: row.id,
@@ -121,7 +121,7 @@ const toItem = (row: ItemRow): CommunityItem => ({
   parentId: row.parent_id ?? null,
   changes: row.changes ?? '',
   rootId: row.root_id ?? row.id,
-  superseded: row.superseded === true,
+  versionCount: (row.versions?.[0]?.count ?? 0) + 1,
   bedPresetId: row.bed_preset_id ?? '',
   plateCount: Array.isArray(row.plates) && row.plates.length > 0 ? row.plates.length : 1,
   createdAt: Date.parse(row.created_at),
@@ -161,8 +161,6 @@ export async function listCommunityItems(options: ListOptions = {}): Promise<Com
     q = options.sort === 'popular' ? q.order('likes', { ascending: false }).order('downloads', { ascending: false }) : q.order('created_at', { ascending: false })
   }
   if (!options.includeUnpublished && !options.ownerId) q = q.eq('status', 'published').eq('approval', 'approved')
-  // Listings show the newest version of a model; the older ones live in its Versions list.
-  if (!options.includeUnpublished && !options.rootId && !options.ids) q = q.eq('superseded', false)
   if (options.pendingOnly) q = q.eq('approval', 'pending').neq('status', 'removed')
   if (options.parentId) q = q.eq('parent_id', options.parentId)
   if (options.category) q = q.eq('category', options.category)
@@ -393,4 +391,75 @@ export async function popularTags(query = '', limit = 12): Promise<{ tag: string
   const { data, error } = await supabase.rpc('popular_tags', { p_query: query, p_limit: limit })
   if (error) throw error
   return (data as { tag: string; uses: number }[]).map((r) => ({ tag: r.tag, uses: Number(r.uses) }))
+}
+
+/** An archived earlier state of a listing (see publish_item_version). */
+export interface ItemVersion {
+  id: string
+  itemId: string
+  version: number
+  title: string
+  thumbnail: string | null
+  changes: string
+  bedPresetId: string
+  plateCount: number
+  shapeCount: number
+  createdAt: number
+}
+
+const VERSION_COLUMNS = 'id, item_id, version, title, thumbnail, changes, created_at, bed_preset_id:data->>bedPresetId, plates:data->plates, shape_count:data->order'
+
+interface VersionRow {
+  id: string
+  item_id: string
+  version: number
+  title: string
+  thumbnail: string | null
+  changes: string
+  created_at: string
+  bed_preset_id: string | null
+  plates: unknown
+  shape_count: unknown
+}
+
+const toVersion = (r: VersionRow): ItemVersion => ({
+  id: r.id,
+  itemId: r.item_id,
+  version: r.version,
+  title: r.title,
+  thumbnail: r.thumbnail,
+  changes: r.changes ?? '',
+  bedPresetId: r.bed_preset_id ?? '',
+  plateCount: Array.isArray(r.plates) && r.plates.length > 0 ? r.plates.length : 1,
+  shapeCount: Array.isArray(r.shape_count) ? r.shape_count.length : 0,
+  createdAt: new Date(r.created_at).getTime(),
+})
+
+/** Earlier versions of a listing, oldest first. */
+export async function listItemVersions(itemId: string): Promise<ItemVersion[]> {
+  const { data, error } = await supabase.from('community_item_versions').select(VERSION_COLUMNS).eq('item_id', itemId).order('version', { ascending: true })
+  if (error) throw error
+  return (data as unknown as VersionRow[]).map(toVersion)
+}
+
+/** The stored document of an earlier version, for downloading it. */
+export async function getItemVersionData(versionId: string): Promise<DocumentSnapshot | null> {
+  const { data, error } = await supabase.from('community_item_versions').select('data').eq('id', versionId).maybeSingle()
+  if (error) throw error
+  return (data as { data: DocumentSnapshot } | null)?.data ?? null
+}
+
+/** Author only: archives the current model as a version and replaces it
+ * with `snapshot`; the listing, its likes, comments and downloads stay.
+ * Returns the new version number. */
+export async function publishItemVersion(itemId: string, snapshot: DocumentSnapshot, thumbnail: string | null, changes: string, sourceProjectId?: string): Promise<number> {
+  const { data, error } = await supabase.rpc('publish_item_version', {
+    p_item: itemId,
+    p_data: snapshot,
+    p_thumbnail: thumbnail,
+    p_changes: changes,
+    p_source_project: sourceProjectId ?? null,
+  })
+  if (error) throw error
+  return data as number
 }
