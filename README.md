@@ -19,7 +19,10 @@ layout is intentionally on hold pending a layout benchmark.
 - React + TypeScript + Vite
 - zustand + zundo for state and undo/redo
 - Three.js, @react-three/fiber, @react-three/drei for 3D rendering
-- three-bvh-csg for real boolean mesh subtraction (holes)
+- three-bvh-csg for real boolean mesh subtraction (holes) in a Web Worker;
+  straight through-holes are cut in 2D instead (`cutPlan.ts`), and every
+  finished cut is kept in IndexedDB (`csgCache.ts`, 200 MB, oldest out) so
+  a shape is cut once per device
 - polygon-clipping for 2D boolean ops (union/subtract/intersect/exclude)
 - Supabase for auth + cloud project storage (see `supabase/schema.sql`)
 - Deployed to GitHub Pages via GitHub Actions on push to `main`

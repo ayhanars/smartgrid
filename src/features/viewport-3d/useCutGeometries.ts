@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three'
 import type { Bounds, ShapeLayer } from '../../types/document'
 import { shapeWorldBounds } from '../../state/documentStore'
-import { buildLayerCutters, buildLayerGeometries, perforationTessellation } from '../../lib/geometry/layerGeometry'
+import { planCut } from '../../lib/geometry/cutPlan'
+import { loadCut, storeCut } from '../../lib/geometry/csgCache'
 import { cutHolesAsync, type CsgJob } from '../../lib/geometry/csgClient'
 import type { PositionedGeometry } from '../../lib/geometry/holeCut'
 import { SCENE_SCALE } from './sceneScale'
@@ -14,14 +15,16 @@ function rectsOverlap(a: Bounds, b: Bounds): boolean {
 /** Everything about a layer that changes its built geometry (not its
  * name, color, selection...), so a cut is redone only when it must be. */
 function geometryKey(layer: ShapeLayer): string {
-  const { name: _name, color: _color, opacity: _opacity, locked: _locked, ...rest } = layer
+  // Only what shapes the mesh: not the name, colour, ids or plate.
+  const { name: _name, color: _color, opacity: _opacity, locked: _locked, id: _id, plateId: _plate, groupId: _group, ...rest } = layer
   return JSON.stringify(rest)
 }
 
 interface CutJob {
   key: string
   bodies: THREE.BufferGeometry[]
-  holes: PositionedGeometry[]
+  needsCsg: boolean
+  holes: () => PositionedGeometry[]
   world: { worldX: number; worldY: number; worldZ: number }
 }
 
@@ -103,19 +106,11 @@ export function useCutGeometries(
       if (!job) {
         const world = toWorld(layer)
         const holeLayers = overlappingHoles.map((hid) => layers[hid])
-        // Cavities go first and, on a perforated body, are built at the
-        // same subdivision: a cavity's few huge faces split against tens
-        // of thousands of drilled-wall triangles takes ~40 s instead of 2.
-        const tessellate = perforationTessellation(layer)
-        const holes: PositionedGeometry[] = [
-          ...holeLayers.flatMap((holeLayer) => {
-            const holeWorld = toWorld(holeLayer)
-            return buildLayerGeometries(holeLayer, SCENE_SCALE, { tessellate }).map((geometry) => ({ geometry, ...holeWorld }))
-          }),
-          ...buildLayerCutters(layer, SCENE_SCALE, holeLayers).map((geometry) => ({ geometry, ...world })),
-        ]
-        if (holes.length === 0) continue
-        job = { key, bodies: buildLayerGeometries(layer, SCENE_SCALE), holes, world }
+        // Straight through-holes are cut in 2D right here; the rest (and
+        // the perforation) is what the worker gets. When nothing is left
+        // for it, the job is complete as built.
+        const plan = planCut(layer, holeLayers, SCENE_SCALE, toWorld)
+        job = { key, bodies: plan.bodies, needsCsg: plan.needsCsg, holes: plan.holes, world }
       }
       used.set(key, job)
       out[id] = job
@@ -138,29 +133,51 @@ export function useCutGeometries(
       }
     }
     for (const [id, job] of Object.entries(jobs)) {
+      if (!job.needsCsg) continue // cut in 2D already
       const cached = resultCache.current.get(job.key)
       if (cached) {
         setResults((r) => (r[id]?.key === job.key ? r : { ...r, [id]: { key: job.key, geometries: cached } }))
         continue
       }
       if (inFlight.current.has(job.key)) continue
-      const jobPromises = job.bodies.map((geo) => cutHolesAsync({ geometry: geo, ...job.world }, job.holes))
+      const remember = (geometries: THREE.BufferGeometry[]) => {
+        resultCache.current.set(job.key, geometries)
+        while (resultCache.current.size > RESULT_CACHE_MAX) {
+          const oldest = resultCache.current.keys().next().value
+          if (oldest === undefined) break
+          resultCache.current.delete(oldest)
+        }
+        setResults((r) => ({ ...r, [id]: { key: job.key, geometries } }))
+      }
+      // Cut on this device before? Then it is on disk, and the worker is
+      // only asked when it is not.
+      let cancelled = false
+      const jobPromises: CsgJob[] = []
       const handle: CsgJob = {
-        promise: Promise.all(jobPromises.map((j) => j.promise)).then((geometries) => {
-          inFlight.current.delete(job.key)
-          resultCache.current.set(job.key, geometries)
-          while (resultCache.current.size > RESULT_CACHE_MAX) {
-            const oldest = resultCache.current.keys().next().value
-            if (oldest === undefined) break
-            resultCache.current.delete(oldest)
-          }
-          setResults((r) => ({ ...r, [id]: { key: job.key, geometries } }))
-          return geometries[0]
-        }),
-        cancel: () => jobPromises.forEach((j) => j.cancel()),
+        promise: loadCut(job.key)
+          .then((stored) => {
+            if (cancelled) throw new Error('cancelled')
+            if (stored) return stored
+            const holes = job.holes()
+            jobPromises.push(...job.bodies.map((geo) => cutHolesAsync({ geometry: geo, ...job.world }, holes)))
+            return Promise.all(jobPromises.map((j) => j.promise)).then((geometries) => {
+              void storeCut(job.key, geometries)
+              return geometries
+            })
+          })
+          .then((geometries) => {
+            inFlight.current.delete(job.key)
+            remember(geometries)
+            return geometries[0]
+          }),
+        cancel: () => {
+          cancelled = true
+          jobPromises.forEach((j) => j.cancel())
+        },
       }
       handle.promise.catch((err) => {
         inFlight.current.delete(job.key)
+        if (cancelled) return
         // CSG on arbitrary/degenerate geometry is best-effort: leave this
         // shape uncut rather than taking the viewport down with it.
         console.error(`Hole cut failed for shape ${id}, rendering it uncut instead:`, err)
@@ -178,7 +195,8 @@ export function useCutGeometries(
     for (const [id, job] of Object.entries(jobs)) {
       uncutGeometriesById[id] = job.bodies
       const result = results[id]
-      if (result?.key === job.key) cutGeometriesById[id] = result.geometries
+      if (!job.needsCsg) cutGeometriesById[id] = job.bodies
+      else if (result?.key === job.key) cutGeometriesById[id] = result.geometries
       else {
         pending++
         // Keep the last cut of this shape on screen while the new one
