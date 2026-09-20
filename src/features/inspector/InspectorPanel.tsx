@@ -19,7 +19,7 @@ import {
   Pin,
   Trash2,
 } from 'lucide-react'
-import { shapeWorldBounds, useDocumentStore, type AlignMode, artboardSize, orderOnPlate, layerPlateId } from '../../state/documentStore'
+import { shapeWorldBounds, useDocumentStore, type AlignMode, artboardSize, orderOnPlate, layerPlateId, shellUnitSolid } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { orderedProfile, presetProfile, profileOverhangs, profileScaleAt, type ProfilePreset } from '../../lib/geometry/profile'
 import type { ProfilePoint, ShapeProfile } from '../../types/document'
@@ -45,7 +45,11 @@ export function InspectorPanel() {
   const duplicateShapes = useDocumentStore((s) => s.duplicateShapes)
   const removeShapes = useDocumentStore((s) => s.removeShapes)
 
-  const selectedLayer = selection.length === 1 ? (layers[selection[0]] ?? null) : null
+  // A hollowed shape (solid + its cavity) is edited as one thing.
+  const unitSolid = shellUnitSolid(layers, selection)
+  const selectedLayer = selection.length === 1 ? (layers[selection[0]] ?? null) : unitSolid
+  const multiCount = unitSolid ? 1 : selection.length
+  const effectIds = unitSolid ? [unitSolid.id] : selection
 
   return (
     <div className="inspector-panel">
@@ -55,7 +59,9 @@ export function InspectorPanel() {
             ? 'No selection'
             : selection.length === 1
               ? selectedLayer?.name
-              : `${selection.length} shapes selected`}
+              : unitSolid
+                ? `${unitSolid.name} · hollow`
+                : `${selection.length} shapes selected`}
         </span>
         {selection.length > 0 && (
           <div className="inspector-panel__selection-actions">
@@ -87,9 +93,9 @@ export function InspectorPanel() {
           storageKey="shape"
           followView
           tabs={[
-            { id: 'design', label: 'Design', content: <><AlignmentSection ids={selection} /><DesignTab layer={selectedLayer} multiCount={selection.length} /></> },
-            { id: '3d', label: '3D', content: <ThreeDTab layer={selectedLayer} multiCount={selection.length} /> },
-            { id: 'effects', label: 'Effects', content: <EffectsTab layer={selectedLayer} ids={selection} /> },
+            { id: 'design', label: 'Design', content: <><AlignmentSection ids={selection} /><DesignTab layer={selectedLayer} multiCount={multiCount} /></> },
+            { id: '3d', label: '3D', content: <ThreeDTab layer={selectedLayer} multiCount={multiCount} /> },
+            { id: 'effects', label: 'Effects', content: <EffectsTab layer={selectedLayer} ids={effectIds} /> },
           ]}
         />
       )}
@@ -314,7 +320,6 @@ function DesignTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
 
       {layer.isHole && <RecessedPocketSection layer={layer} />}
       {layer.isHole && <HoleSizePresetsSection layer={layer} />}
-      {!layer.isHole && <ShellSection layer={layer} />}
     </>
   )
 }

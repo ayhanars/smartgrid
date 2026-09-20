@@ -216,6 +216,19 @@ function platePatch(state: Pick<DocumentState, 'plates' | 'activePlateId'>): { p
 }
 
 /** Layer ids on one plate, in draw order. */
+/** When the selection is one solid together with its own shell cavities
+ * (what clicking a hollowed shape selects), the solid: the whole thing is
+ * edited through it, since the cavity is rebuilt from the solid anyway. */
+export function shellUnitSolid(layers: Record<string, ShapeLayer>, ids: string[]): ShapeLayer | null {
+  if (ids.length < 2) return null
+  const members = ids.map((id) => layers[id]).filter((l): l is ShapeLayer => !!l)
+  if (members.length !== ids.length) return null
+  const solids = members.filter((l) => !l.shellOf)
+  if (solids.length !== 1 || solids[0].isHole) return null
+  const solid = solids[0]
+  return members.every((l) => l === solid || l.shellOf?.solidId === solid.id) ? solid : null
+}
+
 export function orderOnPlate(state: Pick<DocumentState, 'layers' | 'order' | 'plates'>, plateId: string): string[] {
   return state.order.filter((id) => state.layers[id] && layerPlateId(state.layers[id], state.plates) === plateId)
 }

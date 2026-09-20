@@ -165,6 +165,8 @@ The body is tessellated and scaled per height (`profile.ts`); the shell
 cavity and the perforation cutters follow the same curve. Parts leaning
 out past 45° are flagged on the ruler and in the panel.
 
+A hollowed shape (solid + cavity, selected together) is edited as one
+thing through its solid: the cavity is rebuilt from it on every change.
 The right panel is tabbed: Design / 3D / Effects for a selection (shell
 and profile under 3D; pocket, texture, perforation and carve under
 Effects), Printer / Print for the document. Switching the editor to
