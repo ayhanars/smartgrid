@@ -1,4 +1,4 @@
-import { Box, Download, Star } from 'lucide-react'
+import { Box, Download, Heart, Star } from 'lucide-react'
 import type { CommunityItem } from '../../lib/supabase/community'
 import './community.css'
 
@@ -28,6 +28,10 @@ export function CommunityCard({ item, onOpen, showStatus }: { item: CommunityIte
           <span className="community-card__downloads" title="Copies opened">
             <Download size={11} />
             {item.downloads}
+          </span>
+          <span className="community-card__likes" title="Likes">
+            <Heart size={11} />
+            {item.likes}
           </span>
         </span>
       </div>

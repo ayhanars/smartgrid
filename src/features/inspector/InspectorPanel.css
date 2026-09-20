@@ -716,8 +716,9 @@
   opacity: 0.8;
 }
 
-.inspector-footer__menu {
+.inspector-footer .layer-context-menu.inspector-footer__menu {
   position: absolute;
+  top: auto;
   left: 12px;
   right: 12px;
   bottom: calc(100% - 4px);

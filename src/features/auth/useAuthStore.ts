@@ -34,15 +34,19 @@ export function authRedirectUrl(): string {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => {
-  const fetchProfile = async (user: User | null) => {
+  // A flaky first request must not leave the menu without a name or role:
+  // retry a few times, then give up until the next sign-in / refresh.
+  const fetchProfile = async (user: User | null, attempt = 0) => {
     if (!user) {
       set({ profile: null })
       return
     }
     try {
-      set({ profile: await loadProfile(user.id) })
+      const profile = await loadProfile(user.id)
+      if (get().user?.id === user.id) set({ profile })
     } catch (err) {
       console.warn('Could not load profile', err)
+      if (attempt < 4 && get().user?.id === user.id) window.setTimeout(() => void fetchProfile(user, attempt + 1), 1500 * (attempt + 1))
     }
   }
 

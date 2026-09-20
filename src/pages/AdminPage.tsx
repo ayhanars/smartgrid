@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Eye, EyeOff, ExternalLink, RefreshCw, Search, ShieldCheck, Star, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, ExternalLink, RefreshCw, Search, ShieldCheck, Star, Trash2 } from 'lucide-react'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
-import { UserMenu } from '../features/auth/UserMenu'
 import { Avatar } from '../features/community/CommunityCard'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { fetchAdminStats, fetchAdminUsers, setUserRole, type AdminStats, type AdminUser } from '../lib/supabase/admin'
@@ -35,14 +34,7 @@ export function AdminPage() {
 
   if (!user || !profile) return null
   if (!staff) {
-    return (
-      <div className="home">
-        <Header navigate={navigate} />
-        <main className="home__main">
-          <div className="community-empty">This page is for moderators and admins.</div>
-        </main>
-      </div>
-    )
+    return <div className="community-empty">This page is for moderators and admins.</div>
   }
 
   const tabs: { id: Tab; label: string }[] = [
@@ -52,9 +44,8 @@ export function AdminPage() {
   ]
 
   return (
-    <div className="home">
-      <Header navigate={navigate} />
-      <main className="home__main admin">
+    <div>
+      <div className="admin">
         <div className="admin__title">
           <ShieldCheck size={18} />
           <h1>Admin</h1>
@@ -70,24 +61,8 @@ export function AdminPage() {
         {tab === 'overview' && <Overview />}
         {tab === 'community' && <CommunityAdmin admin={admin} navigate={navigate} />}
         {tab === 'users' && <UsersAdmin admin={admin} selfId={user.id} />}
-      </main>
+      </div>
     </div>
-  )
-}
-
-function Header({ navigate }: { navigate: (to: string) => void }) {
-  return (
-    <header className="home__header">
-      <div className="home__brand">
-        <button type="button" className="account__back" onClick={() => navigate('/')}>
-          <ArrowLeft size={15} />
-          All projects
-        </button>
-      </div>
-      <div className="home__header-actions">
-        <UserMenu />
-      </div>
-    </header>
   )
 }
 

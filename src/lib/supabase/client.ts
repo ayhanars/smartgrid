@@ -21,3 +21,11 @@ export const supabase = createClient(supabaseUrl ?? 'https://placeholder.supabas
 export const functionsUrl = supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/functions/v1` : null
 
 export const supabaseAnonKeyValue = supabaseAnonKey ?? ''
+
+/** The signed-in user's id from the cached session (no network round trip),
+ * or null. Rows are still protected by RLS, so a stale id only fails the
+ * request rather than leaking anything. */
+export async function currentUserId(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.user.id ?? null
+}

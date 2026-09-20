@@ -39,7 +39,12 @@ export interface CutGeometries {
   pending: number
 }
 
-const RESULT_CACHE_MAX = 16
+const RESULT_CACHE_MAX = 48
+
+/** Finished cuts, shared by every viewport and preview on the page so a
+ * shape cut once (the editor, a thumbnail, a community spin) is not cut
+ * again when another component shows it. */
+const sharedResultCache = new Map<string, THREE.BufferGeometry[]>()
 
 /** Holes whose footprint overlaps a visible solid — the ones doing real
  * cutting right now (as opposed to a cutter parked off to the side). */
@@ -121,7 +126,7 @@ export function useCutGeometries(
 
   const [results, setResults] = useState<Record<string, CutResult>>({})
   const inFlight = useRef(new Map<string, CsgJob>())
-  const resultCache = useRef(new Map<string, THREE.BufferGeometry[]>())
+  const resultCache = useRef(sharedResultCache)
 
   useEffect(() => {
     const wanted = new Set(Object.values(jobs).map((j) => j.key))

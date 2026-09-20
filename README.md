@@ -95,6 +95,13 @@ locally, says so in the top bar, and uploads when the connection is back;
 project cards flag anything not yet in the cloud. "My assets" (shapes saved
 from a selection or a layer's "Save as asset") sync the same way.
 
+Home: a Figma-style sidebar (account, search, Recents, Community, then
+your Projects and Collections, Admin for staff). Community models can be
+liked, commented on and saved into collections (`community_likes`,
+`community_comments`, `collections` + `collection_items`; counters on the
+item row are kept by triggers). A collection is private unless its owner
+makes it public, which makes it shareable by link.
+
 Community: "Publish to community…" in a project's menu stores a *copy* of
 the project with a title, description, print notes and tags; the same menu
 entry later edits the listing or replaces the shared model with the
