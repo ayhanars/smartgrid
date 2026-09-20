@@ -16,12 +16,12 @@ import { isNetworkError } from '../lib/connectivity'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { CollectionPicker, CommentsSection, LikeButton } from '../features/community/Social'
 import { DownloadBox } from '../features/community/DownloadBox'
-import { CommunityCard } from '../features/community/CommunityCard'
+import { VersionsPanel } from '../features/community/VersionsPanel'
 import { TagInput } from '../features/community/TagInput'
 import { CATEGORIES, categoryLabel } from '../lib/supabase/community'
 import { loadLocalProject } from '../lib/persistence/localProjects'
 import { saveProjectSource } from '../lib/persistence/thumbnails'
-import { listCommunityItems, type CommunityItem } from '../lib/supabase/community'
+import type { CommunityItem } from '../lib/supabase/community'
 import { loadCloudProject } from '../lib/supabase/projects'
 import { Avatar } from '../features/community/CommunityCard'
 import { ProjectPreview3D } from './ProjectPreview3D'
@@ -41,16 +41,12 @@ export function CommunityItemPage() {
   const [live, setLive] = useState(false)
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [versions, setVersions] = useState<CommunityItem[]>([])
   const [parent, setParent] = useState<CommunityItem | null>(null)
 
-  // Lineage: approved versions of this model, and the model it came from.
+  // The model this one is a version of.
   useEffect(() => {
     if (!item) return
     let cancelled = false
-    listCommunityItems({ parentId: item.id })
-      .then((list) => !cancelled && setVersions(list))
-      .catch(() => undefined)
     if (item.parentId) {
       getCommunityItem(item.parentId)
         .then((p) => !cancelled && setParent(p))
@@ -179,17 +175,7 @@ export function CommunityItemPage() {
               </button>
             </div>
 
-            {versions.length > 0 && (
-              <section className="versions">
-                <h2>Versions</h2>
-                <p>Models other people published from a copy of this one.</p>
-                <div className="home__grid">
-                  {versions.map((v) => (
-                    <CommunityCard key={v.id} item={v} onOpen={() => navigate(`/c/${v.id}`)} />
-                  ))}
-                </div>
-              </section>
-            )}
+            <VersionsPanel item={item} />
             <CommentsSection itemId={item.id} ownerId={item.ownerId} onCount={(comments) => setItem((it) => (it ? { ...it, comments } : it))} />
             </div>
 
@@ -253,6 +239,12 @@ export function CommunityItemPage() {
                 </span>
               )}
               {item.parentId && item.changes && <p className="community-item__changes">{item.changes}</p>}
+              {item.superseded && (
+                <span className="community-item__parent">
+                  <GitBranch size={13} />
+                  The author has published a newer version; see Versions below the picture.
+                </span>
+              )}
               <div className="community-item__tags">
                 <button type="button" className="category-badge" onClick={() => navigate(`/community/models?category=${item.category}`)}>
                   {categoryLabel(item.category)}
@@ -293,7 +285,7 @@ export function CommunityItemPage() {
               </div>
               <p className="community-item__hint">
                 {isOwner
-                  ? 'Edits to the original are pushed to the community from the project menu (“Publish to community”). A copy starts a separate project you can publish as a version.'
+                  ? 'New versions are published from the project menu (“Community listing”). A copy starts a separate project you can publish as a version too.'
                   : 'The copy is yours: it lands in your projects and edits never touch the shared model. Publish it back later as a version of this one.'}
               </p>
 
@@ -345,7 +337,7 @@ export function CommunityItemPage() {
                       </button>
                     </div>
                   )}
-                  <p className="community-item__hint">To replace the shared model with a newer version, open the source project and choose “Community listing” from its menu.</p>
+                  <p className="community-item__hint">To publish a new version (the old one stays downloadable under Versions) or replace this one, open the source project and choose “Community listing” from its menu.</p>
                 </div>
               )}
 

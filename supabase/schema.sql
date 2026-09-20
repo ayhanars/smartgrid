@@ -1196,3 +1196,65 @@ as $$
 $$;
 
 grant execute on function public.popular_tags(text, integer) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Version families: every item knows the root model of its lineage, so a
+-- model page can list the original and every version in one query.
+-- ---------------------------------------------------------------------------
+
+alter table public.community_items add column if not exists root_id uuid references public.community_items (id) on delete set null;
+create index if not exists community_items_root_idx on public.community_items (root_id, created_at);
+
+create or replace function public.set_item_root()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.parent_id is not null then
+    select coalesce(p.root_id, p.id) into new.root_id from public.community_items p where p.id = new.parent_id;
+  end if;
+  if new.root_id is null then new.root_id := new.id; end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists community_items_root on public.community_items;
+create trigger community_items_root
+  before insert on public.community_items
+  for each row
+  execute function public.set_item_root();
+
+-- Items published before this column existed.
+with recursive lineage as (
+  select id, id as root from public.community_items where parent_id is null
+  union all
+  select c.id, l.root from public.community_items c join lineage l on c.parent_id = l.id
+)
+update public.community_items ci set root_id = l.root from lineage l where ci.id = l.id and ci.root_id is null;
+update public.community_items set root_id = id where root_id is null;
+
+-- When an author publishes a new version of their own model, the older one
+-- stays downloadable from the Versions list but leaves the listings.
+alter table public.community_items add column if not exists superseded boolean not null default false;
+
+create or replace function public.supersede_parent_version()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.parent_id is not null then
+    update public.community_items set superseded = true where id = new.parent_id and owner_id = new.owner_id;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists community_items_supersede on public.community_items;
+create trigger community_items_supersede
+  after insert on public.community_items
+  for each row
+  execute function public.supersede_parent_version();

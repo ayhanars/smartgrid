@@ -40,7 +40,10 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
   const [notes, setNotes] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [category, setCategory] = useState('other')
-  const [replaceModel, setReplaceModel] = useState(true)
+  /** For an already published project: push the model over the shared
+   * copy, publish it as a new version next to it, or only edit the texts. */
+  const [mode, setMode] = useState<'replace' | 'version' | 'texts'>('replace')
+  const [newChanges, setNewChanges] = useState('')
   const [status, setStatus] = useState<'published' | 'hidden'>('published')
   const [changes, setChanges] = useState('')
   const [asVersion, setAsVersion] = useState(true)
@@ -109,7 +112,12 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
     setBusy(true)
     setError(null)
     try {
-      if (existing) {
+      if (existing && mode === 'version') {
+        const model = await currentModel()
+        const item = await publishCommunityItem(projectId, model.snapshot, model.thumbnail, draft, { parentId: existing.id, changes: newChanges.trim() })
+        setNotice(staff ? `Published "${item.title}" as a new version; the previous one stays under Versions.` : `"${item.title}" was sent for review as a new version. The previous one stays available meanwhile.`, { label: 'View in community', to: `/c/${item.id}` })
+      } else if (existing) {
+        const replaceModel = mode === 'replace'
         const model = replaceModel ? await currentModel() : null
         await updateCommunityItem(existing.id, { ...draft, status, changes: changes.trim(), ...(model ? { snapshot: model.snapshot, thumbnail: model.thumbnail } : {}) })
         setNotice(replaceModel && !staff ? 'Community copy updated. A moderator will review the new model before it shows again.' : replaceModel ? 'Community copy updated with the current model.' : 'Community listing updated.', { label: 'View in community', to: `/c/${existing.id}` })
@@ -195,19 +203,37 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
               )}
             </div>
           )}
-          {existing?.parentId && (
-            <>
-              <label htmlFor="publish-changes">What changed in this version?</label>
-              <textarea id="publish-changes" value={changes} rows={2} maxLength={600} onChange={(e) => setChanges(e.target.value)} />
-            </>
-          )}
-
           {existing && (
-            <div className="publish-dialog__options">
+            <div className="publish-dialog__options" role="radiogroup" aria-label="What to publish">
               <label className="publish-dialog__check">
-                <input type="checkbox" checked={replaceModel} onChange={(e) => setReplaceModel(e.target.checked)} />
+                <input type="radio" name="publish-mode" checked={mode === 'replace'} onChange={() => setMode('replace')} />
                 Replace the shared model with the project as it is now
               </label>
+              <label className="publish-dialog__check">
+                <input type="radio" name="publish-mode" checked={mode === 'version'} onChange={() => setMode('version')} />
+                Publish as a new version <span className="publish-dialog__muted">(the current one stays downloadable under Versions)</span>
+              </label>
+              <label className="publish-dialog__check">
+                <input type="radio" name="publish-mode" checked={mode === 'texts'} onChange={() => setMode('texts')} />
+                Only update the texts above
+              </label>
+              {mode === 'version' ? (
+                <>
+                  <label htmlFor="publish-changes" className="publish-dialog__sublabel">
+                    What changed?
+                  </label>
+                  <textarea id="publish-changes" value={newChanges} rows={2} maxLength={600} placeholder="e.g. thicker floor, fits the Bambu A1 mini, fixed the lid" onChange={(e) => setNewChanges(e.target.value)} />
+                </>
+              ) : (
+                existing.parentId && (
+                  <>
+                    <label htmlFor="publish-changes" className="publish-dialog__sublabel">
+                      What changed in this version?
+                    </label>
+                    <textarea id="publish-changes" value={changes} rows={2} maxLength={600} onChange={(e) => setChanges(e.target.value)} />
+                  </>
+                )
+              )}
               <label className="publish-dialog__check">
                 <input type="checkbox" checked={status === 'published'} onChange={(e) => setStatus(e.target.checked ? 'published' : 'hidden')} />
                 Visible in the community {status === 'hidden' && <span className="publish-dialog__muted">(hidden: only you can see it)</span>}
@@ -229,7 +255,7 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
               </>
             )}
             <button type="submit" className="auth-dialog__submit publish-dialog__submit" disabled={busy || existing === undefined || !title.trim()}>
-              {busy ? 'Working…' : existing ? 'Save changes' : 'Publish'}
+              {busy ? 'Working…' : existing ? (mode === 'version' ? 'Publish new version' : 'Save changes') : 'Publish'}
             </button>
           </div>
         </div>

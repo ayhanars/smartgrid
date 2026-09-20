@@ -42,6 +42,15 @@ export interface CommunityItem {
   parentId: string | null
   /** The author's note on what changed in this version. */
   changes: string
+  /** The first model of this lineage (itself for an original). */
+  rootId: string
+  /** The author published a newer version: still open and downloadable,
+   * but no longer in the listings. */
+  superseded: boolean
+  /** Bed preset the model was designed for, from the stored document. */
+  bedPresetId: string
+  /** Number of build plates in the stored document. */
+  plateCount: number
   createdAt: number
   updatedAt: number
   author: { displayName: string; avatarUrl: string | null; level: number }
@@ -80,13 +89,17 @@ interface ItemRow {
   review_note: string
   parent_id: string | null
   changes: string
+  root_id: string | null
+  superseded: boolean | null
+  bed_preset_id: string | null
+  plates: unknown
   created_at: string
   updated_at: string
   shape_count: number | null
   profiles: { display_name: string; avatar_url: string | null; level: number } | null
 }
 
-const LIST_COLUMNS = 'id, owner_id, source_project_id, title, description, notes, tags, category, thumbnail, status, featured, downloads, likes, comments, approval, review_note, parent_id, changes, created_at, updated_at, shape_count:data->order, profiles!community_items_owner_id_fkey(display_name, avatar_url, level)'
+const LIST_COLUMNS = 'id, owner_id, source_project_id, title, description, notes, tags, category, thumbnail, status, featured, downloads, likes, comments, approval, review_note, parent_id, changes, root_id, superseded, bed_preset_id:data->>bedPresetId, plates:data->plates, created_at, updated_at, shape_count:data->order, profiles!community_items_owner_id_fkey(display_name, avatar_url, level)'
 
 const toItem = (row: ItemRow): CommunityItem => ({
   id: row.id,
@@ -107,6 +120,10 @@ const toItem = (row: ItemRow): CommunityItem => ({
   reviewNote: row.review_note ?? '',
   parentId: row.parent_id ?? null,
   changes: row.changes ?? '',
+  rootId: row.root_id ?? row.id,
+  superseded: row.superseded === true,
+  bedPresetId: row.bed_preset_id ?? '',
+  plateCount: Array.isArray(row.plates) && row.plates.length > 0 ? row.plates.length : 1,
   createdAt: Date.parse(row.created_at),
   updatedAt: Date.parse(row.updated_at),
   author: { displayName: row.profiles?.display_name || 'Someone', avatarUrl: row.profiles?.avatar_url ?? null, level: row.profiles?.level ?? 1 },
@@ -127,6 +144,8 @@ export interface ListOptions {
   includeUnpublished?: boolean
   /** Versions of this model. */
   parentId?: string
+  /** Every model of one lineage (the original and all versions), oldest first. */
+  rootId?: string
   /** Staff: only items waiting for review. */
   pendingOnly?: boolean
   category?: string
@@ -135,9 +154,15 @@ export interface ListOptions {
 
 /** Featured first, then newest. */
 export async function listCommunityItems(options: ListOptions = {}): Promise<CommunityItem[]> {
-  let q = supabase.from('community_items').select(LIST_COLUMNS).order('featured', { ascending: false })
-  q = options.sort === 'popular' ? q.order('likes', { ascending: false }).order('downloads', { ascending: false }) : q.order('created_at', { ascending: false })
+  let q = supabase.from('community_items').select(LIST_COLUMNS)
+  if (options.rootId) q = q.eq('root_id', options.rootId).order('created_at', { ascending: true })
+  else {
+    q = q.order('featured', { ascending: false })
+    q = options.sort === 'popular' ? q.order('likes', { ascending: false }).order('downloads', { ascending: false }) : q.order('created_at', { ascending: false })
+  }
   if (!options.includeUnpublished && !options.ownerId) q = q.eq('status', 'published').eq('approval', 'approved')
+  // Listings show the newest version of a model; the older ones live in its Versions list.
+  if (!options.includeUnpublished && !options.rootId && !options.ids) q = q.eq('superseded', false)
   if (options.pendingOnly) q = q.eq('approval', 'pending').neq('status', 'removed')
   if (options.parentId) q = q.eq('parent_id', options.parentId)
   if (options.category) q = q.eq('category', options.category)
