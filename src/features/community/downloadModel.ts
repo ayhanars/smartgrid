@@ -68,6 +68,7 @@ export async function downloadSnapshot(snapshot: DocumentSnapshot, title: string
   downloadBlob(
     write3mf(meshes, {
       plates: plates?.map((p) => p.name),
+      bambu: { bedPresetId: printer, printSettings: snapshot.printSettings },
       metadata: {
         Title: title,
         Printer: bed?.label,

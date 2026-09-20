@@ -7,6 +7,7 @@ import { buildBeveledGeometry } from './bevelExtrude'
 import { computeSafeBevel } from './offset'
 import { buildSimpleRegionGeometry } from './multiRegionExtrude'
 import { buildPerforationCutter } from './perforation'
+import { applyProfile, footprintCenter, profileTessellation } from './profile'
 import { difference, type MultiPolygon, type Polygon } from 'polygon-clipping'
 import type { ShapeRegion } from '../../types/document'
 
@@ -91,13 +92,17 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
 
   let geometries: THREE.BufferGeometry[]
   if (contour) {
+    const profileStep = profileTessellation(layer.profile, depth)
+    const requested = options.tessellate ?? perforationTessellation(layer)
     const geo = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop, {
       flare: layer.isHole && (layer.bevelMode ?? 'rim') === 'rim',
       texture: layer.texture ?? null,
       textureSign: ((layer.isHole ? 1 : -1) * (layer.texture?.relief === 'raised' ? -1 : 1)) as 1 | -1,
       textureTopCap: !layer.isHole,
-      tessellate: options.tessellate ?? perforationTessellation(layer),
+      tessellate: profileStep && requested ? Math.min(profileStep, requested) : (profileStep ?? requested),
     })
+    // A vase, a cone, a barrel: the footprint scaled along the height.
+    if (layer.profile && layer.profile.points.length > 0) applyProfile(geo, layer.profile, depth, footprintCenter(contour))
     geo.scale(scale, scale, scale)
     geometries = [geo]
   } else {
@@ -168,7 +173,11 @@ export function buildLayerCutters(layer: ShapeLayer, scale: number, holes: Shape
   body.scale(scale, scale, scale)
   const bake = rotationBake(body, layer)
   body.dispose()
+  const center = footprintCenter(contour)
   return cutters.map((cutter) => {
+    // Drilled into a profiled wall: the cutters follow the same curve so a
+    // hole starts outside the bulge and ends in the cavity, as designed.
+    if (layer.profile && layer.profile.points.length > 0) applyProfile(cutter, layer.profile, depth, center)
     cutter.scale(scale, scale, scale)
     return bake ? cutter.applyMatrix4(bake) : cutter
   })
@@ -219,7 +228,7 @@ const EPS = 1e-6
 export function isFlatHole(solid: ShapeLayer, hole: ShapeLayer): boolean {
   if (!hole.isHole || hole.shellOf) return false
   if (solid.transform.rotationX || solid.transform.rotationY || hole.transform.rotationX || hole.transform.rotationY) return false
-  if (solid.bevelBottom > 0 || solid.bevelTop > 0 || solid.texture || solid.perforation) return false
+  if (solid.bevelBottom > 0 || solid.bevelTop > 0 || solid.texture || solid.perforation || solid.profile) return false
   if (hole.bevelBottom > 0 || hole.bevelTop > 0 || hole.texture) return false
   const solidBottom = solid.transform.z
   const solidTop = solid.transform.z + Math.max(0.2, solid.extrusionDepth)

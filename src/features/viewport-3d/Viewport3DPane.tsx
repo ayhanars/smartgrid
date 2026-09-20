@@ -21,6 +21,7 @@ import { activeHoleIds, useCutGeometries } from './useCutGeometries'
 import { PrinterPlate } from './PrinterPlate'
 import { ThumbnailCapture, THUMBNAIL_HIDE } from './ThumbnailCapture'
 import { GhostPlate, plateOffset } from './GhostPlate'
+import { ProfileRuler } from './ProfileRuler'
 import { LayerContextMenu, type ContextMenuState } from '../layers/LayerContextMenu'
 import { PrintPreviewSlider } from './PrintPreviewSlider'
 import { PreviewCaps, type PreviewCapItem } from './PreviewCaps'
@@ -94,6 +95,7 @@ export function Viewport3DPane() {
   const gizmoMode = useViewStore((s) => s.gizmoMode)
   const setGizmoMode = useViewStore((s) => s.setGizmoMode)
   const tileVersion = useViewStore((s) => s.tileVersion)
+  const profileEditing = useViewStore((s) => s.profileEditing)
 
   // A pointer that is on (or has just used) a gizmo handle must never
   // re-select whatever mesh happens to sit under it — otherwise a bigger
@@ -349,7 +351,13 @@ export function Viewport3DPane() {
           </>
         )}
 
-        {primary && gizmoTarget && !printPreview && (
+        {profileEditing && primary && !primary.isHole && !printPreview && primary.regions.length === 1 && primary.regions[0].holes.length === 0 && (
+          <group name={THUMBNAIL_HIDE}>
+            <ProfileRuler layer={primary} artboardWidth={artboardWidth} artboardHeight={artboardHeight} controls={controlsRef.current} />
+          </group>
+        )}
+
+        {primary && gizmoTarget && !printPreview && !profileEditing && (
           <TransformControls
             ref={transformRef}
             object={gizmoTarget}

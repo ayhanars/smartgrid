@@ -9,6 +9,9 @@ import {
   AlignStartHorizontal,
   AlignStartVertical,
   AlignHorizontalSpaceBetween,
+  Plus,
+  Ruler,
+  X,
   AlignVerticalSpaceBetween,
   ChevronDown,
   ChevronRight,
@@ -17,6 +20,9 @@ import {
   Trash2,
 } from 'lucide-react'
 import { shapeWorldBounds, useDocumentStore, type AlignMode, artboardSize, orderOnPlate, layerPlateId } from '../../state/documentStore'
+import { useViewStore } from '../../state/viewStore'
+import { orderedProfile, presetProfile, profileOverhangs, profileScaleAt, type ProfilePreset } from '../../lib/geometry/profile'
+import type { ProfilePoint, ShapeProfile } from '../../types/document'
 import { InspectorFooter } from './InspectorFooter'
 import { IconButton } from '../../components/IconButton'
 import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, HOLE_SHAPES, INFILL_PATTERNS, defaultWallMargin, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
@@ -29,7 +35,6 @@ import { RotationDial } from './RotationDial'
 import { HeightSlider } from './HeightSlider'
 import { useAnalysisStore, visibleWarning } from '../../state/analysisStore'
 import { unitDropDelta, unitRest } from '../../lib/geometry/stacking'
-import { useViewStore } from '../../state/viewStore'
 import './InspectorPanel.css'
 
 const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
@@ -69,36 +74,81 @@ export function InspectorPanel() {
         <UnitToggle />
       </div>
 
-      <div className="inspector-panel__body">
-        {selection.length === 0 ? (
-          <>
-            <CollapsibleGroup title="Printer" defaultOpen>
-              <BedPresetsSection />
-              <ArtboardSection />
-            </CollapsibleGroup>
-            <CollapsibleGroup title="Print Settings" defaultOpen>
-              <PrintSettingsSection />
-            </CollapsibleGroup>
-          </>
-        ) : (
-          <>
-            <CollapsibleGroup title="Design" defaultOpen>
-              <AlignmentSection ids={selection} />
-              <DesignTab layer={selectedLayer} multiCount={selection.length} />
-            </CollapsibleGroup>
-            <CollapsibleGroup title="3D" defaultOpen>
-              <ThreeDTab layer={selectedLayer} multiCount={selection.length} />
-            </CollapsibleGroup>
-            {selection.length === 2 && (
-              <CollapsibleGroup title="Carve" defaultOpen>
-                <CarveSection ids={selection} />
-              </CollapsibleGroup>
-            )}
-          </>
-        )}
-      </div>
+      {selection.length === 0 ? (
+        <Tabs
+          storageKey="doc"
+          tabs={[
+            { id: 'printer', label: 'Printer', content: <><BedPresetsSection /><ArtboardSection /></> },
+            { id: 'print', label: 'Print', content: <PrintSettingsSection /> },
+          ]}
+        />
+      ) : (
+        <Tabs
+          storageKey="shape"
+          tabs={[
+            { id: 'design', label: 'Design', content: <><AlignmentSection ids={selection} /><DesignTab layer={selectedLayer} multiCount={selection.length} /></> },
+            { id: '3d', label: '3D', content: <ThreeDTab layer={selectedLayer} multiCount={selection.length} /> },
+            { id: 'effects', label: 'Effects', content: <EffectsTab layer={selectedLayer} ids={selection} /> },
+          ]}
+        />
+      )}
       <InspectorFooter />
     </div>
+  )
+}
+
+interface TabSpec {
+  id: string
+  label: string
+  content: ReactNode
+}
+
+/** The panel's sections as tabs; the chosen tab is remembered per kind of
+ * selection (document / shapes) so switching selections keeps your place. */
+function Tabs({ tabs, storageKey }: { tabs: TabSpec[]; storageKey: string }) {
+  const key = `smartgrid:inspector-tab:${storageKey}`
+  const [active, setActive] = useState(() => {
+    try {
+      return localStorage.getItem(key) ?? tabs[0].id
+    } catch {
+      return tabs[0].id
+    }
+  })
+  const current = tabs.find((t) => t.id === active) ?? tabs[0]
+  const choose = (id: string) => {
+    setActive(id)
+    try {
+      localStorage.setItem(key, id)
+    } catch {
+      /* private mode */
+    }
+  }
+  return (
+    <>
+      <div className="inspector-tabs" role="tablist">
+        {tabs.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={current.id === t.id} className={`inspector-tab ${current.id === t.id ? 'inspector-tab--active' : ''}`} onClick={() => choose(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="inspector-panel__body" role="tabpanel">
+        {current.content}
+      </div>
+    </>
+  )
+}
+
+/** Everything that removes or carves material: shell, pocket, texture,
+ * perforation, carve. */
+function EffectsTab({ layer, ids }: { layer: ShapeLayer | null; ids: string[] }) {
+  if (ids.length === 2) return <CarveSection ids={ids} />
+  if (!layer) return <EmptyState text="Select a single shape for shell, texture and perforation, or two shapes to carve one with the other." />
+  return (
+    <>
+      <TextureSection layer={layer} />
+      {!layer.isHole && <PerforationSection layer={layer} />}
+    </>
   )
 }
 
@@ -117,19 +167,6 @@ function UnitToggle() {
           {u}
         </button>
       ))}
-    </div>
-  )
-}
-
-function CollapsibleGroup({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="inspector-panel__group">
-      <button type="button" className="inspector-panel__group-header" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <span>{title}</span>
-      </button>
-      {open && <div className="inspector-panel__group-body">{children}</div>}
     </div>
   )
 }
@@ -364,8 +401,11 @@ const ALIGN_ACTIONS: { mode: AlignMode; label: string; icon: typeof AlignStartVe
 
 function AlignmentSection({ ids }: { ids: string[] }) {
   const alignShapes = useDocumentStore((s) => s.alignShapes)
+  const layers = useDocumentStore((s) => s.layers)
+  // A group counts as one thing: a lone group aligns to the artboard.
+  const units = new Set(ids.map((id) => layers[id]?.groupId ?? id)).size
   return (
-    <Section title="Alignment" action={<span className="inspector-section__hint">{ids.length > 1 ? 'to selection' : 'to artboard'}</span>}>
+    <Section title="Alignment" action={<span className="inspector-section__hint">{units > 1 ? 'to selection' : 'to artboard'}</span>}>
       <div className="inspector-align-row">
         <div className="inspector-align-group">
           {ALIGN_ACTIONS.slice(0, 3).map(({ mode, label, icon: Icon }) => (
@@ -381,11 +421,11 @@ function AlignmentSection({ ids }: { ids: string[] }) {
             </IconButton>
           ))}
         </div>
-        <div className="inspector-align-group" title={ids.length < 3 ? 'Select three or more shapes to space them evenly' : undefined}>
-          <IconButton size="md" aria-label="Space evenly across" disabled={ids.length < 3} onClick={() => alignShapes(ids, 'hspace')}>
+        <div className="inspector-align-group" title={units < 3 ? 'Select three or more shapes to space them evenly' : undefined}>
+          <IconButton size="md" aria-label="Space evenly across" disabled={units < 3} onClick={() => alignShapes(ids, 'hspace')}>
             <AlignHorizontalSpaceBetween size={16} />
           </IconButton>
-          <IconButton size="md" aria-label="Space evenly down" disabled={ids.length < 3} onClick={() => alignShapes(ids, 'vspace')}>
+          <IconButton size="md" aria-label="Space evenly down" disabled={units < 3} onClick={() => alignShapes(ids, 'vspace')}>
             <AlignVerticalSpaceBetween size={16} />
           </IconButton>
         </div>
@@ -1315,11 +1355,116 @@ function ThreeDTab({ layer, multiCount }: { layer: ShapeLayer | null; multiCount
           )
         )}
       </Section>
-      <TextureSection layer={layer} />
-      {!layer.isHole && <PerforationSection layer={layer} />}
+      {!layer.isHole && <ProfileSection layer={layer} />}
     </>
   )
 }
+
+const PROFILE_PRESETS: { id: ProfilePreset; label: string }[] = [
+  { id: 'straight', label: 'Straight' },
+  { id: 'bulge', label: 'Bulge' },
+  { id: 'taper', label: 'Taper' },
+  { id: 'flare', label: 'Flare' },
+  { id: 'waist', label: 'Waist' },
+]
+
+/** The width along the height — a vase, a cone, a barrel. Rings are set
+ * here or dragged on the ruler beside the shape in 3D. */
+function ProfileSection({ layer }: { layer: ShapeLayer }) {
+  const setProfile = useDocumentStore((s) => s.setProfile)
+  const profileEditing = useViewStore((s) => s.profileEditing)
+  const setProfileEditing = useViewStore((s) => s.setProfileEditing)
+  const depth = Math.max(0.2, layer.extrusionDepth)
+  const simple = layer.regions.length === 1 && layer.regions[0].holes.length === 0
+  const profile = layer.profile
+  const points = profile ? orderedProfile(profile, depth) : []
+  const bounds = shapeWorldBounds(layer)
+  const overhangs = profile ? profileOverhangs(profile, depth, Math.max(bounds.width, bounds.height) / 2) : []
+  const update = (next: ShapeProfile | undefined) => setProfile(layer.id, next && next.points.length > 0 ? next : undefined)
+  const setPoint = (index: number, patch: Partial<ProfilePoint>) => {
+    if (!profile) return
+    update({ ...profile, points: points.map((p, i) => (i === index ? { ...p, ...patch } : p)) })
+  }
+  if (!simple) {
+    return (
+      <Section title="Profile">
+        <p className="inspector-note">A profile needs a single-outline shape; this one was combined from several.</p>
+      </Section>
+    )
+  }
+  return (
+    <Section title="Profile" action={<span className="inspector-section__hint">vase · cone · barrel</span>}>
+      <div className="inspector-preset-chips">
+        {PROFILE_PRESETS.map((p) => {
+          const active = p.id === 'straight' ? !profile : false
+          return (
+            <button
+              key={p.id}
+              type="button"
+              className={`inspector-preset-chip ${active ? 'inspector-preset-chip--active' : ''}`}
+              onClick={() => {
+                update(presetProfile(p.id, depth))
+                if (p.id !== 'straight') setProfileEditing(true)
+              }}
+            >
+              {p.label}
+            </button>
+          )
+        })}
+      </div>
+      <div className="inspector-profile__tools">
+        <button type="button" className={`inspector-preset-chip ${profileEditing ? 'inspector-preset-chip--active' : ''}`} aria-pressed={profileEditing} onClick={() => setProfileEditing(!profileEditing)}>
+          <Ruler size={12} /> Ruler in 3D
+        </button>
+        {profile && (
+          <label className="inspector-profile__smooth">
+            <input type="checkbox" checked={profile.smooth} onChange={(e) => update({ ...profile, smooth: e.target.checked })} />
+            Smooth
+          </label>
+        )}
+        <button
+          type="button"
+          className="inspector-preset-chip"
+          onClick={() => {
+            const base = profile ?? { smooth: true, points: [{ z: 0, scale: 1 }, { z: depth, scale: 1 }] }
+            const zs = orderedProfile(base, depth)
+            // Halfway into the widest gap between rings.
+            let bestZ = depth / 2
+            let bestGap = -1
+            const edges = [0, ...zs.map((p) => p.z), depth]
+            for (let i = 1; i < edges.length; i++) {
+              if (edges[i] - edges[i - 1] > bestGap) {
+                bestGap = edges[i] - edges[i - 1]
+                bestZ = (edges[i] + edges[i - 1]) / 2
+              }
+            }
+            update({ ...base, points: [...zs, { z: bestZ, scale: profileScaleAt(base, depth, bestZ) }] })
+            setProfileEditing(true)
+          }}
+        >
+          <Plus size={12} /> Add ring
+        </button>
+      </div>
+      {points.length > 0 && (
+        <div className="inspector-profile__rings">
+          {points.map((p, i) => (
+            <div key={i} className="inspector-profile__ring">
+              <Field label={i === 0 ? 'Height' : ''} value={p.z} suffix="mm" onChange={(v) => setPoint(i, { z: Math.min(depth, Math.max(0, v)) })} />
+              <Field label={i === 0 ? 'Width' : ''} value={Math.round(p.scale * 100)} suffix="%" onChange={(v) => setPoint(i, { scale: Math.max(5, v) / 100 })} />
+              <button type="button" className="inspector-profile__remove" aria-label="Remove ring" onClick={() => update(profile ? { ...profile, points: points.filter((_, j) => j !== i) } : undefined)}>
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {overhangs.length > 0 && <p className="inspector-note inspector-note--warning">Leans out more than 45° between {overhangs.map((o) => `${round(o.from)}–${round(o.to)} mm`).join(', ')}: that part may need support to print.</p>}
+      <p className="inspector-note">{profile ? 'Drag a ring on the ruler in 3D: up/down for its height, in/out for its width. Click the ruler to add one.' : 'Pick a preset or add a ring, then shape it on the ruler in 3D.'}</p>
+    </Section>
+  )
+}
+
+
 
 function OrientationSection({ layer }: { layer: ShapeLayer }) {
   const selection = useDocumentStore((s) => s.selection)

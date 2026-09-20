@@ -193,6 +193,19 @@ export function defaultWallMargin(depth: number): number {
   return depth >= 12 ? 3 : 0
 }
 
+/** A width profile along the height: control rings at heights (mm from
+ * the shape's bottom) with the footprint's scale there (1 = as drawn).
+ * Between rings the width follows a smooth curve, or straight lines. */
+export interface ShapeProfile {
+  points: ProfilePoint[]
+  smooth: boolean
+}
+
+export interface ProfilePoint {
+  z: number
+  scale: number
+}
+
 export const DEFAULT_PERFORATION: Perforation = { shape: 'round', pattern: 'grid', size: 3, spacing: 5.5, target: 'walls', depth: null }
 
 export interface ShellLink {
@@ -233,6 +246,9 @@ export interface ShapeLayer {
   texture?: SurfaceTexture
   /** Optional pattern of real holes (see Perforation). */
   perforation?: Perforation
+  /** How wide the shape is along its height (a vase, a cone, a barrel):
+   * the footprint scaled per height. Absent = straight walls. */
+  profile?: ShapeProfile
   /** For hole cutters only: 'rim' (default) flares the bevels outward so
    * they round/countersink the mouth of the cut; 'shape' keeps the
    * cutter's own beveled edges, so a carved pocket has the tool's exact

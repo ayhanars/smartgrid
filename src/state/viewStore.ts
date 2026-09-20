@@ -27,6 +27,9 @@ interface ViewState {
    * sampled it too early rebuild. */
   tileVersion: number
   bumpTileVersion: () => void
+  /** The 3D profile ruler (rings you drag to shape a vase/cone) is shown. */
+  profileEditing: boolean
+  setProfileEditing: (on: boolean) => void
 }
 
 let noticeCounter = 0
@@ -46,4 +49,6 @@ export const useViewStore = create<ViewState>()((set) => ({
   setNotice: (text, link) => set({ notice: text ? { id: ++noticeCounter, text, link } : null }),
   tileVersion: 0,
   bumpTileVersion: () => set((s) => ({ tileVersion: s.tileVersion + 1 })),
+  profileEditing: false,
+  setProfileEditing: (on) => set({ profileEditing: on }),
 }))
