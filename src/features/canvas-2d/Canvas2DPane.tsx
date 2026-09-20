@@ -322,7 +322,12 @@ export function Canvas2DPane() {
         const rect = svg!.getBoundingClientRect()
         const local = { x: e.clientX - rect.left, y: e.clientY - rect.top }
         const docPoint = screenToDoc(local.x, local.y)
-        const factor = Math.exp(-e.deltaY * 0.0015)
+        // Same feel as the 3D orbit: a trackpad pinch step is a few
+        // percent, a mouse-wheel notch about a quarter. Line/page deltas
+        // (some mice) are normalised to pixels first, and one event never
+        // jumps more than that notch.
+        const delta = clamp(e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 100 : 1), -50, 50)
+        const factor = Math.exp(-delta * 0.006)
         const nextZoom = clamp(zoom * factor, MIN_ZOOM, MAX_ZOOM)
         setZoom(nextZoom)
         setPan({ x: local.x - docPoint.x * nextZoom, y: local.y - docPoint.y * nextZoom })
