@@ -23,6 +23,9 @@ export interface PartRecipe {
   /** Extrusion height, mm. */
   depth: number
   cornerRadius?: number
+  /** Fillet on both ends of the extrusion, mm (a peg rounded to fit a
+   * round hole). */
+  bevel?: number
   /** Height above the bed after the tilt is applied, mm. */
   z?: number
   rotation?: { x?: number; y?: number; z?: number }
