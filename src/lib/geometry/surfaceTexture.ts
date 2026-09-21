@@ -298,13 +298,19 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
     const len = Math.hypot(q.x - p.x, q.y - p.y) || 1
     return { x: (q.y - p.y) / len, y: -(q.x - p.x) / len }
   })
+  // Mitred: at a corner the offset is stretched so the relief on both
+  // faces stays a full `depth` tall right up to the edge (a plain unit
+  // normal would leave a notch there on every ridge). Capped so a very
+  // sharp corner cannot spike.
   const vertexNormals = ring.map((_, i) => {
     const a = edgeNormals[(i - 1 + n) % n]
     const b = edgeNormals[i]
     const x = a.x + b.x
     const y = a.y + b.y
     const len = Math.hypot(x, y)
-    return len < 1e-6 ? b : { x: x / len, y: y / len }
+    if (len < 1e-6) return b
+    const miter = Math.min(2, 2 / Math.max(1e-6, len * len)) // 1/cos(half angle), = 2/|a+b|²
+    return { x: (x / len) * miter, y: (y / len) * miter }
   })
 
   // Columns around the ring: each edge split by arc length.
@@ -317,12 +323,13 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
     const m = Math.max(1, Math.ceil(len / step))
     for (let k = 0; k < m; k++) {
       const t = k / m
+      // Along an edge the offset direction blends from one mitred corner
+      // vector to the next (their length carries the mitre).
       const nx = vertexNormals[i].x * (1 - t) + vertexNormals[(i + 1) % n].x * t
       const ny = vertexNormals[i].y * (1 - t) + vertexNormals[(i + 1) % n].y * t
-      const nl = Math.hypot(nx, ny) || 1
       // Which wall a column belongs to is decided by its own edge's normal,
       // not the corner-blended vertex normal used for displacement.
-      columns.push({ p: { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }, nrm: { x: nx / nl, y: ny / nl }, u: u + len * t, side: sideOf(edgeNormals[i].x, edgeNormals[i].y) })
+      columns.push({ p: { x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t }, nrm: { x: nx, y: ny }, u: u + len * t, side: sideOf(edgeNormals[i].x, edgeNormals[i].y) })
     }
     u += len
   }
@@ -351,9 +358,12 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
       const z = zA + (height * j) / rows
       // Height on the reference wall (the solid's, for a derived texture).
       const v = z - zA + phaseV
-      // Fade at the very ends (so the wall still meets caps/bevels) and at
-      // the edges of a height band, over about one pattern step.
-      const endFade = j === 0 || j === rows ? 0 : 1
+      // Taper at the very ends (so the wall still meets caps/bevels
+      // without a jagged rim) and at the edges of a height band, over
+      // about one pattern step.
+      const local = z - zA
+      const ease = Math.min(Math.max(step, Math.max(0.5, texture.size) * 0.5), height / 4)
+      const endFade = j === 0 || j === rows ? 0 : smoothstep(0, ease, local) * (1 - smoothstep(height - ease, height, local))
       const bandFade = Math.min(
         bandFrom == null ? 1 : smoothstep(bandFrom - step, bandFrom + step, v),
         bandTo == null ? 1 : 1 - smoothstep(bandTo - step, bandTo + step, v),
