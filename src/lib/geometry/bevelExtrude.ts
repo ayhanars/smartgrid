@@ -47,6 +47,13 @@ export interface BeveledGeometryOptions {
    * huge triangles cascades into thousands of splits (a 200-hole plate
    * took 6 s; pre-tessellated at 2 mm it takes 0.7 s). */
   tessellate?: number
+  /** Return the indexed geometry without normals: the caller will bend
+   * it (profile, twist) and shade it once at the end. */
+  deferShading?: boolean
+  /** Subdivide the caps too (default). A body that is only scaled or
+   * turned per height keeps its caps planar, so they can stay two plain
+   * fans — the caps are the slow part of a tessellation. */
+  tessellateCaps?: boolean
 }
 
 export function buildBeveledGeometry(
@@ -56,7 +63,7 @@ export function buildBeveledGeometry(
   bevelTopRequested: number,
   options: BeveledGeometryOptions = {},
 ): THREE.BufferGeometry {
-  const { flare = false, texture = null, textureSign = -1, textureTopCap = true, tessellate } = options
+  const { flare = false, texture = null, textureSign = -1, textureTopCap = true, tessellate, deferShading = false, tessellateCaps = true } = options
   // Wall and cap triangle winding below assumes the same orientation every
   // primitive shape has (positive signed area). A pen path clicked in the
   // other direction arrives reversed and would build inside-out — every
@@ -174,9 +181,10 @@ export function buildBeveledGeometry(
   // cross product, not just eyeballed, since getting this backwards is
   // exactly what silently back-face-culls a cap and looks like a hole.
   const bottomCapRing = dedupeRing(bottomCap)
-  if (tessellate) {
+  const capStep = tessellateCaps ? tessellate : undefined
+  if (capStep) {
     // Same grid as the top, flipped to face down.
-    const part = buildTexturedCap(bottomCapRing, 0, flat, tessellate)
+    const part = buildTexturedCap(bottomCapRing, 0, flat, capStep)
     for (let i = 0; i < part.indices.length; i += 3) {
       const b = part.indices[i + 1]
       part.indices[i + 1] = part.indices[i + 2]
@@ -192,8 +200,8 @@ export function buildBeveledGeometry(
   const topCapRing = dedupeRing(topCap)
   if (textureTop && textureTopCap) {
     appendPart(buildTexturedCap(topCapRing, depth, texture, undefined, textureSign))
-  } else if (tessellate) {
-    appendPart(buildTexturedCap(topCapRing, depth, flat, tessellate))
+  } else if (capStep) {
+    appendPart(buildTexturedCap(topCapRing, depth, flat, capStep))
   } else {
     const topTriangles = THREE.ShapeUtils.triangulateShape(toVector2(topCapRing), [])
     const topStart = addRingPoints(topCapRing, depth)
@@ -203,6 +211,7 @@ export function buildBeveledGeometry(
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geometry.setIndex(indices)
+  if (deferShading) return geometry
   geometry.computeVertexNormals()
   // Plain computeVertexNormals shares a vertex's normal across every face
   // touching it, so a sharp reflex corner (a star's inner notch, a plain

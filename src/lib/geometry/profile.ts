@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { mergeVertices, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { Point2, ProfilePoint, ShapeProfile } from '../../types/document'
 
 /** Wall subdivision (mm) a profiled or twisted body is built with, so the
@@ -15,12 +15,12 @@ export function profileTessellation(profile: ShapeProfile | undefined, depth: nu
 
 /** Turns every vertex of a Y-up geometry about `center` in the plan by the
  * twist's share of its height: a twisted vase. */
-export function applyTwist(geometry: THREE.BufferGeometry, twistDeg: number, depth: number, center: Point2): THREE.BufferGeometry {
+export function applyTwist(geometry: THREE.BufferGeometry, twistDeg: number, depth: number, center: Point2, zOffset = 0): THREE.BufferGeometry {
   if (Math.abs(twistDeg) < 1e-6) return geometry
   const pos = geometry.getAttribute('position') as THREE.BufferAttribute
   const total = (twistDeg * Math.PI) / 180
   for (let i = 0; i < pos.count; i++) {
-    const t = Math.min(1, Math.max(0, pos.getY(i) / depth))
+    const t = Math.min(1, Math.max(0, (pos.getY(i) + zOffset) / depth))
     const a = total * t
     const c = Math.cos(a)
     const s = Math.sin(a)
@@ -30,7 +30,7 @@ export function applyTwist(geometry: THREE.BufferGeometry, twistDeg: number, dep
     pos.setZ(i, center.y + x * s + z * c)
   }
   pos.needsUpdate = true
-  return reshade(geometry)
+  return geometry
 }
 
 /** Rings sorted by height, clamped into [0, depth]. */
@@ -42,7 +42,16 @@ export function orderedProfile(profile: ShapeProfile, depth: number): ProfilePoi
  * monotone cubic through them (no overshoot past a ring's value); flat
  * beyond the outermost rings. */
 export function profileScaleAt(profile: ShapeProfile, depth: number, z: number): number {
+  return scaleFromPoints(profile, orderedProfile(profile, depth), z)
+}
+
+/** The same curve, with the rings sorted once: for sampling many heights. */
+export function profileSampler(profile: ShapeProfile, depth: number): (z: number) => number {
   const pts = orderedProfile(profile, depth)
+  return (z) => scaleFromPoints(profile, pts, z)
+}
+
+function scaleFromPoints(profile: ShapeProfile, pts: ProfilePoint[], z: number): number {
   if (pts.length === 0) return 1
   if (pts.length === 1 || z <= pts[0].z) return pts[0].scale
   if (z >= pts[pts.length - 1].z) return pts[pts.length - 1].scale
@@ -85,10 +94,20 @@ export function profileScaleAt(profile: ShapeProfile, depth: number, z: number):
  * bend, crisp only at real corners (the same rule the plain body uses).
  * Plain computeVertexNormals on the unindexed body would give every
  * triangle its own normal — a faceted, "paper-folded" look. */
-function reshade(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
-  const welded = mergeVertices(geometry, 1e-6)
-  geometry.dispose()
-  const creased = toCreasedNormals(welded, Math.PI / 3)
+export function reshade(geometry: THREE.BufferGeometry, fast = false): THREE.BufferGeometry {
+  if (fast) {
+    // The extruder's wall grid shares vertices along the wall but not
+    // with the caps, so averaged normals are smooth on the wall and
+    // still break at the rim — only sharp outline corners go soft.
+    geometry.computeVertexNormals()
+    geometry.computeBoundingBox()
+    geometry.computeBoundingSphere()
+    return geometry
+  }
+  // toCreasedNormals welds by position itself, so an indexed body (the
+  // extruder's, before shading) needs no mergeVertices pass first.
+  const creased = toCreasedNormals(geometry, Math.PI / 3)
+  if (creased !== geometry) geometry.dispose()
   creased.computeBoundingBox()
   creased.computeBoundingSphere()
   return creased
@@ -113,15 +132,16 @@ export function footprintCenter(contour: Point2[]): Point2 {
 /** Scales every vertex of a Y-up geometry (built in mm, height along Y)
  * about `center` in the plan by the profile's scale at its height. Used
  * for bodies and for the cutters drilled into them, so they stay aligned. */
-export function applyProfile(geometry: THREE.BufferGeometry, profile: ShapeProfile, depth: number, center: Point2): THREE.BufferGeometry {
+export function applyProfile(geometry: THREE.BufferGeometry, profile: ShapeProfile, depth: number, center: Point2, zOffset = 0): THREE.BufferGeometry {
   const pos = geometry.getAttribute('position') as THREE.BufferAttribute
+  const scaleAt = profileSampler(profile, depth)
   for (let i = 0; i < pos.count; i++) {
-    const s = profileScaleAt(profile, depth, pos.getY(i))
+    const s = scaleAt(pos.getY(i) + zOffset)
     pos.setX(i, center.x + (pos.getX(i) - center.x) * s)
     pos.setZ(i, center.y + (pos.getZ(i) - center.y) * s)
   }
   pos.needsUpdate = true
-  return reshade(geometry)
+  return geometry
 }
 
 /** Height ranges where the wall leans out more than 45°, which a printer

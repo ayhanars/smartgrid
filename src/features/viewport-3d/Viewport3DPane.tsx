@@ -211,6 +211,7 @@ export function Viewport3DPane() {
   }
 
   const { cutGeometriesById, uncutGeometriesById, pending: cutsPending } = useCutGeometries(layers, order, artboardWidth, artboardHeight, tileVersion)
+  const editing = useDocumentStore((s) => s.editing)
   // A cutter that is doing its job is shown by the pocket it leaves, not
   // as a ghost on top of it — a few carves would otherwise pile up into a
   // haze of red glass. It reappears while selected (from the canvas or the
@@ -404,7 +405,7 @@ export function Viewport3DPane() {
       {cutsPending > 0 && (
         <div className="viewport-3d__busy" role="status">
           <span className="viewport-3d__busy-dot" />
-          Cutting holes{cutsPending > 1 ? ` in ${cutsPending} shapes` : ''}…
+          {editing ? 'Holes are cut when you let go' : `Cutting holes${cutsPending > 1 ? ` in ${cutsPending} shapes` : ''}…`}
         </div>
       )}
       {activeWarnings.length > 0 && (

@@ -169,6 +169,20 @@ out past 45° are flagged on the ruler and in the panel.
 
 A hollowed shape (solid + cavity, selected together) is edited as one
 thing through its solid: the cavity is rebuilt from it on every change.
+The cavity takes the solid's twist and silhouette in the solid's height
+frame (`bendFrame`), with the silhouette re-scaled so the wall keeps its
+thickness where the body narrows (a 45 % neck still has a full wall,
+instead of one the relief cuts through).
+
+Angles are set on a wheel (`AngleWheel`): the texture direction (folded
+to ±90°) and the twist (±180°). Profile rings are listed as they stand
+on the plate, topmost first; a shape printed upside down lists its
+bottom ring first. While a wheel, slider or gizmo is dragged the store's
+`editing` flag is on: the viewport shows shapes uncut with quick
+averaged normals and no outline edges, and the boolean cut runs once
+when the drag ends. A bent body is shaded once, after both bends, with
+planar caps (only a perforated body subdivides its caps), which took a
+twisted textured vase from ~2 s to ~0.2 s per rebuild.
 
 A wall texture has an angle (−90..90°, so flutes can run diagonally), a
 fade-out length at the bottom and top ends (the relief eases to flat

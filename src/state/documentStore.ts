@@ -78,6 +78,9 @@ export interface DocumentState {
   /** Back-to-front draw order (also top-to-bottom in the Layers panel, reversed for display). */
   order: string[]
   selection: string[]
+  /** A drag (slider, wheel, gizmo) is in progress: the viewport shows the
+   * shapes uncut until it ends, so every move stays responsive. */
+  editing: boolean
   /** Document-level, not per-shape — applies regardless of what's selected. */
   bedPresetId: string
   pinnedBedPresetId: string | null
@@ -397,6 +400,30 @@ function withDerivedTexture(solid: ShapeLayer, cavity: ShapeLayer): ShapeLayer {
   return cavity
 }
 
+/** The cavity's share of its solid's bends. The twist is the same; the
+ * profile is re-scaled so the wall keeps its thickness where the body
+ * narrows or widens: at a height where the solid is scaled by s, an
+ * outline r from the centre sits at s·r, so the cavity (inset by the
+ * wall w) must be at s·r − w, i.e. scaled by (s·r − w) / (r − w). Both
+ * are measured in the solid's height frame (`bendFrame`). */
+function withSolidBends(solid: ShapeLayer, cavity: ShapeLayer): ShapeLayer {
+  const { profile: _p, twist: _t, bendFrame: _f, ...rest } = cavity
+  const bends = (solid.profile && solid.profile.points.length > 0) || !!solid.twist
+  if (!bends) return rest
+  const out: ShapeLayer = { ...rest, bendFrame: { z: cavity.transform.z - solid.transform.z, depth: Math.max(0.2, solid.extrusionDepth) } }
+  if (solid.twist) out.twist = solid.twist
+  if (solid.profile && solid.profile.points.length > 0) {
+    const bounds = shapeWorldBounds(solid)
+    const r = Math.max(1e-3, Math.min(bounds.width, bounds.height) / 2)
+    const w = Math.min(cavity.shellOf?.wall ?? 0, r * 0.95)
+    out.profile = {
+      ...solid.profile,
+      points: solid.profile.points.map((p) => ({ z: p.z, scale: Math.max(0.05, (p.scale * r - w) / (r - w)) })),
+    }
+  }
+  return out
+}
+
 function applyCavity(cavity: ShapeLayer, built: ShellCavity): ShapeLayer {
   return {
     ...cavity,
@@ -438,7 +465,7 @@ function syncShells(state: DocumentStore, patch: Patch): Patch {
     if (solid === state.layers[link.solidId] && cavity === state.layers[id]) continue
     const rebuilt = buildShellCavity(solid, link)
     if (!rebuilt) continue
-    const next: ShapeLayer = withDerivedTexture(solid, { ...applyCavity(cavity, rebuilt), groupId: solid.groupId })
+    const next: ShapeLayer = withDerivedTexture(solid, withSolidBends(solid, { ...applyCavity(cavity, rebuilt), groupId: solid.groupId }))
     if (JSON.stringify(next) === JSON.stringify(cavity)) continue
     if (!changed) layers = { ...layers }
     changed = true
@@ -460,6 +487,7 @@ export const useDocumentStore = create<DocumentStore>()(
       showAllPlates: false,
       order: [],
       selection: [],
+      editing: false,
       bedPresetId: DEFAULT_BED_ID,
       pinnedBedPresetId: readPinnedBedPreset(),
       customBedWidth: 256,
@@ -938,6 +966,7 @@ export const useDocumentStore = create<DocumentStore>()(
         const { layers, order, groups } = get()
         transientSnapshot = { layers, order, groups }
         useDocumentStore.temporal.getState().pause()
+        set({ editing: true })
       },
 
       // zundo records the pre-change state on every tracked set, so while
@@ -950,17 +979,19 @@ export const useDocumentStore = create<DocumentStore>()(
         transientSnapshot = null
         if (!snapshot) {
           temporal.resume()
+          set({ editing: false })
           return
         }
         const { layers, order, groups } = get()
         const changed = layers !== snapshot.layers || order !== snapshot.order || groups !== snapshot.groups
         if (!changed) {
           temporal.resume()
+          set({ editing: false })
           return
         }
         set(snapshot)
         temporal.resume()
-        set({ layers, order, groups })
+        set({ layers, order, groups, editing: false })
       },
 
       // Sinks a hole (a magnet pocket) down to the BOTTOM of whatever solids
@@ -1010,7 +1041,7 @@ export const useDocumentStore = create<DocumentStore>()(
         const groupId = solid.groupId ?? generateId()
         const built = makeCavityLayer({ ...solid, groupId }, options, state.printSettings.layerHeight, groupId)
         if (!built) return null
-        const cavity = { ...built, ...(solid.profile ? { profile: solid.profile } : {}), ...(solid.twist ? { twist: solid.twist } : {}) }
+        const cavity = withSolidBends(solid, built)
         set((s) => {
           const layers = { ...s.layers }
           let groups = s.groups
@@ -1127,12 +1158,8 @@ export const useDocumentStore = create<DocumentStore>()(
         set((state) => {
           const layer = state.layers[id]
           if (!layer) return {}
-          const layers = { ...state.layers, [id]: { ...layer, profile } }
-          for (const lid of state.order) {
-            const l = state.layers[lid]
-            if (l?.shellOf?.solidId === id) layers[lid] = { ...l, profile }
-          }
-          return { layers }
+          // A shell cavity follows through syncShells.
+          return { layers: { ...state.layers, [id]: { ...layer, profile } } }
         }),
 
       setTwist: (id, twistIn) =>
@@ -1140,12 +1167,7 @@ export const useDocumentStore = create<DocumentStore>()(
           const layer = state.layers[id]
           if (!layer) return {}
           const twist = Math.abs(twistIn) < 1e-6 ? undefined : Math.max(-360, Math.min(360, twistIn))
-          const layers = { ...state.layers, [id]: { ...layer, twist } }
-          for (const lid of state.order) {
-            const l = state.layers[lid]
-            if (l?.shellOf?.solidId === id) layers[lid] = { ...l, twist }
-          }
-          return { layers }
+          return { layers: { ...state.layers, [id]: { ...layer, twist } } }
         }),
 
       setBevelMode: (id, mode) =>

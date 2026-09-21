@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type * as THREE from 'three'
 import type { Bounds, ShapeLayer } from '../../types/document'
-import { shapeWorldBounds } from '../../state/documentStore'
+import { shapeWorldBounds, useDocumentStore } from '../../state/documentStore'
 import { planCut } from '../../lib/geometry/cutPlan'
 import { loadCut, storeCut } from '../../lib/geometry/csgCache'
 import { cutHolesAsync, type CsgJob } from '../../lib/geometry/csgClient'
@@ -81,6 +81,10 @@ export function useCutGeometries(
   // Built inputs, reused across renders while a shape's key is unchanged:
   // building a big textured body is itself a few hundred ms.
   const builtCache = useRef(new Map<string, CutJob>())
+  // Mid-drag, nothing goes to the worker: the shapes show uncut (with
+  // quick shading) and the boolean runs once, for the state the drag
+  // ends on.
+  const editing = useDocumentStore((s) => s.editing)
 
   const jobs = useMemo(() => {
     const out: Record<string, CutJob> = {}
@@ -101,7 +105,7 @@ export function useCutGeometries(
       const overlappingHoles = holeIds.filter((hid) => hid !== id && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
       if (overlappingHoles.length === 0 && !layer.perforation) continue
 
-      const key = JSON.stringify([geometryKey(layer), overlappingHoles.map((hid) => geometryKey(layers[hid])), artboardWidth, artboardHeight, tileVersion])
+      const key = JSON.stringify([geometryKey(layer), overlappingHoles.map((hid) => geometryKey(layers[hid])), artboardWidth, artboardHeight, tileVersion, editing])
       let job = builtCache.current.get(key)
       if (!job) {
         const world = toWorld(layer)
@@ -109,7 +113,7 @@ export function useCutGeometries(
         // Straight through-holes are cut in 2D right here; the rest (and
         // the perforation) is what the worker gets. When nothing is left
         // for it, the job is complete as built.
-        const plan = planCut(layer, holeLayers, SCENE_SCALE, toWorld)
+        const plan = planCut(layer, holeLayers, SCENE_SCALE, toWorld, { fastShading: editing })
         job = { key, bodies: plan.bodies, needsCsg: plan.needsCsg, holes: plan.holes, world }
       }
       used.set(key, job)
@@ -117,13 +121,14 @@ export function useCutGeometries(
     }
     builtCache.current = used
     return out
-  }, [layers, order, artboardWidth, artboardHeight, tileVersion])
+  }, [layers, order, artboardWidth, artboardHeight, tileVersion, editing])
 
   const [results, setResults] = useState<Record<string, CutResult>>({})
   const inFlight = useRef(new Map<string, CsgJob>())
   const resultCache = useRef(sharedResultCache)
 
   useEffect(() => {
+    if (editing) return
     const wanted = new Set(Object.values(jobs).map((j) => j.key))
     // Drop queued work nobody wants any more.
     for (const [key, job] of inFlight.current) {
@@ -186,7 +191,7 @@ export function useCutGeometries(
       })
       inFlight.current.set(job.key, handle)
     }
-  }, [jobs])
+  }, [jobs, editing])
 
   return useMemo(() => {
     const cutGeometriesById: Record<string, THREE.BufferGeometry[]> = {}
@@ -201,9 +206,9 @@ export function useCutGeometries(
         pending++
         // Keep the last cut of this shape on screen while the new one
         // computes; a shape cut for the first time shows uncut meanwhile.
-        cutGeometriesById[id] = result?.geometries ?? job.bodies
+        cutGeometriesById[id] = editing ? job.bodies : (result?.geometries ?? job.bodies)
       }
     }
     return { cutGeometriesById, uncutGeometriesById, pending }
-  }, [jobs, results])
+  }, [jobs, results, editing])
 }

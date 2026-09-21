@@ -7,7 +7,7 @@ import { buildBeveledGeometry } from './bevelExtrude'
 import { computeSafeBevel } from './offset'
 import { buildSimpleRegionGeometry } from './multiRegionExtrude'
 import { buildPerforationCutter } from './perforation'
-import { applyProfile, applyTwist, footprintCenter, profileTessellation } from './profile'
+import { applyProfile, applyTwist, footprintCenter, profileTessellation, reshade } from './profile'
 import { difference, type MultiPolygon, type Polygon } from 'polygon-clipping'
 import type { ShapeRegion } from '../../types/document'
 
@@ -64,7 +64,7 @@ function rotationBake(geometry: THREE.BufferGeometry, layer: ShapeLayer): THREE.
 
 /** The effective outline the mesh is built from (rounded + polished) for
  * a simple shape, or null for a multi-region one. */
-function effectiveContour(layer: ShapeLayer) {
+export function effectiveContour(layer: ShapeLayer) {
   const isSimple = layer.regions.length === 1 && layer.regions[0].holes.length === 0
   if (!isSimple) return null
   const rounded = roundPolygonCorners(layer.regions[0].outer.points, layer.cornerRadius)
@@ -78,6 +78,9 @@ function effectiveContour(layer: ShapeLayer) {
 export interface LayerGeometryOptions {
   /** Subdivide faces at about this step (mm) — see BeveledGeometryOptions. */
   tessellate?: number
+  /** Shade a bent (profiled / twisted) body with plain averaged normals
+   * instead of crease detection: a tenth of the time, for mid-drag previews. */
+  fastShading?: boolean
 }
 
 /** Length of the outline the walls are built on (mm), for lining a cavity's
@@ -113,11 +116,19 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
       textureSign: ((layer.isHole ? 1 : -1) * (layer.texture?.relief === 'raised' ? -1 : 1)) as 1 | -1,
       textureTopCap: !layer.isHole,
       tessellate: profileStep && requested ? Math.min(profileStep, requested) : (profileStep ?? requested),
+      deferShading: !!profileStep,
+      // Only a perforated body needs subdivided caps (for the CSG); a
+      // profiled or twisted one keeps them planar.
+      tessellateCaps: !!requested,
     })
     // A vase, a cone, a barrel: the footprint scaled along the height; a
-    // twisted vase: turned along it.
-    if (layer.profile && layer.profile.points.length > 0) geo = applyProfile(geo, layer.profile, depth, footprintCenter(contour))
-    if (layer.twist) geo = applyTwist(geo, layer.twist, depth, footprintCenter(contour))
+    // twisted vase: turned along it. Shaded once, after both bends.
+    if (profileStep) {
+      const frame = layer.bendFrame ?? { z: 0, depth }
+      if (layer.profile && layer.profile.points.length > 0) geo = applyProfile(geo, layer.profile, frame.depth, footprintCenter(contour), frame.z)
+      if (layer.twist) geo = applyTwist(geo, layer.twist, frame.depth, footprintCenter(contour), frame.z)
+      geo = reshade(geo, options.fastShading)
+    }
     geo.scale(scale, scale, scale)
     geometries = [geo]
   } else {
@@ -193,8 +204,11 @@ export function buildLayerCutters(layer: ShapeLayer, scale: number, holes: Shape
     // Drilled into a profiled wall: the cutters follow the same curve so a
     // hole starts outside the bulge and ends in the cavity, as designed.
     let cutter = built
-    if (layer.profile && layer.profile.points.length > 0) cutter = applyProfile(cutter, layer.profile, depth, center)
-    if (layer.twist) cutter = applyTwist(cutter, layer.twist, depth, center)
+    const bent = (layer.profile && layer.profile.points.length > 0) || !!layer.twist
+    const frame = layer.bendFrame ?? { z: 0, depth }
+    if (layer.profile && layer.profile.points.length > 0) cutter = applyProfile(cutter, layer.profile, frame.depth, center, frame.z)
+    if (layer.twist) cutter = applyTwist(cutter, layer.twist, frame.depth, center, frame.z)
+    if (bent) cutter = reshade(cutter)
     cutter.scale(scale, scale, scale)
     return bake ? cutter.applyMatrix4(bake) : cutter
   })

@@ -4,7 +4,12 @@ import { Edges } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import type { ShapeLayer } from '../../types/document'
 import { buildLayerGeometries } from '../../lib/geometry/layerGeometry'
+import { useDocumentStore } from '../../state/documentStore'
 import { SCENE_SCALE } from './sceneScale'
+
+/** Bodies above this many triangles get no outline edges. */
+const EDGE_TRIANGLE_LIMIT = 40000
+const triangleCount = (g: THREE.BufferGeometry) => (g.index ? g.index.count : g.getAttribute('position').count) / 3
 import { useViewStore } from '../../state/viewStore'
 
 // Only creases sharper than this get an outline segment. The default 15°
@@ -61,10 +66,11 @@ export function ExtrudedShapeMesh({
 }: ExtrudedShapeMeshProps) {
   // A custom texture tile decoding late bumps tileVersion -> rebuild.
   const tileVersion = useViewStore((s) => s.tileVersion)
+  const editing = useDocumentStore((s) => s.editing)
   const geometries = useMemo(
-    (): THREE.BufferGeometry[] => cutGeometries ?? buildLayerGeometries(layer, SCENE_SCALE),
+    (): THREE.BufferGeometry[] => cutGeometries ?? buildLayerGeometries(layer, SCENE_SCALE, { fastShading: editing }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cutGeometries, layer, tileVersion],
+    [cutGeometries, layer, tileVersion, editing],
   )
 
   // The shape's local center — the outer group sits here so a gizmo's
@@ -108,28 +114,32 @@ export function ExtrudedShapeMesh({
       visible={!hidden}
     >
       <group position={[-center.x, -center.y, -center.z]}>
-        {geometries.map((geo, i) => (
-          <mesh key={i} geometry={geo} raycast={hidden ? () => null : undefined}>
-            <meshPhysicalMaterial
-              color={layer.isHole ? '#ff5c5c' : layer.color}
-              wireframe={wireframe}
-              transparent={opacity < 1}
-              opacity={opacity}
-              side={preview ? THREE.DoubleSide : THREE.FrontSide}
-              clippingPlanes={clippingPlanes ?? null}
-              roughness={0.42}
-              metalness={0.02}
-              clearcoat={0.12}
-              clearcoatRoughness={0.5}
-              envMapIntensity={0.9}
-            />
-            {warning ? (
-              <Edges geometry={outlineGeometries?.[i]} color={warning === 'critical' ? '#ff5c5c' : '#ffb648'} lineWidth={2} threshold={OUTLINE_CREASE_DEG} />
-            ) : (
-              isSelected && <Edges geometry={outlineGeometries?.[i]} color="#4d8dff" lineWidth={2} threshold={OUTLINE_CREASE_DEG} />
-            )}
-          </mesh>
-        ))}
+        {geometries.map((geo, i) => {
+          // Outline edges are found by walking every triangle, which on a
+          // textured or twisted body (hundreds of thousands) costs more
+          // than the body itself — and reads as noise there anyway. Also
+          // skipped mid-drag, so each move stays quick.
+          const showEdges = !editing && triangleCount(outlineGeometries?.[i] ?? geo) <= EDGE_TRIANGLE_LIMIT
+          return (
+            <mesh key={i} geometry={geo} raycast={hidden ? () => null : undefined}>
+              <meshPhysicalMaterial
+                color={layer.isHole ? '#ff5c5c' : layer.color}
+                wireframe={wireframe}
+                transparent={opacity < 1}
+                opacity={opacity}
+                side={preview ? THREE.DoubleSide : THREE.FrontSide}
+                clippingPlanes={clippingPlanes ?? null}
+                roughness={0.42}
+                metalness={0.02}
+                clearcoat={0.12}
+                clearcoatRoughness={0.5}
+                envMapIntensity={0.9}
+              />
+              {showEdges && warning && <Edges geometry={outlineGeometries?.[i]} color={warning === 'critical' ? '#ff5c5c' : '#ffb648'} lineWidth={2} threshold={OUTLINE_CREASE_DEG} />}
+              {showEdges && !warning && isSelected && <Edges geometry={outlineGeometries?.[i]} color="#4d8dff" lineWidth={2} threshold={OUTLINE_CREASE_DEG} />}
+            </mesh>
+          )
+        })}
       </group>
     </group>
   )
