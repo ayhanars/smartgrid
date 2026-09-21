@@ -1,11 +1,12 @@
 import type { ProductTemplate } from './types'
 import { skadisContainer, skadisHook } from './skadis'
+import { brorBin, brorHook } from './bror'
 
 export * from './types'
 export { SKADIS } from './skadis'
 
 /** Every product the Create panel offers, in display order. */
-export const PRODUCT_TEMPLATES: ProductTemplate[] = [skadisContainer, skadisHook]
+export const PRODUCT_TEMPLATES: ProductTemplate[] = [skadisContainer, skadisHook, brorBin, brorHook]
 
 export function productTemplate(id: string): ProductTemplate | undefined {
   return PRODUCT_TEMPLATES.find((t) => t.id === id)

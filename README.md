@@ -209,7 +209,12 @@ family is IKEA SKÅDIS: a container with mounting hooks on its back (one
 per 40 mm of width, tab and lip undersides at 45° so it prints standing
 with no support) and a J-hook that prints lying flat. A product whose
 parts print as one body (`fuse`) is unioned in the CSG worker at export
-time, so the hooks and the box leave as a single object.
+time, so the hooks and the box leave as a single object. The second
+family is IKEA BROR (a bin hanging from one perforated upright by
+stacked tabs, and a J-hook): its slot width, slot height, pitch and
+sheet thickness are fields with starting values rather than verified
+constants, to be checked against the rail. The tab-through-a-slot
+profile both families share lives in `mount.ts`.
 
 A wall texture has an angle (−90..90°, so flutes can run diagonally), a
 fade-out length at the bottom and top ends (the relief eases to flat

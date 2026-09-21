@@ -1,5 +1,5 @@
-import type { Point2 } from '../../types/document'
 import { bool, num, str, type PartRecipe, type ProductSpec, type ProductTemplate } from './types'
+import { jHook, mountProfile, standingPath, type MountDims } from './mount'
 
 /**
  * IKEA SKÅDIS pegboard, as measured on the boards: 5 × 15 mm slots on a
@@ -24,36 +24,8 @@ export const SKADIS = {
 
 const COLOR = '#4d8dff'
 
-/**
- * Side profile of a mounting tab, as (h, b): h up from the tab's own
- * bottom, b backward from the mounting face (negative = into the part).
- * The lip's underside and the tab's underside are 45° so the part
- * prints standing up with no support.
- */
-function tabProfile(embed: number): { points: { h: number; b: number }[]; height: number } {
-  const { tabThickness: t, lipThickness: lt, gap, lipDrop } = SKADIS
-  const height = t + Math.max(lipDrop, gap + embed)
-  const top = height
-  const back = gap + lt
-  const points = [
-    { h: top, b: -embed },
-    { h: top, b: back },
-    { h: top - t - lipDrop, b: back },
-    // Chamfer under the lip, up toward the board.
-    { h: top - t - lipDrop + lt, b: gap },
-    { h: top - t, b: gap },
-    // Gusset under the tab, down to the part.
-    { h: top - t - (gap + embed), b: -embed },
-  ]
-  return { points, height }
-}
-
-/** Side profile → canvas path standing up (rotation y 90°): canvas x
- * becomes height, canvas y stays depth; the extrusion becomes the width,
- * centred on the profile's x centre. */
-function standingPath(points: { h: number; b: number }[], centerX: number, height: number, faceY: number): Point2[] {
-  return points.map((p) => ({ x: centerX - height / 2 + p.h, y: faceY - p.b }))
-}
+/** The SKÅDIS tab in the shared mount-profile terms. */
+const SKADIS_MOUNT: MountDims = { tabThickness: SKADIS.tabThickness, lipThickness: SKADIS.lipThickness, gap: SKADIS.gap, lipDrop: SKADIS.lipDrop }
 
 function hookCount(width: number, choice: string): number {
   if (choice !== 'auto') return Math.max(1, parseInt(choice, 10) || 1)
@@ -99,7 +71,7 @@ export const skadisContainer: ProductTemplate = {
 
     // The board is behind the box: toward the top of the canvas. Leave
     // room above the box outline for the hooks.
-    const { points: profile, height: hookHeight } = tabProfile(Math.min(1, wall / 2))
+    const { points: profile, height: hookHeight } = mountProfile(SKADIS_MOUNT, Math.min(1, wall / 2))
     const hookReach = SKADIS.gap + SKADIS.lipThickness
     const boxY = hookReach
     const parts: PartRecipe[] = [
@@ -153,30 +125,6 @@ export const skadisHook: ProductTemplate = {
     const arm = num(spec, 'arm', 4)
     const tip = num(spec, 'tip', 8)
     const plateH = num(spec, 'plate', 20)
-    const plateT = 4
-    const { tabThickness: t, lipThickness: lt, gap, lipDrop } = SKADIS
-    const top = plateH + t
-    const back = gap + lt
-    // (b, h): b backward from the board face (negative = in front), h up.
-    const profile: { b: number; h: number }[] = [
-      { b: 0, h: top },
-      { b: back, h: top },
-      { b: back, h: top - t - lipDrop },
-      { b: gap, h: top - t - lipDrop + lt },
-      { b: gap, h: top - t },
-      { b: 0, h: top - t },
-      { b: 0, h: 0 },
-      { b: -(plateT + reach), h: 0 },
-      { b: -(plateT + reach), h: arm + tip },
-      { b: -(plateT + reach) + Math.min(arm, reach), h: arm + tip },
-      { b: -(plateT + reach) + Math.min(arm, reach), h: arm },
-      { b: -plateT, h: arm },
-      { b: -plateT, h: top },
-    ]
-    // Lying flat on the canvas: x is the depth axis (front to the left),
-    // y is height (top of the hook toward the top of the canvas).
-    const offset = plateT + reach
-    const points: Point2[] = profile.map((p) => ({ x: p.b + offset, y: top - p.h }))
-    return { width: offset + back, height: top, parts: [{ name: 'Hook', color: COLOR, outline: { kind: 'path', points }, depth: width }] }
+    return jHook({ mount: SKADIS_MOUNT, reach, width, arm, tip, plateH, color: COLOR })
   },
 }

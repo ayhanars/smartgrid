@@ -6,7 +6,7 @@ import { useViewStore } from '../../state/viewStore'
 import { SpecForm } from './SpecForm'
 import './CreatePanel.css'
 
-const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'skadis-hook': Anchor }
+const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'skadis-hook': Anchor, 'bror-bin': Package, 'bror-hook': Anchor }
 
 /**
  * The product picker: search, a category row and the templates, then a
