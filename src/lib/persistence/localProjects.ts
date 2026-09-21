@@ -30,6 +30,14 @@ export interface LocalProjectMeta {
 }
 
 const INDEX_KEY = 'smartgrid:projects'
+const TRASH_KEY = 'smartgrid:trash'
+
+/** How long a deleted project stays in the trash before it is purged. */
+export const TRASH_DAYS = 30
+
+export interface TrashedProjectMeta extends LocalProjectMeta {
+  deletedAt: number
+}
 const docKey = (id: string) => `smartgrid:project:${id}`
 
 function readJson<T>(key: string): T | null {
@@ -113,23 +121,65 @@ export function renameLocalProject(id: string, name: string) {
   if (snapshot) saveLocalProject(id, { ...snapshot, name })
 }
 
-export function deleteLocalProject(id: string) {
+function readTrash(): TrashedProjectMeta[] {
+  return readJson<TrashedProjectMeta[]>(TRASH_KEY) ?? []
+}
+
+function writeTrash(trash: TrashedProjectMeta[]) {
+  writeJson(TRASH_KEY, trash)
+}
+
+function removeDoc(id: string) {
   try {
     localStorage.removeItem(docKey(id))
   } catch {
     /* nothing to clean up */
   }
+}
+
+/** Moves a project to the trash (the document stays until it is purged). */
+export function deleteLocalProject(id: string) {
+  const index = readIndex()
+  const meta = index.find((p) => p.id === id)
+  writeIndex(index.filter((p) => p.id !== id))
+  if (meta) writeTrash([{ ...meta, deletedAt: Date.now() }, ...readTrash().filter((p) => p.id !== id)])
+  else removeDoc(id)
+}
+
+/** The trash, newest deletion first; anything past its keep period is
+ * purged on the way. */
+export function listLocalTrash(days = TRASH_DAYS): TrashedProjectMeta[] {
+  const cutoff = Date.now() - days * 86_400_000
+  const trash = readTrash()
+  const kept = trash.filter((p) => p.deletedAt >= cutoff)
+  if (kept.length !== trash.length) {
+    for (const p of trash) if (p.deletedAt < cutoff) removeDoc(p.id)
+    writeTrash(kept)
+  }
+  return kept.sort((a, b) => b.deletedAt - a.deletedAt)
+}
+
+export function restoreLocalProject(id: string): boolean {
+  const trash = readTrash()
+  const meta = trash.find((p) => p.id === id)
+  if (!meta) return false
+  writeTrash(trash.filter((p) => p.id !== id))
+  if (!loadLocalProject(id)) return false
+  const { deletedAt: _dropped, ...rest } = meta
+  writeIndex([...readIndex().filter((p) => p.id !== id), rest])
+  return true
+}
+
+/** Gone for good, from the trash or the list. */
+export function purgeLocalProject(id: string) {
+  removeDoc(id)
   writeIndex(readIndex().filter((p) => p.id !== id))
+  writeTrash(readTrash().filter((p) => p.id !== id))
 }
 
 /** Wipes every project (and the index) from this browser. */
 export function deleteAllLocalProjects() {
-  for (const p of readIndex()) {
-    try {
-      localStorage.removeItem(docKey(p.id))
-    } catch {
-      /* nothing to clean up */
-    }
-  }
+  for (const p of [...readIndex(), ...readTrash()]) removeDoc(p.id)
   writeIndex([])
+  writeTrash([])
 }

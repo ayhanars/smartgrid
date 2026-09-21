@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Download } from 'lucide-react'
+import { ChevronDown, Download, LockKeyhole } from 'lucide-react'
 import '../layers/LayerContextMenu.css'
 import type { DocumentSnapshot } from '../../lib/persistence/localProjects'
 import { bedPresets } from '../../lib/geometry/bedPresets'
 import { recordCommunityDownload } from '../../lib/supabase/community'
+import { useSiteSettings } from '../../lib/supabase/settings'
+import { useAuthStore } from '../auth/useAuthStore'
+import { requireAccount } from '../auth/authGate'
 import { defaultPrinterFor, downloadSnapshot, fitsPrinter, modelSize } from './downloadModel'
 import './community.css'
 
@@ -34,9 +37,13 @@ export function DownloadBox({ itemId, title, snapshot }: { itemId: string; title
     }
   }, [menuOpen])
   const supported = bedPresets.filter((p) => fits(p.id)).length
+  const membersOnly = useSiteSettings((s) => s.settings.downloadAccess) === 'members'
+  const user = useAuthStore((s) => s.user)
+  const locked = membersOnly && !user
 
   const exportAs = async (format: '3mf' | 'stl') => {
     if (busy) return
+    if (locked && !requireAccount('download')) return
     setBusy(format)
     try {
       if (await downloadSnapshot(snapshot, title, format, printer)) void recordCommunityDownload(itemId)
@@ -55,6 +62,17 @@ export function DownloadBox({ itemId, title, snapshot }: { itemId: string; title
           </button>
         ))}
       </div>
+      {locked && (
+        <div className="download-box__gate">
+          <span>
+            <LockKeyhole size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+            Downloads are for members. Sign in (it is free) to get the file.
+          </span>
+          <button type="button" className="page__button" onClick={() => requireAccount('download')}>
+            Sign in to download
+          </button>
+        </div>
+      )}
       <div className="download-box__split" ref={menuRef}>
         <button type="button" className="download-box__primary" disabled={busy !== null || size.width === 0} onClick={() => void exportAs('3mf')}>
           <Download size={15} />

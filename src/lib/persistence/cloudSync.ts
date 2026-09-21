@@ -1,6 +1,6 @@
 import { useAuthStore } from '../../features/auth/useAuthStore'
-import { deleteCloudProject, loadCloudProject, saveCloudProject } from '../supabase/projects'
-import { deleteLocalProject, loadLocalProject, saveLocalProject, type DocumentSnapshot } from './localProjects'
+import { deleteCloudProject, loadCloudProject, purgeCloudProject, restoreCloudProject, saveCloudProject } from '../supabase/projects'
+import { deleteLocalProject, loadLocalProject, purgeLocalProject, restoreLocalProject, saveLocalProject, type DocumentSnapshot } from './localProjects'
 import { deleteLocalThumbnail, loadLocalThumbnail, saveLocalThumbnail } from './thumbnails'
 
 /** Cloud rows are keyed by uuid; ids from the pre-uuid fallback in
@@ -32,13 +32,38 @@ export async function uploadProject(id: string): Promise<boolean> {
   return true
 }
 
-/** Removes a project from this browser and, when signed in, from the cloud. */
+/** Moves a project to the trash in this browser and, when signed in, in
+ * the cloud. The thumbnail stays for the trash listing. */
 export async function deleteProjectEverywhere(id: string): Promise<void> {
   deleteLocalProject(id)
-  deleteLocalThumbnail(id)
   if (isSignedIn() && isCloudSyncable(id)) {
     try {
       await deleteCloudProject(id)
+    } catch (err) {
+      console.warn('Cloud delete failed', err)
+    }
+  }
+}
+
+/** Back out of the trash, here and in the cloud. */
+export async function restoreProjectEverywhere(id: string): Promise<void> {
+  restoreLocalProject(id)
+  if (isSignedIn() && isCloudSyncable(id)) {
+    try {
+      await restoreCloudProject(id)
+    } catch (err) {
+      console.warn('Cloud restore failed', err)
+    }
+  }
+}
+
+/** Gone for good, here and in the cloud. */
+export async function purgeProjectEverywhere(id: string): Promise<void> {
+  purgeLocalProject(id)
+  deleteLocalThumbnail(id)
+  if (isSignedIn() && isCloudSyncable(id)) {
+    try {
+      await purgeCloudProject(id)
     } catch (err) {
       console.warn('Cloud delete failed', err)
     }

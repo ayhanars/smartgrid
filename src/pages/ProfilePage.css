@@ -90,3 +90,8 @@
     align-items: flex-start;
   }
 }
+
+.profile__role--restricted {
+  color: var(--danger);
+  border-color: var(--danger);
+}
