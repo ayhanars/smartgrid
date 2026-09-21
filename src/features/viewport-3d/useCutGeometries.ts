@@ -104,7 +104,9 @@ export function useCutGeometries(
       const layer = layers[id]
       if (!layer || layer.isHole || !layer.visible) continue
       const solidBounds = shapeWorldBounds(layer)
-      const overlappingHoles = holeIds.filter((hid) => hid !== id && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
+      // A "Hollow out" cavity is private to its solid: a divider or a
+      // hook standing inside the hollow is not carved by it.
+      const overlappingHoles = holeIds.filter((hid) => hid !== id && (!layers[hid].shellOf || layers[hid].shellOf.solidId === id) && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
       if (overlappingHoles.length === 0 && !layer.perforation) continue
 
       const key = JSON.stringify([geometryKey(layer), overlappingHoles.map((hid) => geometryKey(layers[hid])), artboardWidth, artboardHeight, tileVersion, editing])

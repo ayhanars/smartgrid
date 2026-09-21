@@ -1,4 +1,5 @@
 import { bool, num, str, type PartRecipe, type ProductSpec, type ProductTemplate } from './types'
+import { dividerParts } from './dividers'
 import { jHook, mountProfile, standingPath, type MountDims } from './mount'
 import { SKADIS_BOARD } from './boards'
 
@@ -79,9 +80,10 @@ export const skadisContainer: ProductTemplate = {
         { value: '2', label: '2 (40 mm lower too)' },
       ],
     },
+    { kind: 'number', id: 'dividers', label: 'Dividers', min: 0, max: 6, step: 1, hint: 'Walls across the inside, evenly spaced.' },
     { kind: 'boolean', id: 'drain', label: 'Drain hole in the floor' },
   ],
-  defaults: { width: 80, depth: 50, height: 60, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', drain: false },
+  defaults: { width: 80, depth: 50, height: 60, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', dividers: 0, drain: false },
   notes: 'Prints standing up, hooks at the back top edge; the tab and lip undersides are 45° so no support is needed. Hooks sit 40 mm apart to match the pegboard. The parts export as one body.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 80)
@@ -127,6 +129,7 @@ export const skadisContainer: ProductTemplate = {
       const d = Math.min(8, Math.max(3, Math.min(width, depth) / 4))
       parts.push({ name: 'Drain', outline: { kind: 'circle', x: width / 2 - d / 2, y: boxY + depth / 2 - d / 2, width: d, height: d }, depth: Math.max(wall, 1.6) + 2, z: -1, isHole: true })
     }
+    parts.push(...dividerParts({ count: num(spec, 'dividers', 0), width, depth, height, wall, boxY, color: COLOR }))
     const span = (hooks - 1) * SKADIS.pitch
     const rows = rowCount(spec, height)
     let n = 0

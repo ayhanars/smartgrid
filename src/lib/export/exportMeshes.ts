@@ -96,7 +96,7 @@ export async function buildExportMeshes(
 
     const solidBounds = shapeWorldBounds(layer)
     // Only cutters on the same plate can cut a solid.
-    const overlapping = holeIds.filter((hid) => plateIndex(layers[hid]) === plateIndex(layer) && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
+    const overlapping = holeIds.filter((hid) => plateIndex(layers[hid]) === plateIndex(layer) && (!layers[hid].shellOf || layers[hid].shellOf.solidId === id) && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
     const solidWorld = toWorld(layer)
     const holeLayers = overlapping.map((hid) => layers[hid])
     // Same plan as the viewport (see useCutGeometries).
