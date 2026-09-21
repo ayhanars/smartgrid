@@ -216,7 +216,13 @@ diameter and sheet thickness are fields with starting values, to be
 verified on a board. Both boards are described in `boards.ts` and the
 tab-through-an-opening profile both families share lives in
 `mount.ts`; a hook wider than its opening gets the tab as a narrower
-centre piece, fused at export.
+centre piece, fused at export. A BROR hook is a swept tube: a layer
+can carry `tube` (a radius and a 3D centreline), which
+`buildTubeGeometry` sweeps a round section along — rings on
+parallel-transported frames, capped ends — instead of extruding the
+outline; the outline then only marks the footprint. Containers take
+adjustable dividers, and a "Hollow out" cavity cuts only its own solid
+so parts standing inside a hollow keep their shape.
 
 The product form is a small simulator: above the sliders a back view of
 the product is drawn to scale on a window of the pegboard (SKÅDIS's

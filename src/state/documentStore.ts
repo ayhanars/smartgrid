@@ -113,6 +113,9 @@ interface DocumentActions {
   loadDocument: (projectId: string, snapshot: DocumentSnapshot) => void
   addShape: (kind: ShapeKind, bounds: Bounds) => string
   addPenShape: (documentSpacePoints: Point2[]) => string
+  /** A tube swept along `points` (document mm; z up from the bed) with
+   * the given radius, as a solid layer whose footprint is its bounds. */
+  addTubeShape: (points: { x: number; y: number; z: number }[], radius: number) => string
   moveShapesBy: (ids: string[], dx: number, dy: number) => void
   resizeShape: (id: string, bounds: Bounds) => void
   duplicateShapes: (ids: string[]) => string[]
@@ -295,6 +298,16 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
   const ids: string[] = []
   for (const part of build.parts) {
     let id: string
+    if (part.outline.kind === 'tube') {
+      id = api.addTubeShape(
+        part.outline.points.map((p) => ({ x: p.x + origin.x, y: p.y + origin.y, z: p.z })),
+        part.outline.radius,
+      )
+      ids.push(id)
+      api.renameLayer(id, part.name)
+      if (part.color) api.setColor(id, part.color)
+      continue
+    }
     if (part.outline.kind === 'path') {
       id = api.addPenShape(part.outline.points.map((p) => ({ x: p.x + origin.x, y: p.y + origin.y })))
     } else {
@@ -705,6 +718,40 @@ export const useDocumentStore = create<DocumentStore>()(
             },
           }
         })
+      },
+
+      addTubeShape: (points, radius) => {
+        const id = generateId()
+        const r = Math.max(0.2, radius)
+        const minX = Math.min(...points.map((p) => p.x)) - r
+        const maxX = Math.max(...points.map((p) => p.x)) + r
+        const minY = Math.min(...points.map((p) => p.y)) - r
+        const maxY = Math.max(...points.map((p) => p.y)) + r
+        const minZ = Math.min(...points.map((p) => p.z)) - r
+        const maxZ = Math.max(...points.map((p) => p.z)) + r
+        const layer: ShapeLayer = {
+          id,
+          kind: 'rect',
+          name: 'Tube',
+          visible: true,
+          locked: false,
+          color: '#4d8dff',
+          transform: { x: minX, y: minY, z: minZ, rotation: 0, rotationX: 0, rotationY: 0 },
+          regions: createShapeRegions('rect', Math.max(0.2, maxX - minX), Math.max(0.2, maxY - minY)),
+          extrusionDepth: Math.max(0.2, maxZ - minZ),
+          cornerRadius: 0,
+          smartPolish: 0,
+          bevelBottom: 0,
+          bevelTop: 0,
+          isHole: false,
+          tube: { radius: r, points: points.map((p) => ({ x: p.x - minX, y: p.y - minY, z: p.z - minZ })) },
+        }
+        set((state) => ({
+          layers: { ...state.layers, [id]: { ...layer, ...platePatch(state) } },
+          order: [...state.order, id],
+          selection: [id],
+        }))
+        return id
       },
 
       addPenShape: (documentSpacePoints) => {

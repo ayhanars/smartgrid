@@ -19,7 +19,12 @@ export type ProductSpec = Record<string, SpecValue>
 export interface PartRecipe {
   name: string
   color?: string
-  outline: { kind: 'rect' | 'circle'; x: number; y: number; width: number; height: number } | { kind: 'path'; points: Point2[] }
+  outline:
+    | { kind: 'rect' | 'circle'; x: number; y: number; width: number; height: number }
+    | { kind: 'path'; points: Point2[] }
+    /** A round section swept along a 3D path (product mm, z up). Its
+     * height comes from the path; `depth`, `z` and tilts are ignored. */
+    | { kind: 'tube'; radius: number; points: { x: number; y: number; z: number }[] }
   /** Extrusion height, mm. */
   depth: number
   cornerRadius?: number
