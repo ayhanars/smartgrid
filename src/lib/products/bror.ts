@@ -32,6 +32,20 @@ function mountFrom(spec: ProductSpec): { dims: MountDims; pitch: number; pattern
   }
 }
 
+/** One row of pegs, or two when the bin is big enough to lever hard on
+ * them (deep, or tall and wide) — and tall enough for the second row to
+ * fit under the first. */
+function rowCount(spec: ProductSpec, height: number, pitch: number, dims: MountDims): number {
+  const fits = height - pitch > dims.lipDrop + dims.tabThickness
+  if (!fits) return 1
+  const choice = str(spec, 'rows', 'auto')
+  if (choice === '1') return 1
+  if (choice === '2') return 2
+  const width = num(spec, 'width', 90)
+  const depth = num(spec, 'depth', 60)
+  return depth >= 80 || (height >= 100 && width >= 120) || width * depth * height >= 480000 ? 2 : 1
+}
+
 function hookCount(width: number, choice: string, pitch: number, peg: number): number {
   const most = Math.max(1, Math.floor((width - peg) / pitch) + 1)
   if (choice !== 'auto') return Math.min(most, Math.max(1, parseInt(choice, 10) || 1))
@@ -67,6 +81,7 @@ export const brorBin: ProductTemplate = {
       id: 'rows',
       label: 'Peg rows',
       options: [
+        { value: 'auto', label: 'Auto (second row on a big bin)' },
         { value: '1', label: '1 (top edge)' },
         { value: '2', label: '2 (one pitch lower too)' },
       ],
@@ -74,18 +89,19 @@ export const brorBin: ProductTemplate = {
     { kind: 'boolean', id: 'drain', label: 'Drain hole in the floor' },
     ...MOUNT_FIELDS,
   ],
-  defaults: { width: 90, depth: 60, height: 80, wall: 2, corner: 6, hooks: 'auto', rows: '1', drain: false, ...MOUNT_DEFAULTS },
+  defaults: { width: 90, depth: 60, height: 80, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', drain: false, ...MOUNT_DEFAULTS },
   notes: 'Prints standing up; rounded pegs at the back top edge go through the round holes and drop behind the sheet. Peg and lip undersides are 45°, no support needed. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 90)
     const height = num(spec, 'height', 80)
     const { dims, pitch, pattern } = mountFrom(spec)
     const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pitch, dims.tabWidth)
-    const rows = str(spec, 'rows', '1') === '2' ? 2 : 1
+    const rows = rowCount(spec, height, pitch, dims)
     const span = (hooks - 1) * pitch
     const anchors = []
     for (let r = 0; r < rows; r++) for (let i = 0; i < hooks; i++) anchors.push({ x: width / 2 - span / 2 + i * pitch - dims.tabWidth / 2, y: r * pitch, width: dims.tabWidth, height: dims.tabThickness })
-    return { pattern, silhouette: { width, height }, anchors, caption: `Back view · ${hooks * rows} peg${hooks * rows === 1 ? '' : 's'} on the ${pitch} mm grid` }
+    const auto = str(spec, 'rows', 'auto') === 'auto' && rows === 2 ? ' · second row added for the load' : ''
+    return { pattern, silhouette: { width, height }, anchors, caption: `Back view · ${hooks * rows} peg${hooks * rows === 1 ? '' : 's'} on the ${pitch} mm grid${auto}` }
   },
   build: (spec: ProductSpec) => {
     const width = num(spec, 'width', 90)
@@ -96,7 +112,7 @@ export const brorBin: ProductTemplate = {
     const drain = bool(spec, 'drain', false)
     const { dims, pitch } = mountFrom(spec)
     const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pitch, dims.tabWidth)
-    const rows = str(spec, 'rows', '1') === '2' && height - pitch > dims.lipDrop + dims.tabThickness ? 2 : 1
+    const rows = rowCount(spec, height, pitch, dims)
     const { points: profile, height: tabHeight } = mountProfile(dims, Math.min(1, wall / 2))
     const boxY = dims.gap + dims.lipThickness
     const parts: PartRecipe[] = [
