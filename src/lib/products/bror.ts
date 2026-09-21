@@ -144,16 +144,18 @@ export const brorBin: ProductTemplate = {
         z: center - dims.tabThickness / 2,
       })
     }
-    // Straight studs: a cylinder from inside the wall to just behind the
-    // sheet (tilted 90° about x, a circle's extrusion runs along depth).
-    const studLength = embed + dims.gap + 1.5
+    // Straight studs: a cylinder from inside the wall through the sheet,
+    // reaching as far back as the hooks (tilted 90° about x, a circle's
+    // extrusion runs along depth).
+    const reach = dims.gap + dims.lipThickness
+    const studLength = embed + reach
     const d = dims.tabThickness
     let n = 0
     for (let r = 1; r <= studs; r++) {
       for (let i = 0; i < hooks; i++) {
         n++
         const cx = width / 2 - span / 2 + i * pitch
-        const centerB = (dims.gap + 1.5 - embed) / 2
+        const centerB = (reach - embed) / 2
         parts.push({
           name: hooks * studs === 1 ? 'Stud' : `Stud ${n}`,
           color: COLOR,
