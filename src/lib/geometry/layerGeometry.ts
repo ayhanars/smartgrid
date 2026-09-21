@@ -100,10 +100,15 @@ export function solidPerimeter(layer: ShapeLayer): number {
   return total
 }
 
-/** The face subdivision a perforated body is built with. */
+/** The face subdivision a perforated body is built with: none. The
+ * clipping evaluator wanted the caps and the cavity split as finely as
+ * the drilled walls (a huge face against thousands of triangles took
+ * ~40 s), but Manifold handles big faces, and a cap subdivided on its
+ * own grid leaves T-junctions along the wall seam that Manifold then
+ * rejects as non-manifold. */
 export function perforationTessellation(layer: ShapeLayer): number | undefined {
-  const perforation = !layer.isHole ? layer.perforation : undefined
-  return perforation ? Math.min(2.5, Math.max(1, perforation.spacing / 2)) : undefined
+  void layer
+  return undefined
 }
 
 export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: LayerGeometryOptions = {}): THREE.BufferGeometry[] {

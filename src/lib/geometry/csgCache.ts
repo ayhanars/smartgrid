@@ -61,7 +61,7 @@ function hash(str: string): string {
 /** Bump whenever the built geometry or its shading changes for the same
  * document data, so cuts stored on a device before the change are not
  * served for it (they would carry the old look). */
-export const GEOMETRY_VERSION = 3
+export const GEOMETRY_VERSION = 4
 
 export const cutCacheKey = (jobKey: string) => hash(`v${GEOMETRY_VERSION}:${jobKey}`)
 

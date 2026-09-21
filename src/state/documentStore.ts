@@ -260,9 +260,9 @@ export function artboardSize(state: Pick<DocumentState, 'bedPresetId' | 'customB
 /** A corner for a new `width` × `height` product on the active plate:
  * the middle of the bed, nudged right (then down) until it overlaps
  * nothing already there. */
-function freeSpot(state: DocumentState, width: number, height: number): Point2 {
+function freeSpot(state: DocumentState, width: number, height: number, plateId = state.activePlateId): Point2 {
   const bed = artboardSize(state)
-  const others = orderOnPlate(state, state.activePlateId).map((id) => shapeWorldBounds(state.layers[id]))
+  const others = orderOnPlate(state, plateId).map((id) => shapeWorldBounds(state.layers[id]))
   const clear = (x: number, y: number) => !others.some((b) => x < b.x + b.width + 4 && x + width + 4 > b.x && y < b.y + b.height + 4 && y + height + 4 > b.y)
   const start = { x: Math.max(0, Math.round(bed.width / 2 - width / 2)), y: Math.max(0, Math.round(bed.height / 2 - height / 2)) }
   if (clear(start.x, start.y)) return start
@@ -287,34 +287,81 @@ function freeSpot(state: DocumentState, width: number, height: number): Point2 {
   return start
 }
 
+/** Footprint of a part's outline, in product mm. */
+function partBounds(part: import('../lib/products').PartRecipe): Bounds {
+  const o = part.outline
+  if (o.kind !== 'path' && o.kind !== 'tube') return { x: o.x, y: o.y, width: o.width, height: o.height }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+  const points: { x: number; y: number }[] = o.points
+  for (const p of points) {
+    x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y)
+  }
+  const r = o.kind === 'tube' ? o.radius : 0
+  return { x: x0 - r, y: y0 - r, width: x1 - x0 + 2 * r, height: y1 - y0 + 2 * r }
+}
+
 /** Creates a product's parts at `origin` (document mm), groups them and
- * stores the recipe on the group. One undo step. */
-function buildProduct(templateId: string, spec: ProductSpec, build: { parts: import('../lib/products').PartRecipe[]; fuse?: boolean }, origin: Point2, plateId: string | null, name?: string): string | null {
+ * stores the recipe on the group. Parts of a tile beyond the first go
+ * to their own plate (created as needed), each at a free spot there.
+ * One undo step. */
+function buildProduct(templateId: string, spec: ProductSpec, build: { parts: import('../lib/products').PartRecipe[]; fuse?: boolean; tiles?: string[] }, origin: Point2, plateId: string | null, name?: string): string | null {
   const api = useDocumentStore.getState()
   const template = productTemplate(templateId)
   if (!template) return null
   const wasEditing = useDocumentStore.getState().editing
   if (!wasEditing) api.beginTransientEdit()
   const ids: string[] = []
+  const basePlate: string = plateId ?? useDocumentStore.getState().activePlateId
+  // Where each tile goes: tile 0 at `origin` on the base plate, the
+  // rest on the plates after it (new ones while there is room), each
+  // shifted from its own bounds to a free spot there.
+  const tileCount = Math.max(1, ...build.parts.map((p) => (p.tile ?? 0) + 1))
+  const placements: { plateId: string; shift: Point2 }[] = [{ plateId: basePlate, shift: origin }]
+  for (let k = 1; k < tileCount; k++) {
+    const state = useDocumentStore.getState()
+    const baseIndex = state.plates.findIndex((p) => p.id === basePlate)
+    const target: string | null = state.plates[baseIndex + k]?.id ?? api.addPlate()
+    if (!target) {
+      // No room for another plate: the tile shares the previous one.
+      placements.push({ plateId: placements[k - 1].plateId, shift: { x: placements[k - 1].shift.x, y: placements[k - 1].shift.y + 10 } })
+      continue
+    }
+    const tileParts = build.parts.filter((p) => (p.tile ?? 0) === k && !p.isHole)
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+    for (const part of tileParts) {
+      const b = partBounds(part)
+      x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height)
+    }
+    if (!Number.isFinite(x0)) { x0 = 0; y0 = 0; x1 = 0; y1 = 0 }
+    const spot = freeSpot(useDocumentStore.getState(), x1 - x0, y1 - y0, target)
+    placements.push({ plateId: target, shift: { x: spot.x - x0, y: spot.y - y0 } })
+  }
+  const byPlate = new Map<string, string[]>()
   for (const part of build.parts) {
+    const place = placements[Math.min(part.tile ?? 0, placements.length - 1)]
+    const shift = place.shift
     let id: string
     if (part.outline.kind === 'tube') {
       id = api.addTubeShape(
-        part.outline.points.map((p) => ({ x: p.x + origin.x, y: p.y + origin.y, z: p.z })),
+        part.outline.points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y, z: p.z })),
         part.outline.radius,
       )
       ids.push(id)
       api.renameLayer(id, part.name)
       if (part.color) api.setColor(id, part.color)
+      byPlate.set(place.plateId, [...(byPlate.get(place.plateId) ?? []), id])
       continue
     }
     if (part.outline.kind === 'path') {
-      id = api.addPenShape(part.outline.points.map((p) => ({ x: p.x + origin.x, y: p.y + origin.y })))
+      id = api.addPenShape(part.outline.points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y })))
     } else {
       const kind = part.isHole ? 'hole' : part.outline.kind
-      id = api.addShape(kind, { x: part.outline.x + origin.x, y: part.outline.y + origin.y, width: part.outline.width, height: part.outline.height })
+      id = api.addShape(kind, { x: part.outline.x + shift.x, y: part.outline.y + shift.y, width: part.outline.width, height: part.outline.height })
     }
     ids.push(id)
+    const onPlate = byPlate.get(place.plateId) ?? []
+    onPlate.push(id)
+    byPlate.set(place.plateId, onPlate)
     api.renameLayer(id, part.name)
     if (part.color) api.setColor(id, part.color)
     api.setExtrusionDepth(id, part.depth)
@@ -328,12 +375,19 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
     // under its footprint (a hook onto its box).
     api.setLayerZ(id, part.z ?? 0)
     if (part.texture) api.setTexture(id, part.texture)
+    if (part.perforation) api.setPerforation(id, part.perforation)
     if (part.hollow) {
       const made = api.hollowOut(id, part.hollow)
-      if (made) ids.push(made.cavityId)
+      if (made) {
+        ids.push(made.cavityId)
+        onPlate.push(made.cavityId)
+      }
     }
   }
-  if (plateId && plateId !== useDocumentStore.getState().plates[0]?.id) api.moveShapesToPlate(ids, plateId)
+  // Shapes are created on the active plate, which adding plates moved:
+  // put every part on its tile's plate, and the user back where they were.
+  for (const [pid, members] of byPlate) api.moveShapesToPlate(members, pid)
+  useDocumentStore.setState({ activePlateId: basePlate })
   const groupId = api.groupShapes(ids)
   if (groupId) {
     api.renameGroup(groupId, name ?? template.name)
@@ -1558,7 +1612,7 @@ export const useDocumentStore = create<DocumentStore>()(
         const template = productTemplate(templateId)
         if (!template) return null
         const state = get()
-        const build = template.build(cleanSpec(template, spec))
+        const build = template.build(cleanSpec(template, spec), { bed: artboardSize(state) })
         return buildProduct(templateId, cleanSpec(template, spec), build, freeSpot(state, build.width, build.height), null)
       },
 
@@ -1569,16 +1623,19 @@ export const useDocumentStore = create<DocumentStore>()(
         if (!group || !template) return null
         const members = state.order.filter((id) => state.layers[id]?.groupId === groupId)
         if (members.length === 0) return null
+        const plateId = layerPlateId(state.layers[members[0]], state.plates)
+        // The first tile's corner: members on other plates have their
+        // own plate's coordinates.
         let x = Infinity
         let y = Infinity
         for (const id of members) {
+          if (layerPlateId(state.layers[id], state.plates) !== plateId) continue
           const b = shapeWorldBounds(state.layers[id])
           x = Math.min(x, b.x)
           y = Math.min(y, b.y)
         }
-        const plateId = layerPlateId(state.layers[members[0]], state.plates)
         const clean = cleanSpec(template, spec)
-        const build = template.build(clean)
+        const build = template.build(clean, { bed: artboardSize(state) })
         get().beginTransientEdit()
         get().removeShapes(members)
         const id = buildProduct(template.id, clean, build, { x, y }, plateId, group.name)

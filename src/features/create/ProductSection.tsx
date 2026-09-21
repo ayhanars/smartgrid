@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { RefreshCcw } from 'lucide-react'
 import { cleanSpec, productTemplate, type ProductSpec, type SpecValue } from '../../lib/products'
-import { useDocumentStore } from '../../state/documentStore'
+import { artboardSize, useDocumentStore } from '../../state/documentStore'
 import { SpecForm } from './SpecForm'
-import { BoardPreview } from './BoardPreview'
+import { ProductPreview } from './ProductPreview'
 
 /**
  * Shown above the tabs when the selection is (part of) a product the
@@ -16,6 +16,10 @@ export function ProductSection({ selection }: { selection: string[] }) {
   const regenerateProduct = useDocumentStore((s) => s.regenerateProduct)
   const setSelection = useDocumentStore((s) => s.setSelection)
   const order = useDocumentStore((s) => s.order)
+  const bedPresetId = useDocumentStore((s) => s.bedPresetId)
+  const customBedWidth = useDocumentStore((s) => s.customBedWidth)
+  const customBedHeight = useDocumentStore((s) => s.customBedHeight)
+  const bed = useMemo(() => artboardSize({ bedPresetId, customBedWidth, customBedHeight }), [bedPresetId, customBedWidth, customBedHeight])
 
   const groupIds = new Set(selection.map((id) => layers[id]?.groupId).filter((g): g is string => !!g))
   const groupId = groupIds.size === 1 ? [...groupIds][0] : null
@@ -47,7 +51,7 @@ export function ProductSection({ selection }: { selection: string[] }) {
         <span>{template.name}</span>
         <span className="inspector-section__hint">{partCount} part{partCount === 1 ? '' : 's'}</span>
       </div>
-      {template.preview && <BoardPreview preview={template.preview(cleanSpec(template, spec))} />}
+      {template.preview && <ProductPreview preview={template.preview(cleanSpec(template, spec), { bed })} />}
       <SpecForm fields={template.fields} spec={spec} sliders onChange={(id: string, value: SpecValue) => setSpec((prev) => ({ ...prev, [id]: value }))} />
       <button type="button" className={`inspector-product__update ${dirty ? 'inspector-product__update--dirty' : ''}`} disabled={!dirty} onClick={update}>
         <RefreshCcw size={13} /> Update product

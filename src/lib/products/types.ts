@@ -1,4 +1,4 @@
-import type { Point2, SurfaceTexture } from '../../types/document'
+import type { Perforation, Point2, SurfaceTexture } from '../../types/document'
 import type { ShellOptions } from '../geometry/shell'
 
 /** A value the user can set on a product: a number in mm (or a count),
@@ -36,7 +36,11 @@ export interface PartRecipe {
   rotation?: { x?: number; y?: number; z?: number }
   hollow?: ShellOptions
   texture?: SurfaceTexture
+  perforation?: Perforation
   isHole?: boolean
+  /** Which piece of a product split for the bed this part belongs to
+   * (0 = the first). Each tile lands on its own plate. */
+  tile?: number
 }
 
 export interface ProductBuild {
@@ -47,11 +51,22 @@ export interface ProductBuild {
   /** Whether the parts are meant to print as one body (the exporter
    * fuses them) — a box with its hooks, as opposed to a set of pieces. */
   fuse?: boolean
+  /** Names of the tiles when the product is split for the bed. */
+  tiles?: string[]
 }
+
+/** What the builder knows about the printer: the bed, so a product too
+ * big for it can split itself into tiles. */
+export interface BuildContext {
+  bed: { width: number; height: number }
+}
+
+export const DEFAULT_CONTEXT: BuildContext = { bed: { width: 256, height: 256 } }
 
 /** What the 2D fit preview draws: the board's pattern, the product seen
  * from the back (its silhouette) and where its tabs meet the sheet. */
 export interface MountPreview {
+  kind?: 'mount'
   pattern: import('./boards').PegPattern
   /** Back-view silhouette, mm. */
   silhouette: { width: number; height: number }
@@ -59,6 +74,24 @@ export interface MountPreview {
   anchors: { x: number; y: number; width: number; height: number }[]
   caption?: string
 }
+
+/** The top-view simulator of a tray: its compartments, and how it is
+ * cut into tiles for the bed. */
+export interface TrayPreview {
+  kind: 'tray'
+  width: number
+  depth: number
+  /** Compartments, in tray mm from its top-left corner. */
+  cells: { x: number; y: number; width: number; height: number }[]
+  /** Tiles the tray is split into, with the bed size for the caption. */
+  tiles: { x: number; y: number; width: number; height: number; name: string }[]
+  bed: { width: number; height: number }
+  /** Where connectors join two tiles (tray mm). */
+  joints?: { x: number; y: number }[]
+  caption?: string
+}
+
+export type ProductPreview = MountPreview | TrayPreview
 
 export interface ProductTemplate {
   id: string
@@ -72,11 +105,11 @@ export interface ProductTemplate {
   defaults: ProductSpec
   /** Lays the product out from a spec. Never throws for a spec within
    * the fields' ranges. */
-  build: (spec: ProductSpec) => ProductBuild
+  build: (spec: ProductSpec, ctx: BuildContext) => ProductBuild
   /** A few sentences on how it prints and mounts, shown under the form. */
   notes?: string
   /** The fit preview for a spec, when the product mounts on a board. */
-  preview?: (spec: ProductSpec) => MountPreview
+  preview?: (spec: ProductSpec, ctx: BuildContext) => ProductPreview
 }
 
 /** What a generated group remembers, so its specs can be changed later. */

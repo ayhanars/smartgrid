@@ -216,6 +216,7 @@ family is IKEA SKÅDIS: a container with mounting hooks on its back (one
 per 40 mm of width, tab and lip undersides at 45° so it prints standing
 with no support) and a J-hook that prints lying flat. A product whose
 parts print as one body (`fuse`) leaves the 3MF as one compound object
+per plate
 whose parts are the group's solids (a `components` object; Bambu Studio
 and PrusaSlicer open it as one object with parts and union them layer
 by layer), which is far more robust than a mesh boolean of the parts.
@@ -311,6 +312,28 @@ Moderation tools on top of that:
   (browser-only projects move to a local trash index); the Trash page
   restores or purges, and `purge_deleted_projects` drops anything older
   than the keep period whenever the trash is listed.
+
+### Products in the Create panel
+
+`src/lib/products/` holds the templates: SKÅDIS and BROR pieces, the
+"any pegboard" bin and hook (pick SKÅDIS, BROR or describe your own
+board: round holes or slots, their size, pitch across and down,
+staggered rows, sheet thickness; the fit simulator draws that pattern),
+and the drawer organizers. A drawer tray takes the drawer's size, a
+grid of compartments (even, a narrow first column or a shallow front
+row), wall and floor thickness and an optional perforation pattern on
+the walls; the simulator shows the compartments from above. A tray
+bigger than the bed is cut into tiles along compartment lines and each
+tile goes to its own plate (`PartRecipe.tile`; `buildProduct` adds
+plates as needed and puts the user back on the plate they were on),
+with E-profile clips that slide over two neighbouring walls to join the
+tiles in the drawer. Notched divider strips cross each other at the
+same spacing (top notches meet bottom notches); a strip longer than the
+bed is cut with a half-lap. Templates get a `BuildContext` with the bed
+size for this. The panel keeps the last six products added, with their
+specs, under Recent (per browser). Round-hole hooks bend gently (55°
+on a radius of 1.6 pegs) rather than a full U, which tilts into the
+hole more easily and still looks up behind the sheet.
 
 ## Custom domain
 
