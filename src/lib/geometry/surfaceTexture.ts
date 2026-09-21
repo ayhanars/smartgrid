@@ -360,7 +360,10 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
       )
       // Optional soft ends: the relief dies out over `fade` mm at the
       // bottom and the top of the (reference) wall.
-      const softEnds = fade > 0 ? smoothstep(0, fade, v) * (1 - smoothstep(refHeight - fade, refHeight, v)) : 1
+      // Cubed, because a shallow groove still reads as a line under
+      // light: the relief has to get near zero well before the end of
+      // the fade for the pattern to look gone.
+      const softEnds = fade > 0 ? Math.pow(smoothstep(0, fade, v) * (1 - smoothstep(refHeight - fade, refHeight, v)), 3) : 1
       // Pattern coordinates, turned by the angle.
       const pu = acrossWall ? acrossWall(col.p.x + col.nrm.x * wallGap, col.p.y + col.nrm.y * wallGap) : col.u * uScale
       const ru = pu * cosA - v * sinA
