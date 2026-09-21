@@ -3,7 +3,10 @@ import type { ExportMesh } from './exportMeshes'
 /** Binary STL: 80-byte header, uint32 triangle count, then 50 bytes per
  * triangle (normal, 3 vertices, uint16 attribute). Colors can't survive
  * STL — that's what the 3MF export is for. */
-export function writeBinaryStl(meshes: ExportMesh[]): ArrayBuffer {
+export function writeBinaryStl(input: ExportMesh[]): ArrayBuffer {
+  // A compound object's parts are written one after another; overlapping
+  // shells in one STL slice as their union.
+  const meshes = input.flatMap((m) => m.components ?? [m])
   const triangleCount = (m: ExportMesh) => (m.indices ? m.indices.length / 3 : m.positions.length / 9)
   const triCount = meshes.reduce((n, m) => n + triangleCount(m), 0)
   const buffer = new ArrayBuffer(84 + triCount * 50)

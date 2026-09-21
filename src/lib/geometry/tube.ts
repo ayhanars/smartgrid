@@ -57,7 +57,9 @@ export function buildTubeGeometry(tube: TubeSpec, scale: number): THREE.BufferGe
       const a1 = i * RING + ((k + 1) % RING)
       const b0 = (i + 1) * RING + k
       const b1 = (i + 1) * RING + ((k + 1) % RING)
-      indices.push(a0, b0, b1, a0, b1, a1)
+      // (normal, binormal, tangent) is right-handed, so the ring runs
+      // clockwise seen along the tangent: wind the quads to face out.
+      indices.push(a0, b1, b0, a0, a1, b1)
     }
   }
   // End caps: a centre vertex and a fan, wound to face outward.

@@ -3,8 +3,7 @@ import type { ShapeLayer } from '../../types/document'
 import { type Plate, type ShapeGroup, layerPlateId, shapeWorldBounds } from '../../state/documentStore'
 import { plateOrigin } from '../geometry/plateLayout'
 import { planCut } from '../geometry/cutPlan'
-import { cutHolesAsync, fuseAsync } from '../geometry/csgClient'
-import type { PositionedGeometry } from '../geometry/holeCut'
+import { cutHolesAsync } from '../geometry/csgClient'
 
 export interface ExportMesh {
   name: string
@@ -17,6 +16,11 @@ export interface ExportMesh {
   indices?: Uint32Array
   /** 1-based build plate the mesh sits on; absent for single-plate exports. */
   plate?: number
+  /** A compound object: these meshes are its parts, overlapping where
+   * they join. Slicers union the parts of one object layer by layer,
+   * which is far more robust than a mesh boolean; `positions` is then
+   * empty. */
+  components?: ExportMesh[]
 }
 
 export interface ExportProgress {
@@ -73,9 +77,11 @@ export async function buildExportMeshes(
 
   const meshes: ExportMesh[] = []
   // A generated product that prints as one body (a box with its hooks):
-  // its solids are unioned after their own cuts.
-  const fuseParts = new Map<string, { parts: PositionedGeometry[]; layer: ShapeLayer }>()
-  const place = (geo: THREE.BufferGeometry, name: string, layer: ShapeLayer) => {
+  // its solids leave as the parts of one compound object, each cut on
+  // its own, overlapping where they join. (A mesh boolean of the parts
+  // left cracks along the seams that slicers "repaired" by filling.)
+  const fuseParts = new Map<string, { parts: ExportMesh[]; layer: ShapeLayer }>()
+  const place = (geo: THREE.BufferGeometry, name: string, layer: ShapeLayer): ExportMesh => {
     // Kept indexed when it is: the 3MF writer wants a shared vertex
     // table anyway, and welding a flat list back is the slow part.
     const placed = geo.applyMatrix4(Y_UP_TO_Z_UP).translate(0, bedDepth, 0)
@@ -87,7 +93,7 @@ export async function buildExportMeshes(
       placed.translate(origin.x, origin.y, 0)
       mesh.plate = idx + 1
     }
-    meshes.push(mesh)
+    return mesh
   }
   for (const id of solidIds) {
     const layer = layers[id]
@@ -111,26 +117,18 @@ export async function buildExportMeshes(
       }
       const world = finalGeo.clone().translate(solidWorld.worldX, solidWorld.worldY, solidWorld.worldZ)
       const fuseGroup = layer.groupId && groups[layer.groupId]?.recipe?.fuse ? layer.groupId : null
+      const mesh = place(world, layer.name, layer)
       if (fuseGroup) {
         const entry = fuseParts.get(fuseGroup) ?? { parts: [], layer }
-        entry.parts.push({ geometry: world, worldX: 0, worldY: 0, worldZ: 0 })
+        entry.parts.push(mesh)
         fuseParts.set(fuseGroup, entry)
-      } else place(world, layer.name, layer)
+      } else meshes.push(mesh)
     }
     done++
   }
   for (const [groupId, { parts, layer }] of fuseParts) {
     const name = groups[groupId]?.name ?? layer.name
-    onProgress?.({ done, total: solidIds.length, stage: `Fusing ${name}` })
-    await breathe()
-    let fused: THREE.BufferGeometry | null = null
-    try {
-      fused = await fuseAsync(parts).promise
-    } catch (err) {
-      console.error(`Fusing "${name}" failed during export, exporting its parts separately:`, err)
-    }
-    if (fused) place(fused, name, layer)
-    else for (const part of parts) place(part.geometry, name, layer)
+    meshes.push({ name, color: layer.color, positions: new Float32Array(0), plate: parts[0]?.plate, components: parts })
   }
   onProgress?.({ done, total: solidIds.length, stage: 'Writing the file' })
   await breathe()
