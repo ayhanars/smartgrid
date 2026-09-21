@@ -4,6 +4,7 @@ import { contourBounds } from './primitives'
 import { rotatedLocalPoints } from './layerBounds'
 import { roundPolygonCorners, smartPolishCorners } from './rounding'
 import { buildBeveledGeometry } from './bevelExtrude'
+import { buildTubeGeometry } from './tube'
 import { computeSafeBevel } from './offset'
 import { buildSimpleRegionGeometry } from './multiRegionExtrude'
 import { buildPerforationCutter } from './perforation'
@@ -106,6 +107,8 @@ export function perforationTessellation(layer: ShapeLayer): number | undefined {
 }
 
 export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: LayerGeometryOptions = {}): THREE.BufferGeometry[] {
+  // A tube is swept, not extruded; it is built in its final orientation.
+  if (layer.tube) return [buildTubeGeometry(layer.tube, scale)]
   const depth = Math.max(0.2, layer.extrusionDepth)
   const contour = effectiveContour(layer)
 

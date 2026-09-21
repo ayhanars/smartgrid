@@ -1,5 +1,6 @@
 import type { Point2 } from '../../types/document'
 import type { PartRecipe, ProductBuild } from './types'
+import { arcPoints } from '../geometry/tube'
 
 /** A tab-through-an-opening mount, in mm: the tab goes through the
  * opening and a lip drops behind the sheet. Shared by every pegboard. */
@@ -86,53 +87,33 @@ export function standingPath(points: { h: number; b: number }[], centerX: number
 }
 
 /**
- * A round hook built from cylinders, for a round-hole board: a shank
- * through the sheet, a 45° elbow and a lip rising behind the sheet with
- * a rounded tip. Bend radius (centreline) = the peg's diameter. Parts
- * overlap and fuse at export.
- *
- * Standing (a bin's hook): `cx` is the hook's centre across the board,
- * `faceY` the mounting face on the canvas, `c` the shank's centre
- * height. Lying flat (a hook that prints on its side): `faceX` is the
- * mounting face along canvas x (the hook's depth axis), `shankY` the
- * shank's centre on canvas y, height up = canvas y decreasing.
+ * A round hook as one swept tube, for a round-hole board: a shank
+ * through the sheet, a quarter bend (centreline radius = the peg's
+ * diameter) and a lip rising behind the sheet. Standing (a bin's hook):
+ * `cx` is the hook's centre across the board, `faceY` the mounting face
+ * on the canvas, `c` the shank's centre height. Lying flat (a hook that
+ * prints on its side): `faceX` is the mounting face along canvas x (the
+ * hook's depth axis), `shankY` the shank's centre on canvas y with up =
+ * canvas y decreasing, `zc` the tube's centre height above the bed.
  */
-export function roundHookParts(o: { d: number; gap: number; rise: number; embed: number; color: string; name: string } & ({ standing: true; cx: number; faceY: number; c: number } | { standing: false; faceX: number; shankY: number })): PartRecipe[] {
+export function roundHookParts(o: { d: number; gap: number; rise: number; embed: number; color: string; name: string } & ({ standing: true; cx: number; faceY: number; c: number } | { standing: false; faceX: number; shankY: number; zc: number })): PartRecipe[] {
   const { d, gap, rise, embed, color, name } = o
   const R = d
   const r = d / 2
-  const s45 = Math.SQRT1_2
-  // Centreline in (b, h): b backward from the face, h up from the shank
-  // centre. Shank: b from -embed to gap (+ a little into the elbow).
-  const shankLen = embed + gap + r * 0.6
-  const shankMid = (-embed + gap + r * 0.6) / 2
-  // Elbow: quarter arc about (gap, R); its 45° chord segment.
-  const elbowLen = (R * Math.PI) / 4 + r
-  const elbowMid = { b: gap + R * s45, h: R - R * s45 }
-  // Lip: b = gap + R, from h = R (- overlap) up to rise.
-  const lipLen = rise - R + r * 0.6
-  const lipMid = { b: gap + R, h: (R - r * 0.6 + rise) / 2 }
-  const circle = (x: number, y: number) => ({ kind: 'circle' as const, x: x - r, y: y - r, width: d, height: d })
-  const tip = Math.round((r - 0.1) * 10) / 10
-  if (o.standing) {
-    const { cx, faceY, c } = o
-    // A cylinder tilted about x: its extent along depth is centred on
-    // the circle's canvas y; z is its lowest point.
-    const elbowExtent = elbowLen * s45 + d * s45
-    return [
-      { name: `${name} shank`, color, outline: circle(cx, faceY - shankMid), depth: shankLen, rotation: { x: 90 }, z: c - r },
-      { name: `${name} elbow`, color, outline: circle(cx, faceY - elbowMid.b), depth: elbowLen, rotation: { x: -45 }, z: c + elbowMid.h - elbowExtent / 2 },
-      { name: `${name} lip`, color, outline: circle(cx, faceY - lipMid.b), depth: lipLen, bevel: tip, z: c + lipMid.h - lipLen / 2 },
-    ]
-  }
-  const { faceX, shankY } = o
-  // Flat: b runs along +x, h along -y; every cylinder lies on the bed.
-  return [
-    { name: `${name} shank`, color, outline: circle(faceX + shankMid, shankY), depth: shankLen, rotation: { y: 90 }, z: 0 },
-    // Tilted about y: axis at 45° between +x and -y (back and up).
-    { name: `${name} elbow`, color, outline: circle(faceX + elbowMid.b, shankY - elbowMid.h), depth: elbowLen, rotation: { y: -45 }, z: 0 },
-    { name: `${name} lip`, color, outline: circle(faceX + lipMid.b, shankY - lipMid.h), depth: lipLen, rotation: { x: 90 }, bevel: tip, z: 0 },
-  ]
+  const points = o.standing
+    ? [
+        { x: o.cx, y: o.faceY + embed, z: o.c },
+        { x: o.cx, y: o.faceY - gap, z: o.c },
+        ...arcPoints({ x: o.cx, y: o.faceY - gap, z: o.c + R }, R, { x: 0, y: 0, z: -1 }, { x: 0, y: -1, z: 0 }, 0, Math.PI / 2, 8).slice(1),
+        { x: o.cx, y: o.faceY - gap - R, z: o.c + rise },
+      ]
+    : [
+        { x: o.faceX - embed, y: o.shankY, z: o.zc },
+        { x: o.faceX + gap, y: o.shankY, z: o.zc },
+        ...arcPoints({ x: o.faceX + gap, y: o.shankY - R, z: o.zc }, R, { x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }, 0, Math.PI / 2, 8).slice(1),
+        { x: o.faceX + gap + R, y: o.shankY - rise, z: o.zc },
+      ]
+  return [{ name, color, outline: { kind: 'tube', radius: r, points }, depth: d }]
 }
 
 /**

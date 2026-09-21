@@ -206,9 +206,9 @@ export const brorHook: ProductTemplate = {
     // Shank centre: at the plate's top less a peg radius; the lip rises
     // above the plate by `rise` (base.height already includes it).
     const shankY = rise + d / 2
-    const peg = roundHookParts({ standing: false, d, gap: dims.gap, rise, embed: plateT - 0.5, color: COLOR, name: 'Peg', faceX: offset, shankY })
-    // The peg lies on the bed; centre it across the plate's width.
-    const parts = [plate, ...peg.map((p) => ({ ...p, z: Math.max(0, (width - d) / 2) }))]
-    return { width: base.width, height: base.height, parts, fuse: true }
+    // The peg is centred across the plate's width, resting on the bed
+    // when the plate is thinner than it.
+    const peg = roundHookParts({ standing: false, d, gap: dims.gap, rise, embed: plateT - 0.5, color: COLOR, name: 'Peg', faceX: offset, shankY, zc: Math.max(d / 2, width / 2) })
+    return { width: base.width, height: base.height, parts: [plate, ...peg], fuse: true }
   },
 }

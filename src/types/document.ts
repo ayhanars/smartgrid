@@ -277,6 +277,10 @@ export interface ShapeLayer {
    * its profile and twist are measured in — the solid's bottom relative
    * to this layer's, and the solid's depth — so both bend identically. */
   bendFrame?: { z: number; depth: number }
+  /** A tube: a round section swept along a path, instead of the outline
+   * extruded. The outline then only marks the footprint. Points are
+   * local mm: x across, y along the canvas (depth), z up from the bed. */
+  tube?: { radius: number; points: { x: number; y: number; z: number }[] }
   /** For hole cutters only: 'rim' (default) flares the bevels outward so
    * they round/countersink the mouth of the cut; 'shape' keeps the
    * cutter's own beveled edges, so a carved pocket has the tool's exact
