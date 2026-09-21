@@ -213,6 +213,12 @@ export function buildBeveledGeometry(
   geometry.setIndex(indices)
   if (deferShading) return geometry
   geometry.computeVertexNormals()
+  // A subdivided wall is a smooth relief whose facets can turn more than
+  // the crease angle on a tall ridge; crease detection would shade each
+  // one flat (a serrated look). Its grid already splits at sharp outline
+  // corners and shares nothing with the caps, so averaged normals are
+  // right as they are.
+  if (textureWalls || tessellate) return geometry
   // Plain computeVertexNormals shares a vertex's normal across every face
   // touching it, so a sharp reflex corner (a star's inner notch, a plain
   // box corner) blends into a normal that can point the wrong way and
