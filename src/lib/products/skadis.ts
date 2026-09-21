@@ -1,5 +1,6 @@
 import { bool, num, str, type PartRecipe, type ProductSpec, type ProductTemplate } from './types'
 import { jHook, mountProfile, standingPath, type MountDims } from './mount'
+import { SKADIS_BOARD } from './boards'
 
 /**
  * IKEA SKÅDIS pegboard, as measured on the boards: 5 × 15 mm slots on a
@@ -25,7 +26,7 @@ export const SKADIS = {
 const COLOR = '#4d8dff'
 
 /** The SKÅDIS tab in the shared mount-profile terms. */
-const SKADIS_MOUNT: MountDims = { tabThickness: SKADIS.tabThickness, lipThickness: SKADIS.lipThickness, gap: SKADIS.gap, lipDrop: SKADIS.lipDrop }
+const SKADIS_MOUNT: MountDims = { tabThickness: SKADIS.tabThickness, lipThickness: SKADIS.lipThickness, gap: SKADIS.gap, lipDrop: SKADIS.lipDrop, tabWidth: SKADIS.tabWidth }
 
 function hookCount(width: number, choice: string): number {
   if (choice !== 'auto') return Math.max(1, parseInt(choice, 10) || 1)
@@ -60,6 +61,18 @@ export const skadisContainer: ProductTemplate = {
   ],
   defaults: { width: 80, depth: 50, height: 60, wall: 2, corner: 6, hooks: 'auto', drain: false },
   notes: 'Prints standing up, hooks at the back top edge; the tab and lip undersides are 45° so no support is needed. Hooks sit 40 mm apart to match the pegboard. The parts export as one body.',
+  preview: (spec: ProductSpec) => {
+    const width = num(spec, 'width', 80)
+    const height = num(spec, 'height', 60)
+    const hooks = Math.min(hookCount(width, str(spec, 'hooks', 'auto')), Math.max(1, Math.floor((width - SKADIS.tabWidth) / SKADIS.pitch) + 1))
+    const span = (hooks - 1) * SKADIS.pitch
+    return {
+      pattern: SKADIS_BOARD.pattern,
+      silhouette: { width, height },
+      anchors: Array.from({ length: hooks }, (_, i) => ({ x: width / 2 - span / 2 + i * SKADIS.pitch - SKADIS.tabWidth / 2, y: 0, width: SKADIS.tabWidth, height: SKADIS.tabThickness })),
+      caption: `Back view · ${hooks} hook${hooks === 1 ? '' : 's'} on the 40 mm grid`,
+    }
+  },
   build: (spec: ProductSpec) => {
     const width = num(spec, 'width', 80)
     const depth = num(spec, 'depth', 50)
@@ -118,7 +131,18 @@ export const skadisHook: ProductTemplate = {
     { kind: 'number', id: 'plate', label: 'Back plate height', unit: 'mm', min: 10, max: 60, step: 1 },
   ],
   defaults: { reach: 30, width: 10, arm: 4, tip: 8, plate: 20 },
-  notes: 'Prints lying on its side, so the layers run along the hook for strength. The tab at the top goes through a slot and its lip drops behind the board.',
+  notes: 'Prints lying on its side, so the layers run along the hook for strength. The tab at the top goes through a slot and its lip drops behind the board; a hook wider than the slot gets a narrower tab, fused at export.',
+  preview: (spec: ProductSpec) => {
+    const width = num(spec, 'width', 10)
+    const plateH = num(spec, 'plate', 20)
+    const peg = Math.min(width, SKADIS.tabWidth)
+    return {
+      pattern: SKADIS_BOARD.pattern,
+      silhouette: { width, height: plateH + SKADIS.tabThickness },
+      anchors: [{ x: width / 2 - peg / 2, y: 0, width: peg, height: SKADIS.tabThickness }],
+      caption: 'Back view · one slot',
+    }
+  },
   build: (spec: ProductSpec) => {
     const reach = num(spec, 'reach', 30)
     const width = num(spec, 'width', 10)

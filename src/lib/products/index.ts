@@ -4,6 +4,7 @@ import { brorBin, brorHook } from './bror'
 
 export * from './types'
 export { SKADIS } from './skadis'
+export * from './boards'
 
 /** Every product the Create panel offers, in display order. */
 export const PRODUCT_TEMPLATES: ProductTemplate[] = [skadisContainer, skadisHook, brorBin, brorHook]

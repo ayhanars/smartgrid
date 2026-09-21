@@ -41,6 +41,17 @@ export interface ProductBuild {
   fuse?: boolean
 }
 
+/** What the 2D fit preview draws: the board's pattern, the product seen
+ * from the back (its silhouette) and where its tabs meet the sheet. */
+export interface MountPreview {
+  pattern: import('./boards').PegPattern
+  /** Back-view silhouette, mm. */
+  silhouette: { width: number; height: number }
+  /** Tabs / pegs in silhouette coordinates (from its top-left), mm. */
+  anchors: { x: number; y: number; width: number; height: number }[]
+  caption?: string
+}
+
 export interface ProductTemplate {
   id: string
   name: string
@@ -56,6 +67,8 @@ export interface ProductTemplate {
   build: (spec: ProductSpec) => ProductBuild
   /** A few sentences on how it prints and mounts, shown under the form. */
   notes?: string
+  /** The fit preview for a spec, when the product mounts on a board. */
+  preview?: (spec: ProductSpec) => MountPreview
 }
 
 /** What a generated group remembers, so its specs can be changed later. */
