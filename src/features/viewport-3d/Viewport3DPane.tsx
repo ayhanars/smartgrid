@@ -3,7 +3,8 @@ import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, GizmoHelper, GizmoViewcube, Grid, Lightformer, OrbitControls, TransformControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib'
-import { ArrowDownToLine, Box, Layers2, Maximize, Move3d, Rotate3d, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDownToLine, Box, Layers2, Maximize, Move3d, Rotate3d, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
+import { CreatePanel } from '../create/CreatePanel'
 import { IconButton } from '../../components/IconButton'
 import { expandToGroup, useDocumentStore, orderOnPlate, layerPlateId } from '../../state/documentStore'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
@@ -85,10 +86,20 @@ export function Viewport3DPane() {
   const dismissed = useAnalysisStore((s) => s.dismissed)
   const dismiss = useAnalysisStore((s) => s.dismiss)
   // Only the active plate's warnings; the others belong to plates not shown.
-  const activeWarnings = warnings.filter((w) => layers[w.id] && layerPlateId(layers[w.id], plates) === activePlateId && !(w.severity === 'partial' && dismissed.includes(w.id)))
+  // A part of a product that prints as one body (a hook on its box) is
+  // meant to hang off its neighbours, so it is never "unsupported".
+  const groups = useDocumentStore((s) => s.groups)
+  const fusedPart = (id: string) => {
+    const gid = layers[id]?.groupId
+    return !!gid && !!groups[gid]?.recipe?.fuse
+  }
+  const activeWarnings = warnings.filter((w) => layers[w.id] && layerPlateId(layers[w.id], plates) === activePlateId && !(w.severity === 'partial' && dismissed.includes(w.id)) && !fusedPart(w.id))
   const warningById = new Map(activeWarnings.map((w) => [w.id, w.severity] as const))
 
   const printPreview = useViewStore((s) => s.printPreview)
+  const viewMode = useViewStore((s) => s.viewMode)
+  const createOpen = useViewStore((s) => s.createOpen)
+  const setCreateOpen = useViewStore((s) => s.setCreateOpen)
   const previewHeightState = useViewStore((s) => s.previewHeight)
   const setPreviewHeight = useViewStore((s) => s.setPreviewHeight)
   const setPrintPreview = useViewStore((s) => s.setPrintPreview)
@@ -477,6 +488,24 @@ export function Viewport3DPane() {
           onChange={setPreviewHeight}
           onClose={() => setPrintPreview(false)}
         />
+      )}
+
+      {viewMode === '3d' && (
+        <>
+          <button
+            type="button"
+            data-create-launcher
+            className={`create-launcher create-launcher--floating ${createOpen ? 'create-launcher--active' : ''}`}
+            aria-label="Create"
+            aria-haspopup="dialog"
+            aria-expanded={createOpen}
+            title="Create a product from specs"
+            onClick={() => setCreateOpen(!createOpen)}
+          >
+            <Sparkles size={15} /> Create
+          </button>
+          <CreatePanel />
+        </>
       )}
 
       {primary && t && (

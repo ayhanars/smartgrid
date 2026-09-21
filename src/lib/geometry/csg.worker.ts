@@ -1,4 +1,4 @@
-import { cutHolesFromSolid } from './holeCut'
+import { cutHolesFromSolid, fuseSolids } from './holeCut'
 import { packGeometry, transferables, unpackGeometry, type PackedGeometry } from './csgPack'
 
 /** Off-main-thread boolean: a plate full of drilled holes can take seconds
@@ -8,6 +8,8 @@ export interface CsgRequest {
   id: number
   solid: PackedGeometry
   holes: PackedGeometry[]
+  /** Subtract the holes (default) or union them onto the solid. */
+  op?: 'subtract' | 'union'
 }
 
 export type CsgResponse = { id: number; ok: true; geometry: PackedGeometry } | { id: number; ok: false; error: string }
@@ -24,7 +26,8 @@ self.onmessage = (event: MessageEvent<CsgRequest | { cancel: number }>) => {
   try {
     const solid = unpackGeometry(data.solid)
     const holes = data.holes.map((h) => ({ geometry: unpackGeometry(h), worldX: h.x, worldY: h.y, worldZ: h.z }))
-    const cut = cutHolesFromSolid({ geometry: solid, worldX: data.solid.x, worldY: data.solid.y, worldZ: data.solid.z }, holes)
+    const placed = { geometry: solid, worldX: data.solid.x, worldY: data.solid.y, worldZ: data.solid.z }
+    const cut = data.op === 'union' ? fuseSolids([placed, ...holes]) : cutHolesFromSolid(placed, holes)
     const geometry = packGeometry(cut)
     const response: CsgResponse = { id: data.id, ok: true, geometry }
     self.postMessage(response, { transfer: transferables(geometry) })

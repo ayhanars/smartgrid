@@ -36,6 +36,7 @@ import { bedPresets, CUSTOM_BED_ID, CUSTOM_BED_MAX_Z, getBedPreset } from '../..
 import { RotationDial } from './RotationDial'
 import { HeightSlider } from './HeightSlider'
 import { AngleWheel } from './AngleWheel'
+import { ProductSection } from '../create/ProductSection'
 import { useAnalysisStore, visibleWarning } from '../../state/analysisStore'
 import { unitDropDelta, unitRest } from '../../lib/geometry/stacking'
 import './InspectorPanel.css'
@@ -83,6 +84,7 @@ export function InspectorPanel() {
         <UnitToggle />
       </div>
 
+      <ProductSection selection={selection} />
       {selection.length === 0 ? (
         <Tabs
           storageKey="doc"

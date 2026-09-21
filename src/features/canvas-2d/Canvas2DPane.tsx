@@ -17,9 +17,12 @@ import {
   Star,
   ZoomIn,
   ZoomOut,
+  Sparkles,
 } from 'lucide-react'
+import { CreatePanel } from '../create/CreatePanel'
 import { IconButton } from '../../components/IconButton'
 import { useDocumentStore, shapeWorldBounds, expandToGroup, type Guide, orderOnPlate } from '../../state/documentStore'
+import { useViewStore } from '../../state/viewStore'
 import type { Bounds, Point2, ShapeKind, ShapeLayer } from '../../types/document'
 import type { BooleanOp } from '../../lib/geometry/boolean'
 import { isTextEntryTarget } from '../../lib/dom/isTextEntryTarget'
@@ -95,6 +98,8 @@ export function Canvas2DPane() {
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState<Point2>({ x: 0, y: 0 })
   const [tool, setTool] = useState<Tool>('select')
+  const createOpen = useViewStore((s) => s.createOpen)
+  const setCreateOpen = useViewStore((s) => s.setCreateOpen)
   const [gesture, setGesture] = useState<Gesture | null>(null)
   const [isSpaceDown, setIsSpaceDown] = useState(false)
   const [isAltDown, setIsAltDown] = useState(false)
@@ -967,7 +972,7 @@ export function Canvas2DPane() {
         <IconButton size="md" active={tool === 'zoom'} aria-label="Zoom" shortcut="Z" onClick={() => setTool('zoom')}>
           <ZoomIn size={16} />
         </IconButton>
-        <IconButton size="md" aria-label="Artboard" disabled>
+        <IconButton size="md" aria-label="Artboard" className="canvas-2d__toolbar-optional" disabled>
           <SquareDashed size={16} />
         </IconButton>
         <IconButton size="md" active={tool === 'pen'} aria-label="Pen" onClick={() => setTool('pen')}>
@@ -978,10 +983,24 @@ export function Canvas2DPane() {
             <Icon size={16} />
           </IconButton>
         ))}
-        <IconButton size="md" aria-label="Cut" disabled>
+        <IconButton size="md" aria-label="Cut" className="canvas-2d__toolbar-optional" disabled>
           <Scissors size={16} />
         </IconButton>
+        <div className="canvas-2d__boolean-toolbar-divider" />
+        <button
+          type="button"
+          data-create-launcher
+          className={`create-launcher ${createOpen ? 'create-launcher--active' : ''}`}
+          aria-label="Create"
+          aria-haspopup="dialog"
+          aria-expanded={createOpen}
+          title="Create a product from specs"
+          onClick={() => setCreateOpen(!createOpen)}
+        >
+          <Sparkles size={15} /> <span>Create</span>
+        </button>
       </div>
+      <CreatePanel />
 
       <div className="canvas-2d__zoom">
         <IconButton size="sm" aria-label="Zoom out" shortcut="⇧-" onClick={() => zoomAtCenter(1 / 1.2)}>

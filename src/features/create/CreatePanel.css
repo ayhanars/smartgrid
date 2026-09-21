@@ -1,0 +1,255 @@
+.create-panel {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, calc(100% - 32px));
+  max-height: min(520px, calc(100% - 140px));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  z-index: 30;
+  overflow: hidden;
+}
+
+.create-panel__search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 10px 6px;
+  padding: 0 12px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.create-panel__search:focus-within {
+  border-color: var(--accent);
+}
+
+.create-panel__search input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.create-panel__chips {
+  display: flex;
+  gap: 4px;
+  padding: 4px 10px 8px;
+}
+
+.create-panel__chip {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.create-panel__chip:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.create-panel__chip--active {
+  background: var(--bg-field);
+  color: var(--text);
+}
+
+.create-panel__list {
+  overflow-y: auto;
+  padding: 0 6px 8px;
+}
+
+.create-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.create-panel__item:hover,
+.create-panel__item:focus-visible {
+  background: var(--bg-hover);
+}
+
+.create-panel__item-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+
+.create-panel__item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.create-panel__item-text strong {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.create-panel__item-text span,
+.create-panel__title span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.create-panel__item-cat {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.create-panel__empty {
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.create-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.create-panel__title {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.create-panel__title strong {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.create-panel__icon-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+}
+
+.create-panel__icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.create-panel__body {
+  overflow-y: auto;
+  padding: 10px 14px 6px;
+}
+
+.create-panel__notes {
+  margin: 10px 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.create-panel__foot {
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.create-panel__primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.create-panel__primary:hover {
+  filter: brightness(1.08);
+}
+
+.spec-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+
+.spec-form__field--wide {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+}
+
+.spec-form select {
+  width: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 12.5px;
+  padding: 0;
+}
+
+/* The launcher: the accent button at the end of the tool row. */
+.create-launcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  margin-left: 4px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: white;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.create-launcher:hover,
+.create-launcher--active {
+  filter: brightness(1.1);
+}
+
+.create-launcher--floating {
+  position: absolute;
+  bottom: 60px;
+  left: 12px;
+  height: 36px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
