@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Ban, Check, Eye, EyeOff, ExternalLink, Flag, RefreshCw, Search, ShieldCheck, Star, Trash2, XCircle } from 'lucide-react'
+import { ArrowDown, ArrowUp, Ban, Check, Eye, EyeOff, ExternalLink, Flag, ImagePlus, RefreshCw, Search, ShieldCheck, Sparkles, Star, Trash2, XCircle } from 'lucide-react'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { Avatar } from '../features/community/CommunityCard'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { banUser, fetchAdminStats, fetchAdminUsers, setUserRole, unbanUser, type AdminStats, type AdminUser } from '../lib/supabase/admin'
 import { listReports, reasonLabel, resolveReport, type CommunityReport, type ReportStatus } from '../lib/supabase/reports'
 import { useSiteSettings, type SiteSettings } from '../lib/supabase/settings'
+import { isNewCard, listGeneratorCards, saveGeneratorCard, uploadGeneratorThumbnail, type GeneratorCard } from '../lib/supabase/generators'
+import { GeneratorArt } from '../features/create/GeneratorArt'
+import '../features/create/GeneratorCards.css'
 import { deleteCommunityItem, listCommunityItems, moderateCommunityItem, reviewCommunityItem, type CommunityItem, type CommunityStatus } from '../lib/supabase/community'
 import { listPendingCollections, reviewCollection, type Collection } from '../lib/supabase/collections'
 import { useNotifications } from '../state/notificationsStore'
@@ -16,7 +19,7 @@ import './HomePage.css'
 import './AccountPage.css'
 import './AdminPage.css'
 
-type Tab = 'overview' | 'approvals' | 'reports' | 'community' | 'users' | 'settings'
+type Tab = 'overview' | 'approvals' | 'reports' | 'community' | 'users' | 'generators' | 'settings'
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Something went wrong')
 
@@ -29,7 +32,7 @@ export function AdminPage() {
   const profile = useAuthStore((s) => s.profile)
   const [params, setParams] = useSearchParams()
   const tabParam = params.get('tab')
-  const tab: Tab = tabParam === 'approvals' || tabParam === 'reports' || tabParam === 'community' || tabParam === 'users' || tabParam === 'settings' ? tabParam : 'overview'
+  const tab: Tab = tabParam === 'approvals' || tabParam === 'reports' || tabParam === 'community' || tabParam === 'users' || tabParam === 'generators' || tabParam === 'settings' ? tabParam : 'overview'
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(params)
     if (t === 'overview') next.delete('tab')
@@ -55,7 +58,7 @@ export function AdminPage() {
     { id: 'reports', label: 'Reports' },
     { id: 'community', label: 'Community' },
     { id: 'users', label: 'Users' },
-    ...(admin ? [{ id: 'settings' as Tab, label: 'Settings' }] : []),
+    ...(admin ? [{ id: 'generators' as Tab, label: 'Generators' }, { id: 'settings' as Tab, label: 'Settings' }] : []),
   ]
 
   return (
@@ -76,6 +79,7 @@ export function AdminPage() {
         {tab === 'overview' && <Overview />}
         {tab === 'approvals' && <Approvals navigate={navigate} />}
         {tab === 'reports' && <Reports navigate={navigate} />}
+        {tab === 'generators' && admin && <GeneratorsAdmin />}
         {tab === 'settings' && admin && <SettingsAdmin />}
         {tab === 'community' && <CommunityAdmin admin={admin} navigate={navigate} />}
         {tab === 'users' && <UsersAdmin admin={admin} selfId={user.id} />}
@@ -748,6 +752,140 @@ function SettingsAdmin() {
             }}
           />
         </SettingRow>
+      </div>
+    </section>
+  )
+}
+
+const DAY = 86_400_000
+
+/** Admins: the generator cards on the home and community pages. */
+function GeneratorsAdmin() {
+  const load = useCallback(() => listGeneratorCards(), [])
+  const { data, error, busy, reload, setData } = useLoader(load)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState<string | null>(null)
+
+  const apply = (template: string, change: Parameters<typeof saveGeneratorCard>[1]) =>
+    setData((list) =>
+      list
+        ? list
+            .map((c) => (c.template === template ? { ...c, ...(change.enabled !== undefined ? { enabled: change.enabled } : {}), ...(change.thumbnailUrl !== undefined ? { thumbnailUrl: change.thumbnailUrl } : {}), ...(change.sort !== undefined ? { sort: change.sort } : {}), ...(change.newUntil !== undefined ? { newUntil: change.newUntil } : {}) } : c))
+            .sort((a, b) => a.sort - b.sort)
+        : list,
+    )
+  // Optimistic: the switch flips at once and flips back if the save fails.
+  const patch = async (card: GeneratorCard, change: Parameters<typeof saveGeneratorCard>[1]) => {
+    apply(card.template, change)
+    try {
+      await saveGeneratorCard(card.template, change)
+      setActionError(null)
+    } catch (err) {
+      apply(card.template, { enabled: card.enabled, thumbnailUrl: card.thumbnailUrl, sort: card.sort, newUntil: card.newUntil })
+      setActionError(errorText(err))
+    }
+  }
+  const move = async (card: GeneratorCard, dir: -1 | 1) => {
+    if (!data) return
+    const i = data.findIndex((c) => c.template === card.template)
+    const j = i + dir
+    if (j < 0 || j >= data.length) return
+    const other = data[j]
+    // Swap the two sort values (giving each a distinct one when equal).
+    const a = card.sort === other.sort ? other.sort + dir : other.sort
+    const b = card.sort === other.sort ? card.sort : card.sort
+    await patch(card, { sort: a })
+    await patch(other, { sort: b })
+  }
+  const upload = async (card: GeneratorCard, file: File) => {
+    setUploading(card.template)
+    try {
+      const url = await uploadGeneratorThumbnail(card.template, file)
+      await patch(card, { thumbnailUrl: url })
+    } catch (err) {
+      setActionError(errorText(err))
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  return (
+    <section>
+      <Toolbar busy={busy} onReload={reload}>
+        <span className="admin__count">Cards under “Make one now” on the home and community pages · a New badge fades on its own</span>
+      </Toolbar>
+      {(error || actionError) && <p className="account__error">{error ?? actionError}</p>}
+      <div className="admin__table-wrap">
+        <table className="admin__table">
+          <thead>
+            <tr>
+              <th>Generator</th>
+              <th>Shown</th>
+              <th>New badge</th>
+              <th>Picture</th>
+              <th>Order</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(data ?? []).map((c) => (
+              <tr key={c.template} style={{ opacity: c.enabled ? 1 : 0.55 }}>
+                <td>
+                  <span className="admin__author">
+                    <span className="admin__thumb admin__thumb--art" style={{ color: 'var(--accent)' }}>
+                      {c.thumbnailUrl ? <img src={c.thumbnailUrl} alt="" /> : <GeneratorArt template={c.template} />}
+                    </span>
+                    <span className="admin__user">
+                      <strong>{c.product.name}</strong>
+                      <span>
+                        {c.product.category} · {c.product.tagline}
+                      </span>
+                    </span>
+                  </span>
+                </td>
+                <td>
+                  <label className="admin__toggle">
+                    <input type="checkbox" checked={c.enabled} onChange={(e) => void patch(c, { enabled: e.target.checked })} />
+                    <span>{c.enabled ? 'On' : 'Off'}</span>
+                  </label>
+                </td>
+                <td>
+                  {isNewCard(c) ? (
+                    <span className="admin__muted">
+                      <Sparkles size={11} className="admin__star" /> until {new Date(c.newUntil!).toLocaleDateString()}{' '}
+                      <button type="button" className="admin__link" onClick={() => void patch(c, { newUntil: null })}>
+                        clear
+                      </button>
+                    </span>
+                  ) : (
+                    <button type="button" className="admin__approve" onClick={() => void patch(c, { newUntil: Date.now() + 30 * DAY })}>
+                      <Sparkles size={12} /> New for 30 days
+                    </button>
+                  )}
+                </td>
+                <td className="admin__actions">
+                  <label className="admin__icon-btn" title="Upload a picture (4:3 works best)" style={{ cursor: 'pointer' }}>
+                    <ImagePlus size={13} />
+                    <input type="file" accept="image/*" style={{ display: 'none' }} disabled={uploading !== null} onChange={(e) => e.target.files?.[0] && void upload(c, e.target.files[0])} />
+                  </label>
+                  {c.thumbnailUrl && (
+                    <button type="button" className="admin__icon-btn" title="Back to the drawn picture" aria-label="Remove picture" onClick={() => void patch(c, { thumbnailUrl: null })}>
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                  {uploading === c.template && <span className="admin__muted">Uploading…</span>}
+                </td>
+                <td className="admin__actions">
+                  <button type="button" className="admin__icon-btn" aria-label="Move up" onClick={() => void move(c, -1)}>
+                    <ArrowUp size={13} />
+                  </button>
+                  <button type="button" className="admin__icon-btn" aria-label="Move down" onClick={() => void move(c, 1)}>
+                    <ArrowDown size={13} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   )

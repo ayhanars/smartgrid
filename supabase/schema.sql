@@ -1767,3 +1767,40 @@ as $$
   update public.community_reports set emailed_at = now() where id = p_report and emailed_at is null;
 $$;
 revoke execute on function public.mark_report_emailed(uuid) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Generator cards: the Create panel's products, shown on the home and
+-- community pages. Admins switch them on and off, give them a picture
+-- and a "New" badge that expires; the templates themselves live in the
+-- app (src/lib/products), keyed by id.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.generator_cards (
+  template text primary key,
+  enabled boolean not null default true,
+  thumbnail_url text,
+  sort integer not null default 0,
+  -- The card carries a "New" badge until this moment.
+  new_until timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.profiles (id) on delete set null
+);
+
+alter table public.generator_cards enable row level security;
+
+drop policy if exists "Generator cards are readable by everyone" on public.generator_cards;
+create policy "Generator cards are readable by everyone" on public.generator_cards for select using (true);
+drop policy if exists "Admins manage generator cards" on public.generator_cards;
+create policy "Admins manage generator cards" on public.generator_cards for all using (public.is_admin()) with check (public.is_admin());
+
+insert into public.generator_cards (template, sort, new_until) values
+  ('drawer-tray', 10, now() + interval '21 days'),
+  ('drawer-divider', 20, now() + interval '21 days'),
+  ('pegboard-bin', 30, now() + interval '21 days'),
+  ('pegboard-hook', 40, now() + interval '21 days'),
+  ('skadis-container', 50, null),
+  ('skadis-hook', 60, null),
+  ('bror-bin', 70, null),
+  ('bror-hook', 80, null)
+on conflict (template) do nothing;

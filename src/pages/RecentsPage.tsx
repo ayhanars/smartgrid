@@ -10,6 +10,7 @@ import { useProjects } from '../features/projects/useProjects'
 import { ProjectBanners, ProjectGrid } from '../features/projects/ProjectCards'
 import { CommunityCard } from '../features/community/CommunityCard'
 import { CollectionCard } from '../features/community/CollectionCard'
+import { GeneratorsSection } from '../features/create/GeneratorCards'
 import { PageHeader } from './HomeLayout'
 import '../features/community/community.css'
 import './HomePage.css'
@@ -101,6 +102,8 @@ export function RecentsPage() {
         </div>
         <ProjectGrid projects={projects} limit={RECENT_PROJECTS} />
       </section>
+
+      <GeneratorsSection limit={4} />
 
       {isSupabaseConfigured && user && followed && followed.length > 0 && (
         <section className="page__section">

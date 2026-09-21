@@ -20,6 +20,8 @@ const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'sk
 export function CreatePanel() {
   const open = useViewStore((s) => s.createOpen)
   const setOpen = useViewStore((s) => s.setCreateOpen)
+  const requested = useViewStore((s) => s.createTemplate)
+  const setRequested = useViewStore((s) => s.setCreateTemplate)
   const generateProduct = useDocumentStore((s) => s.generateProduct)
   const setNotice = useViewStore((s) => s.setNotice)
   const [query, setQuery] = useState('')
@@ -38,6 +40,16 @@ export function CreatePanel() {
   const picked = pickedId ? productTemplate(pickedId) : undefined
   const categories = useMemo(() => [...new Set(PRODUCT_TEMPLATES.map((t) => t.category))], [])
   const results = useMemo(() => searchTemplates(query, category ?? undefined), [query, category])
+
+  useEffect(() => {
+    if (!open || !requested) return
+    const t = productTemplate(requested)
+    setRequested(null)
+    if (t) {
+      setPickedId(t.id)
+      setSpec({ ...t.defaults })
+    }
+  }, [open, requested, setRequested])
 
   useEffect(() => {
     if (!open) return

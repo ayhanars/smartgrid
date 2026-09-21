@@ -81,13 +81,25 @@ export interface TrayPreview {
   kind: 'tray'
   width: number
   depth: number
-  /** Compartments, in tray mm from its top-left corner. */
+  height: number
+  /** Compartments (open floor), in tray mm from its top-left corner. */
   cells: { x: number; y: number; width: number; height: number }[]
+  /** Solid material seen from above: outer walls and dividers, to scale. */
+  walls: { x: number; y: number; width: number; height: number }[]
   /** Tiles the tray is split into, with the bed size for the caption. */
   tiles: { x: number; y: number; width: number; height: number; name: string }[]
   bed: { width: number; height: number }
   /** Where connectors join two tiles (tray mm). */
   joints?: { x: number; y: number }[]
+  /** A side elevation of one wall / strip: its length and height, the
+   * hole pattern on it and any notches cut into it. */
+  elevation?: {
+    length: number
+    height: number
+    holes: { shape: 'round' | 'hex' | 'slot' | 'square'; size: number; spacing: number; inset: number } | null
+    notches: { x: number; width: number; depth: number; fromTop: boolean }[]
+    label: string
+  }
   caption?: string
 }
 

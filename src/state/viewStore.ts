@@ -33,6 +33,9 @@ interface ViewState {
   /** The Create panel (product templates) is open. */
   createOpen: boolean
   setCreateOpen: (on: boolean) => void
+  /** A product the panel should open on (a generator card was clicked). */
+  createTemplate: string | null
+  setCreateTemplate: (id: string | null) => void
   /** Which panes the editor shows; mirrored from the shell so panels can
    * follow it (the inspector jumps to its 3D tab in 3D-only mode). */
   viewMode: '2d' | 'split' | '3d'
@@ -60,6 +63,8 @@ export const useViewStore = create<ViewState>()((set) => ({
   setProfileEditing: (on) => set({ profileEditing: on }),
   createOpen: false,
   setCreateOpen: (on) => set({ createOpen: on }),
+  createTemplate: null,
+  setCreateTemplate: (id) => set({ createTemplate: id }),
   viewMode: 'split',
   setViewMode: (mode) => set({ viewMode: mode }),
 }))

@@ -7,6 +7,7 @@ import { listCommunityItems, type CommunityItem } from '../lib/supabase/communit
 import { listPublicCollections, type Collection } from '../lib/supabase/collections'
 import { CommunityCard } from '../features/community/CommunityCard'
 import { CollectionCard } from '../features/community/CollectionCard'
+import { GeneratorsSection } from '../features/create/GeneratorCards'
 import { PageHeader } from './HomeLayout'
 import '../features/community/community.css'
 import './HomePage.css'
@@ -46,6 +47,10 @@ export function CommunityPage() {
   return (
     <div>
       <PageHeader title="Community" hint="Models and collections people shared. Open a copy and make it yours." />
+
+      <div id="generators">
+        <GeneratorsSection />
+      </div>
 
       <section className="page__section">
         <div className="page__section-header">
