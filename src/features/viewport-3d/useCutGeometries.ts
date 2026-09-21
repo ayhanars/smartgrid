@@ -43,6 +43,8 @@ export interface CutGeometries {
 }
 
 const RESULT_CACHE_MAX = 48
+/** Coarsest texture subdivision while a drag is in progress (mm). */
+export const PREVIEW_STEP = 1.2
 
 /** Finished cuts, shared by every viewport and preview on the page so a
  * shape cut once (the editor, a thumbnail, a community spin) is not cut
@@ -113,7 +115,7 @@ export function useCutGeometries(
         // Straight through-holes are cut in 2D right here; the rest (and
         // the perforation) is what the worker gets. When nothing is left
         // for it, the job is complete as built.
-        const plan = planCut(layer, holeLayers, SCENE_SCALE, toWorld, { fastShading: editing })
+        const plan = planCut(layer, holeLayers, SCENE_SCALE, toWorld, { fastShading: editing, minStep: editing ? PREVIEW_STEP : undefined })
         job = { key, bodies: plan.bodies, needsCsg: plan.needsCsg, holes: plan.holes, world }
       }
       used.set(key, job)

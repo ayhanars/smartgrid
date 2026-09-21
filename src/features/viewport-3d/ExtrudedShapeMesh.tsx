@@ -5,6 +5,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import type { ShapeLayer } from '../../types/document'
 import { buildLayerGeometries } from '../../lib/geometry/layerGeometry'
 import { useDocumentStore } from '../../state/documentStore'
+import { PREVIEW_STEP } from './useCutGeometries'
 import { SCENE_SCALE } from './sceneScale'
 
 /** Bodies above this many triangles get no outline edges. */
@@ -68,7 +69,13 @@ export function ExtrudedShapeMesh({
   const tileVersion = useViewStore((s) => s.tileVersion)
   const editing = useDocumentStore((s) => s.editing)
   const geometries = useMemo(
-    (): THREE.BufferGeometry[] => cutGeometries ?? buildLayerGeometries(layer, SCENE_SCALE, { fastShading: editing }),
+    (): THREE.BufferGeometry[] => {
+      if (cutGeometries) return cutGeometries
+      // A shell cavity sits inside its solid; mid-drag it is not worth a
+      // rebuild of its own (the solid's preview is what the eye follows).
+      if (editing && layer.shellOf) return []
+      return buildLayerGeometries(layer, SCENE_SCALE, { fastShading: editing, minStep: editing ? PREVIEW_STEP : undefined })
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [cutGeometries, layer, tileVersion, editing],
   )

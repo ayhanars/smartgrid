@@ -48,7 +48,7 @@ export function printQuaternionToEuler(q: THREE.Quaternion): { x: number; y: num
  * no matter how it's tilted, so a tilt can never sink it under the plate.
  * Computed from the main geometry and shared with its cutters, so a
  * perforation rotates and re-anchors exactly with the body it drills. */
-function rotationBake(geometry: THREE.BufferGeometry, layer: ShapeLayer): THREE.Matrix4 | null {
+export function rotationBake(geometry: THREE.BufferGeometry, layer: ShapeLayer): THREE.Matrix4 | null {
   const { rotationX, rotationY, rotation } = layer.transform
   if (!rotationX && !rotationY && !rotation) return null
   geometry.computeBoundingBox()
@@ -81,6 +81,9 @@ export interface LayerGeometryOptions {
   /** Shade a bent (profiled / twisted) body with plain averaged normals
    * instead of crease detection: a tenth of the time, for mid-drag previews. */
   fastShading?: boolean
+  /** Coarsest texture subdivision allowed (mm): a mid-drag preview trades
+   * fine relief for speed. */
+  minStep?: number
 }
 
 /** Length of the outline the walls are built on (mm), for lining a cavity's
@@ -120,6 +123,7 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
       // Only a perforated body needs subdivided caps (for the CSG); a
       // profiled or twisted one keeps them planar.
       tessellateCaps: !!requested,
+      minStep: options.minStep,
     })
     // A vase, a cone, a barrel: the footprint scaled along the height; a
     // twisted vase: turned along it. Shaded once, after both bends.
@@ -161,7 +165,7 @@ function builtBevels(contour: Point2[], depth: number, layer: ShapeLayer): { bev
 /** A hole layer's footprint rings expressed in `solid`'s own unrotated
  * local frame (the frame its geometry and cutters are built in): world
  * XY, then undo the solid's spin about its footprint center. */
-function holeFootprintsInLocalFrame(solid: ShapeLayer, hole: ShapeLayer): Point2[][] {
+export function holeFootprintsInLocalFrame(solid: ShapeLayer, hole: ShapeLayer): Point2[][] {
   const all = solid.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
   const bounds = contourBounds(all)
   const cx = bounds.x + bounds.width / 2

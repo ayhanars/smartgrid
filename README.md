@@ -182,7 +182,18 @@ bottom ring first. While a wheel, slider or gizmo is dragged the store's
 averaged normals and no outline edges, and the boolean cut runs once
 when the drag ends. A bent body is shaded once, after both bends, with
 planar caps (only a perforated body subdivides its caps), which took a
-twisted textured vase from ~2 s to ~0.2 s per rebuild.
+twisted textured vase from ~2 s to ~0.2 s per rebuild. Mid-drag the
+texture is subdivided no finer than 1.2 mm and the cavity's own ghost
+mesh is not rebuilt.
+
+The common hollow shape (a single-outline solid without bevels or
+perforation, its texture on the walls, hollowed by "Hollow out") is not
+cut with a boolean at all: `shellMesh.ts` builds the shell directly —
+outer wall, inner wall (the same wall routine, turned inward), rim,
+floor — so it appears hollow at once instead of solid-then-hollow a few
+seconds later, and the exporter gets the same mesh. Anything else (a
+second hole, perforation, bevels, a top-face texture) still goes through
+the CSG worker.
 
 A wall texture has an angle (−90..90°, so flutes can run diagonally), a
 fade-out length at the bottom and top ends (the relief eases to flat
