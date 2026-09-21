@@ -14,6 +14,8 @@ export interface MountDims {
   lipDrop: number
   /** Width of the tab along the sheet: what the opening allows. */
   tabWidth: number
+  /** Fillet on the tab's side faces, mm: rounds a peg for a round hole. */
+  round?: number
 }
 
 /**
@@ -102,7 +104,7 @@ export function jHook(o: { mount: MountDims; reach: number; width: number; arm: 
   const tabPiece: { b: number; h: number }[] = [{ b: -plateT + 0.5, h: top }, ...tab, { b: -plateT + 0.5, h: top - t }]
   const parts: PartRecipe[] = [
     { name: 'Hook', color, outline: { kind: 'path', points: plate.map(toCanvas) }, depth: width },
-    { name: 'Tab', color, outline: { kind: 'path', points: tabPiece.map(toCanvas) }, depth: peg, z: (width - peg) / 2 },
+    { name: 'Tab', color, outline: { kind: 'path', points: tabPiece.map(toCanvas) }, depth: peg, z: (width - peg) / 2, bevel: o.mount.round },
   ]
   return { width: offset + back, height: top, parts, fuse: true }
 }

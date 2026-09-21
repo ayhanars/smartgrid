@@ -16,15 +16,17 @@ const MOUNT_FIELDS: SpecField[] = [
 ]
 const MOUNT_DEFAULTS: ProductSpec = { hole: BROR_BOARD.pattern.kind === 'round' ? BROR_BOARD.pattern.diameter : 6, pitch: BROR_BOARD.pattern.pitchX, sheet: BROR_BOARD.thickness }
 
-/** A square peg that passes a round hole: its diagonal is the hole less
- * 0.4 mm of play. The lip behind the sheet is as thick as the peg. */
+/** A rounded peg that fills a round hole: as wide and as thick as the
+ * hole less 0.4 mm of play, with its edges filleted to half that, so
+ * the cross-section is close to a circle. The lip behind the sheet is
+ * as thick as the peg. */
 function mountFrom(spec: ProductSpec): { dims: MountDims; pitch: number; pattern: PegPattern } {
   const hole = num(spec, 'hole', 6)
   const sheet = num(spec, 'sheet', 1.5)
   const pitch = num(spec, 'pitch', 30)
-  const peg = Math.max(2, Math.round(((hole - 0.4) / Math.SQRT2) * 10) / 10)
+  const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
   return {
-    dims: { tabThickness: peg, tabWidth: peg, lipThickness: Math.max(3, peg), gap: sheet + 0.6, lipDrop: Math.max(8, hole + 4) },
+    dims: { tabThickness: peg, tabWidth: peg, lipThickness: Math.max(3, peg), gap: sheet + 0.6, lipDrop: Math.max(8, hole + 4), round: Math.round((peg / 2 - 0.1) * 10) / 10 },
     pitch,
     pattern: { kind: 'round', pitchX: pitch, pitchY: pitch, stagger: false, diameter: hole },
   }
@@ -73,7 +75,7 @@ export const brorBin: ProductTemplate = {
     ...MOUNT_FIELDS,
   ],
   defaults: { width: 90, depth: 60, height: 80, wall: 2, corner: 6, hooks: 'auto', rows: '1', drain: false, ...MOUNT_DEFAULTS },
-  notes: 'Prints standing up; square pegs at the back top edge go through the round holes and drop behind the sheet. Peg and lip undersides are 45°, no support needed. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
+  notes: 'Prints standing up; rounded pegs at the back top edge go through the round holes and drop behind the sheet. Peg and lip undersides are 45°, no support needed. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 90)
     const height = num(spec, 'height', 80)
@@ -114,6 +116,7 @@ export const brorBin: ProductTemplate = {
           color: COLOR,
           outline: { kind: 'path', points: standingPath(profile, width / 2 - span / 2 + i * pitch, tabHeight, boxY) },
           depth: dims.tabWidth,
+          bevel: dims.round,
           rotation: { y: 90 },
           z: height - tabHeight - r * pitch,
         })
@@ -138,7 +141,7 @@ export const brorHook: ProductTemplate = {
     ...MOUNT_FIELDS,
   ],
   defaults: { reach: 40, width: 12, arm: 5, tip: 10, plate: 30, ...MOUNT_DEFAULTS },
-  notes: 'Prints lying on its side. A square peg sized to the hole goes through it and its lip drops behind the sheet; a hook wider than the peg gets the peg as a fused centre piece. Check hole diameter and sheet thickness on your board first.',
+  notes: 'Prints lying on its side. A rounded peg sized to the hole goes through it and its lip drops behind the sheet; a hook wider than the peg gets the peg as a fused centre piece. Check hole diameter and sheet thickness on your board first.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 12)
     const plateH = num(spec, 'plate', 30)

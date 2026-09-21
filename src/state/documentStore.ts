@@ -306,6 +306,10 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
     if (part.color) api.setColor(id, part.color)
     api.setExtrusionDepth(id, part.depth)
     if (part.cornerRadius) api.setCornerRadius(id, part.cornerRadius)
+    if (part.bevel) {
+      api.setBevelBottom(id, part.bevel)
+      api.setBevelTop(id, part.bevel)
+    }
     if (part.rotation) api.setRotation(id, part.rotation)
     // Always explicit: a new shape otherwise climbs onto whatever is
     // under its footprint (a hook onto its box).
