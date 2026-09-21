@@ -58,7 +58,12 @@ function hash(str: string): string {
   return `${one(1)}-${one(7)}-${str.length}`
 }
 
-export const cutCacheKey = (jobKey: string) => hash(jobKey)
+/** Bump whenever the built geometry or its shading changes for the same
+ * document data, so cuts stored on a device before the change are not
+ * served for it (they would carry the old look). */
+export const GEOMETRY_VERSION = 2
+
+export const cutCacheKey = (jobKey: string) => hash(`v${GEOMETRY_VERSION}:${jobKey}`)
 
 export async function loadCut(jobKey: string): Promise<THREE.BufferGeometry[] | null> {
   const db = await openDb()
