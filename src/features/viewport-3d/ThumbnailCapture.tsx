@@ -14,6 +14,8 @@ export const THUMBNAIL_HIDE = 'thumbnail-hide'
 
 function isChrome(obj: THREE.Object3D): boolean {
   if (obj.name === THUMBNAIL_HIDE) return true
+  // A selected cutter's translucent ghost (a hollow's cavity, a hole).
+  if (obj.userData?.cutterGhost === true) return true
   // Selection outlines (drei <Edges lineWidth>) and the transform gizmo.
   const type = obj.type
   return type === 'Line2' || type === 'LineSegments2' || type.startsWith('TransformControls')

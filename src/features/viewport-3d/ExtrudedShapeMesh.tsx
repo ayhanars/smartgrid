@@ -119,6 +119,9 @@ export function ExtrudedShapeMesh({
         onContextMenu(layer.id, e.nativeEvent.clientX, e.nativeEvent.clientY)
       }}
       visible={!hidden}
+      // A cutter's translucent ghost is editor feedback (it shows while
+      // selected); the thumbnail leaves it out.
+      userData={{ cutterGhost: layer.isHole }}
     >
       <group position={[-center.x, -center.y, -center.z]}>
         {geometries.map((geo, i) => {
