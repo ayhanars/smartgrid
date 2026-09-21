@@ -42,7 +42,7 @@ export function ProductSection({ selection }: { selection: string[] }) {
   const partCount = order.filter((id) => layers[id]?.groupId === groupId && !layers[id]?.shellOf).length
 
   return (
-    <div className="inspector-section inspector-product">
+    <div className="inspector-section">
       <div className="inspector-section__header">
         <span>{template.name}</span>
         <span className="inspector-section__hint">{partCount} part{partCount === 1 ? '' : 's'}</span>

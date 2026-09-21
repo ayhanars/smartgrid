@@ -54,6 +54,11 @@ export function InspectorPanel() {
   const selectedLayer = selection.length === 1 ? (layers[selection[0]] ?? null) : unitSolid
   const multiCount = unitSolid ? 1 : selection.length
   const effectIds = unitSolid ? [unitSolid.id] : selection
+  // A generated product (every selected shape in one group with a recipe)
+  // gets its specs as the first tab.
+  const groups = useDocumentStore((s) => s.groups)
+  const selectedGroups = new Set(selection.map((id) => layers[id]?.groupId).filter((g): g is string => !!g))
+  const productGroupId = selectedGroups.size === 1 && groups[[...selectedGroups][0]]?.recipe ? [...selectedGroups][0] : null
 
   return (
     <div className="inspector-panel">
@@ -84,7 +89,6 @@ export function InspectorPanel() {
         <UnitToggle />
       </div>
 
-      <ProductSection selection={selection} />
       {selection.length === 0 ? (
         <Tabs
           storageKey="doc"
@@ -95,9 +99,10 @@ export function InspectorPanel() {
         />
       ) : (
         <Tabs
-          storageKey="shape"
+          storageKey={productGroupId ? 'product' : 'shape'}
           followView
           tabs={[
+            ...(productGroupId ? [{ id: 'product', label: 'Product', content: <ProductSection selection={selection} /> }] : []),
             { id: 'design', label: 'Design', content: <><AlignmentSection ids={selection} /><DesignTab layer={selectedLayer} multiCount={multiCount} /></> },
             { id: '3d', label: '3D', content: <ThreeDTab layer={selectedLayer} multiCount={multiCount} /> },
             { id: 'effects', label: 'Effects', content: <EffectsTab layer={selectedLayer} ids={effectIds} /> },
