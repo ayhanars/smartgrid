@@ -9,11 +9,25 @@ export interface ExportMesh {
   name: string
   /** '#rrggbb' */
   color: string
-  /** Flat, non-indexed triangle list in mm, Z-up (slicer convention). */
+  /** Vertices in mm, Z-up (slicer convention): a flat triangle list when
+   * `indices` is absent, a shared vertex table otherwise. */
   positions: Float32Array
+  /** Triangle vertex indices into `positions`, when the mesh is indexed. */
+  indices?: Uint32Array
   /** 1-based build plate the mesh sits on; absent for single-plate exports. */
   plate?: number
 }
+
+export interface ExportProgress {
+  /** Shapes finished so far, out of `total`. */
+  done: number
+  total: number
+  /** What is being worked on right now. */
+  stage: string
+}
+
+/** Lets the page paint (a progress bar, the busy cursor) between shapes. */
+const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 /** How the plates of a multi-plate export are laid out in slicer space. */
 export interface PlateLayout {
@@ -36,16 +50,25 @@ const Y_UP_TO_Z_UP = new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0
  * overlapping hole already subtracted, exactly as the viewport shows them,
  * in mm at the shape's real plate position. Holes are cutters, so they
  * never appear as objects of their own. */
-export async function buildExportMeshes(layers: Record<string, ShapeLayer>, order: string[], layout?: PlateLayout): Promise<ExportMesh[]> {
+export async function buildExportMeshes(layers: Record<string, ShapeLayer>, order: string[], layout?: PlateLayout, onProgress?: (p: ExportProgress) => void): Promise<ExportMesh[]> {
   const holeIds = order.filter((id) => layers[id]?.isHole && layers[id]?.visible)
+  const solidIds = order.filter((id) => layers[id] && !layers[id].isHole && layers[id].visible)
+  let done = 0
   const toWorld = (layer: ShapeLayer) => ({ worldX: layer.transform.x, worldY: layer.transform.z, worldZ: layer.transform.y })
   const multi = layout && layout.plates.length > 1 ? layout : null
+  // The 2D canvas measures y from the back of the bed forward; a slicer
+  // measures it from the front, with the bed spanning 0..depth. So the
+  // Y-up → Z-up rotation below (which maps canvas y to −Y) is followed by
+  // a shift of one bed depth, and every object lands on its plate where
+  // the canvas shows it.
+  const bedDepth = layout?.bedDepth ?? 0
   const plateIndex = (layer: ShapeLayer) => (multi ? Math.max(0, multi.plates.findIndex((p) => p.id === layerPlateId(layer, multi.plates))) : 0)
 
   const meshes: ExportMesh[] = []
-  for (const id of order) {
+  for (const id of solidIds) {
     const layer = layers[id]
-    if (!layer || layer.isHole || !layer.visible) continue
+    onProgress?.({ done, total: solidIds.length, stage: layer.name })
+    await breathe()
 
     const solidBounds = shapeWorldBounds(layer)
     // Only cutters on the same plate can cut a solid.
@@ -62,10 +85,11 @@ export async function buildExportMeshes(layers: Record<string, ShapeLayer>, orde
       } catch (err) {
         console.error(`Hole cut failed for "${layer.name}" during export, exporting it uncut:`, err)
       }
-      const placed = (finalGeo.index ? finalGeo.toNonIndexed() : finalGeo.clone())
-        .translate(solidWorld.worldX, solidWorld.worldY, solidWorld.worldZ)
-        .applyMatrix4(Y_UP_TO_Z_UP)
+      // Kept indexed when it is: the 3MF writer wants a shared vertex
+      // table anyway, and welding a flat list back is the slow part.
+      const placed = finalGeo.clone().translate(solidWorld.worldX, solidWorld.worldY, solidWorld.worldZ).applyMatrix4(Y_UP_TO_Z_UP).translate(0, bedDepth, 0)
       const mesh: ExportMesh = { name: layer.name, color: layer.color, positions: placed.getAttribute('position').array as Float32Array }
+      if (placed.index) mesh.indices = Uint32Array.from(placed.index.array)
       if (multi) {
         const idx = plateIndex(layer)
         const origin = plateOrigin(idx, multi.plates.length, multi.bedWidth, multi.bedDepth)
@@ -74,7 +98,10 @@ export async function buildExportMeshes(layers: Record<string, ShapeLayer>, orde
       }
       meshes.push(mesh)
     }
+    done++
   }
+  onProgress?.({ done, total: solidIds.length, stage: 'Writing the file' })
+  await breathe()
   return meshes
 }
 

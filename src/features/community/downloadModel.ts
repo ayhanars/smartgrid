@@ -56,7 +56,7 @@ export const slugify = (title: string) => title.replace(/[^a-z0-9]+/gi, '-').rep
 export async function downloadSnapshot(snapshot: DocumentSnapshot, title: string, format: '3mf' | 'stl', printer: string): Promise<boolean> {
   const bed = getBedPreset(printer)
   const plates = snapshot.plates && snapshot.plates.length > 1 ? snapshot.plates : undefined
-  const layout = plates && bed ? { plates, bedWidth: bed.width, bedDepth: bed.height } : undefined
+  const layout = bed ? { plates: plates ?? [{ id: 'plate-1', name: 'Plate 1' }], bedWidth: bed.width, bedDepth: bed.height } : undefined
   const meshes = await buildExportMeshes(snapshot.layers, snapshot.order, layout)
   if (meshes.length === 0) return false
   const slug = slugify(title)

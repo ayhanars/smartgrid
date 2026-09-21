@@ -14,7 +14,7 @@ function normalizeColor(hex: string): string {
 
 /** Welds the flat triangle list back into a shared vertex table, which 3MF
  * requires (triangles reference vertex indices). */
-function indexTriangles(positions: Float32Array) {
+function indexTriangles(positions: Float32Array): { vertices: ArrayLike<number>; triangles: ArrayLike<number> } {
   const vertices: number[] = []
   const triangles: number[] = []
   const lookup = new Map<string, number>()
@@ -75,7 +75,7 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
   meshes.forEach((mesh, i) => {
     const objectId = i + 2 // id 1 is the basematerials group
     const colorIndex = colors.indexOf(normalizeColor(mesh.color))
-    const { vertices, triangles } = indexTriangles(mesh.positions)
+    const { vertices, triangles } = mesh.indices ? { vertices: mesh.positions, triangles: mesh.indices } : indexTriangles(mesh.positions)
     const vertexXml: string[] = []
     for (let v = 0; v < vertices.length; v += 3) {
       vertexXml.push(`          <vertex x="${vertices[v].toFixed(4)}" y="${vertices[v + 1].toFixed(4)}" z="${vertices[v + 2].toFixed(4)}" />`)
@@ -154,7 +154,9 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
       'Metadata/model_settings.config': strToU8(modelSettings),
       'Metadata/project_settings.config': strToU8(projectSettings),
     },
-    { level: 6 },
+    // Mesh XML deflates well even at the lightest level, several times
+    // faster than the default on a few million triangles.
+    { level: 1 },
   )
   // Copy into a plain ArrayBuffer-backed view so it satisfies BlobPart typing.
   return new Uint8Array(zipped)

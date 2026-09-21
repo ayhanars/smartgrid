@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronUp, Download, Globe } from 'lucide-react'
+import { ChevronUp, Download, Globe, Loader2 } from 'lucide-react'
 import { artboardSize, layerPlateId, orderOnPlate, useDocumentStore } from '../../state/documentStore'
-import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
+import { buildExportMeshes, downloadBlob, type ExportProgress } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
@@ -29,6 +29,7 @@ export function InspectorFooter() {
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [preparing, setPreparing] = useState(false)
+  const [progress, setProgress] = useState<ExportProgress | null>(null)
   const [publishOpen, setPublishOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -50,25 +51,28 @@ export function InspectorFooter() {
     setMenuOpen(false)
     if (preparing) return
     setPreparing(true)
+    setProgress(null)
     try {
       const state = useDocumentStore.getState()
       const bed = artboardSize(state)
       if (format === '3mf') {
         // A 3MF carries every plate: Bambu Studio opens it with the same plates.
-        const meshes = await buildExportMeshes(layers, order, { plates, bedWidth: bed.width, bedDepth: bed.height })
+        const meshes = await buildExportMeshes(layers, order, { plates, bedWidth: bed.width, bedDepth: bed.height }, setProgress)
         if (meshes.length === 0) return
         downloadBlob(write3mf(meshes, { plates: plates.map((p) => p.name), bambu: { bedPresetId: state.bedPresetId, printSettings: state.printSettings } }), `${fileBase}.3mf`, 'model/3mf')
       } else {
         // STL has no plates, so it holds the plate you are looking at.
-        const meshes = await buildExportMeshes(layers, orderOnPlate(state, activePlateId))
+        const meshes = await buildExportMeshes(layers, orderOnPlate(state, activePlateId), { plates: [activePlate], bedWidth: bed.width, bedDepth: bed.height }, setProgress)
         if (meshes.length === 0) return
         const suffix = multiPlate ? `-${activePlate.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}` : ''
         downloadBlob(writeBinaryStl(meshes), `${fileBase}${suffix}.stl`, 'model/stl')
       }
     } finally {
       setPreparing(false)
+      setProgress(null)
     }
   }
+  const fraction = progress ? (progress.total > 0 ? progress.done / progress.total : 0) : 0
 
   return (
     <div className="inspector-footer" ref={ref}>
@@ -90,16 +94,20 @@ export function InspectorFooter() {
       )}
       <button
         type="button"
-        className="inspector-footer__btn inspector-footer__btn--primary"
+        className={`inspector-footer__btn inspector-footer__btn--primary ${preparing ? 'inspector-footer__btn--busy' : ''}`}
         disabled={solids.length === 0 || preparing}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
+        aria-busy={preparing}
         title={solids.length === 0 ? 'Draw a solid shape to export' : 'Download for your printer'}
         onClick={() => setMenuOpen((o) => !o)}
       >
-        <Download size={14} />
-        {preparing ? 'Preparing…' : 'Export'}
-        <ChevronUp size={13} className="inspector-footer__chevron" />
+        {preparing && <span className="inspector-footer__progress" style={{ width: `${Math.round(fraction * 100)}%` }} aria-hidden="true" />}
+        <span className="inspector-footer__btn-body">
+          {preparing ? <Loader2 size={14} className="inspector-footer__spinner" /> : <Download size={14} />}
+          {preparing ? (progress ? (progress.done < progress.total ? `Preparing ${progress.done + 1}/${progress.total} · ${progress.stage}` : progress.stage + '…') : 'Preparing…') : 'Export'}
+          {!preparing && <ChevronUp size={13} className="inspector-footer__chevron" />}
+        </span>
       </button>
       {isSupabaseConfigured && (
         <button

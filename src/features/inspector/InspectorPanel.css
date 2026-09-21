@@ -962,3 +962,42 @@
 .inspector-angle .inspector-note {
   margin-top: 6px;
 }
+
+.inspector-footer__btn--busy,
+.inspector-footer__btn--busy:disabled {
+  position: relative;
+  overflow: hidden;
+  opacity: 1;
+  cursor: progress;
+}
+
+.inspector-footer__progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(255, 255, 255, 0.22);
+  transition: width 0.25s ease;
+  pointer-events: none;
+}
+
+.inspector-footer__btn-body {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inspector-footer__spinner {
+  animation: inspector-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes inspector-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
