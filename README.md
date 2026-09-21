@@ -210,11 +210,20 @@ per 40 mm of width, tab and lip undersides at 45° so it prints standing
 with no support) and a J-hook that prints lying flat. A product whose
 parts print as one body (`fuse`) is unioned in the CSG worker at export
 time, so the hooks and the box leave as a single object. The second
-family is IKEA BROR (a bin hanging from one perforated upright by
-stacked tabs, and a J-hook): its slot width, slot height, pitch and
-sheet thickness are fields with starting values rather than verified
-constants, to be checked against the rail. The tab-through-a-slot
-profile both families share lives in `mount.ts`.
+family is IKEA BROR, the 840 × 450 mm round-hole pegboard on a 30 mm
+grid (a bin with square pegs sized to the hole, and a J-hook); hole
+diameter and sheet thickness are fields with starting values, to be
+verified on a board. Both boards are described in `boards.ts` and the
+tab-through-an-opening profile both families share lives in
+`mount.ts`; a hook wider than its opening gets the tab as a narrower
+centre piece, fused at export.
+
+The product form is a small simulator: above the sliders a back view of
+the product is drawn to scale on a window of the pegboard (SKÅDIS's
+staggered 5 × 15 mm slots, BROR's round holes), with each tab or peg
+marked green where it meets an opening and red where it would miss, and
+it redraws as the specs change. The same view and sliders appear in the
+right panel for a generated product.
 
 A wall texture has an angle (−90..90°, so flutes can run diagonally), a
 fade-out length at the bottom and top ends (the relief eases to flat

@@ -6,11 +6,21 @@ const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
 
 /** The fields of a product, two to a row. Values stay in mm in the spec;
  * the display follows the document's unit like the inspector does. */
-export function SpecForm({ fields, spec, onChange }: { fields: SpecField[]; spec: ProductSpec; onChange: (id: string, value: SpecValue) => void }) {
+export function SpecForm({ fields, spec, onChange, sliders = false }: { fields: SpecField[]; spec: ProductSpec; onChange: (id: string, value: SpecValue) => void; sliders?: boolean }) {
   return (
     <div className="spec-form">
       {fields.map((f) => {
-        if (f.kind === 'number') return <NumberField key={f.id} field={f} value={typeof spec[f.id] === 'number' ? (spec[f.id] as number) : f.min} onChange={(v) => onChange(f.id, v)} />
+        if (f.kind === 'number') {
+          const value = typeof spec[f.id] === 'number' ? (spec[f.id] as number) : f.min
+          const field = <NumberField key={f.id} field={f} value={value} onChange={(v) => onChange(f.id, v)} />
+          if (!sliders) return field
+          return (
+            <div key={f.id} className="spec-form__slider" title={f.hint}>
+              <input type="range" min={f.min} max={f.max} step={f.step ?? 0.1} value={value} aria-label={f.label} onChange={(e) => onChange(f.id, Number(e.target.value))} />
+              {field}
+            </div>
+          )
+        }
         if (f.kind === 'select')
           return (
             <label key={f.id} className="inspector-field spec-form__field" title={f.hint}>

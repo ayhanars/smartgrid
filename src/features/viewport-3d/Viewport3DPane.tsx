@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { Canvas, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, GizmoHelper, GizmoViewcube, Grid, Lightformer, OrbitControls, TransformControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl, TransformControls as TransformControlsImpl } from 'three-stdlib'
-import { ArrowDownToLine, Box, Layers2, Maximize, Move3d, Rotate3d, Sparkles, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowDownToLine, Box, Layers2, Maximize, Move3d, Rotate3d, Boxes, ZoomIn, ZoomOut } from 'lucide-react'
 import { CreatePanel } from '../create/CreatePanel'
 import { IconButton } from '../../components/IconButton'
 import { expandToGroup, useDocumentStore, orderOnPlate, layerPlateId } from '../../state/documentStore'
@@ -502,7 +502,7 @@ export function Viewport3DPane() {
             title="Create a product from specs"
             onClick={() => setCreateOpen(!createOpen)}
           >
-            <Sparkles size={15} /> Create
+            <Boxes size={15} /> Create
           </button>
           <CreatePanel />
         </>

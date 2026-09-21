@@ -4,6 +4,7 @@ import { PRODUCT_TEMPLATES, cleanSpec, productTemplate, searchTemplates, type Pr
 import { useDocumentStore } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
 import { SpecForm } from './SpecForm'
+import { BoardPreview } from './BoardPreview'
 import './CreatePanel.css'
 
 const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'skadis-hook': Anchor, 'bror-bin': Package, 'bror-hook': Anchor }
@@ -85,7 +86,8 @@ export function CreatePanel() {
             </button>
           </div>
           <div className="create-panel__body">
-            <SpecForm fields={picked.fields} spec={spec} onChange={(id: string, value: SpecValue) => setSpec((s) => ({ ...s, [id]: value }))} />
+            {picked.preview && <BoardPreview preview={picked.preview(cleanSpec(picked, spec))} />}
+            <SpecForm fields={picked.fields} spec={spec} sliders onChange={(id: string, value: SpecValue) => setSpec((s) => ({ ...s, [id]: value }))} />
             {picked.notes && <p className="create-panel__notes">{picked.notes}</p>}
           </div>
           <div className="create-panel__foot">

@@ -3,6 +3,7 @@ import { RefreshCcw } from 'lucide-react'
 import { cleanSpec, productTemplate, type ProductSpec, type SpecValue } from '../../lib/products'
 import { useDocumentStore } from '../../state/documentStore'
 import { SpecForm } from './SpecForm'
+import { BoardPreview } from './BoardPreview'
 
 /**
  * Shown above the tabs when the selection is (part of) a product the
@@ -46,7 +47,8 @@ export function ProductSection({ selection }: { selection: string[] }) {
         <span>{template.name}</span>
         <span className="inspector-section__hint">{partCount} part{partCount === 1 ? '' : 's'}</span>
       </div>
-      <SpecForm fields={template.fields} spec={spec} onChange={(id: string, value: SpecValue) => setSpec((prev) => ({ ...prev, [id]: value }))} />
+      {template.preview && <BoardPreview preview={template.preview(cleanSpec(template, spec))} />}
+      <SpecForm fields={template.fields} spec={spec} sliders onChange={(id: string, value: SpecValue) => setSpec((prev) => ({ ...prev, [id]: value }))} />
       <button type="button" className={`inspector-product__update ${dirty ? 'inspector-product__update--dirty' : ''}`} disabled={!dirty} onClick={update}>
         <RefreshCcw size={13} /> Update product
       </button>

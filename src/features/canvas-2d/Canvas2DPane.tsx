@@ -17,7 +17,7 @@ import {
   Star,
   ZoomIn,
   ZoomOut,
-  Sparkles,
+  Boxes,
 } from 'lucide-react'
 import { CreatePanel } from '../create/CreatePanel'
 import { IconButton } from '../../components/IconButton'
@@ -997,7 +997,7 @@ export function Canvas2DPane() {
           title="Create a product from specs"
           onClick={() => setCreateOpen(!createOpen)}
         >
-          <Sparkles size={15} /> <span>Create</span>
+          <Boxes size={15} /> <span>Create</span>
         </button>
       </div>
       <CreatePanel />
