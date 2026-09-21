@@ -10,7 +10,7 @@ import { restingHeight, unitDropDelta, unitRest } from '../lib/geometry/stacking
 import { nearestPlate } from '../lib/geometry/plateLayout'
 import { buildShellCavity, type ShellCavity, type ShellOptions } from '../lib/geometry/shell'
 import { useViewStore } from './viewStore'
-import { buildLayerCutters, buildLayerGeometries, solidPerimeter } from '../lib/geometry/layerGeometry'
+import { buildLayerCutters, buildLayerGeometries, effectiveContour, solidPerimeter } from '../lib/geometry/layerGeometry'
 import { cutHolesFromSolid } from '../lib/geometry/holeCut'
 import { holeOutline, prism } from '../lib/geometry/perforation'
 
@@ -378,6 +378,15 @@ export function buildAssetLayers(asset: AssetDefinition, origin: Point2, layerHe
  * pattern, measured on the solid's wall, pulling the cavity surface the
  * same way the solid's is pushed — so the wall keeps its thickness. A
  * cavity texture the user set stays as it is. */
+/** The solid's wall outline expressed in the cavity's local frame (the
+ * cavity bakes the solid's spin and re-origins at its own bounds). */
+function solidRingInCavityFrame(solid: ShapeLayer, cavity: ShapeLayer): Point2[] | undefined {
+  const contour = effectiveContour(solid)
+  if (!contour) return undefined
+  const round = (v: number) => Math.round(v * 1000) / 1000
+  return rotatedLocalPoints(solid, contour).map((p) => ({ x: round(p.x + solid.transform.x - cavity.transform.x), y: round(p.y + solid.transform.y - cavity.transform.y) }))
+}
+
 function withDerivedTexture(solid: ShapeLayer, cavity: ShapeLayer): ShapeLayer {
   const src = solid.texture
   const wantsThrough = !!src && src.through && src.depth > 0 && (src.target === 'walls' || src.target === 'both')
@@ -388,7 +397,13 @@ function withDerivedTexture(solid: ShapeLayer, cavity: ShapeLayer): ShapeLayer {
       through: false,
       // Solid: cut = inward. Cavity: 'raised' is what moves its surface inward.
       relief: (src.relief ?? 'cut') === 'cut' ? 'raised' : 'cut',
-      derived: { perimeter: solidPerimeter(solid), height: Math.max(0.2, solid.extrusionDepth), phaseV: cavity.transform.z - solid.transform.z },
+      derived: {
+        perimeter: solidPerimeter(solid),
+        height: Math.max(0.2, solid.extrusionDepth),
+        phaseV: cavity.transform.z - solid.transform.z,
+        ring: solidRingInCavityFrame(solid, cavity),
+        wall: cavity.shellOf?.wall,
+      },
     }
     if (JSON.stringify(cavity.texture) === JSON.stringify(texture)) return cavity
     return { ...cavity, texture }

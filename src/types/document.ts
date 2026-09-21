@@ -134,7 +134,17 @@ export interface SurfaceTexture {
   through?: boolean
   /** Set on a cavity's texture derived from its solid's (see `through`):
    * pattern coordinates are measured on the solid's wall, so both line up. */
-  derived?: { perimeter: number; height: number; phaseV: number }
+  derived?: {
+    perimeter: number
+    height: number
+    phaseV: number
+    /** The solid's wall outline in this cavity's frame, and the wall
+     * between them: each cavity column takes its pattern position from
+     * the solid point straight across the wall, so grooves line up
+     * exactly (an inset outline's arc length drifts around corners). */
+    ring?: Point2[]
+    wall?: number
+  }
 }
 
 export const TEXTURE_PATTERNS: { id: TexturePattern; label: string; hint: string }[] = [
