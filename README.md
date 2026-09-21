@@ -19,7 +19,11 @@ layout is intentionally on hold pending a layout benchmark.
 - React + TypeScript + Vite
 - zustand + zundo for state and undo/redo
 - Three.js, @react-three/fiber, @react-three/drei for 3D rendering
-- three-bvh-csg for real boolean mesh subtraction (holes) in a Web Worker;
+- Manifold (manifold-3d, WebAssembly) for boolean mesh subtraction and
+  union (holes, pockets, perforations) in a Web Worker: its output is
+  guaranteed watertight with shared edges, so slicers add no repairs,
+  fills or phantom supports. Inputs are welded by position first; a body
+  Manifold rejects as non-manifold falls back to three-bvh-csg;
   straight through-holes are cut in 2D instead (`cutPlan.ts`), and every
   finished cut is kept in IndexedDB (`csgCache.ts`, 200 MB, oldest out) so
   a shape is cut once per device
