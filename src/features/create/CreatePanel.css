@@ -325,3 +325,66 @@
 .spec-form__slider .inspector-field {
   margin: 0;
 }
+
+/* Recent section and the tray simulator */
+.create-panel__section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.create-panel__item--recent .create-panel__item-cat {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tray-preview__tile {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.tray-preview__tile--0 {
+  fill: rgba(77, 141, 255, 0.18);
+}
+
+.tray-preview__tile--1 {
+  fill: rgba(224, 168, 74, 0.2);
+}
+
+.tray-preview__tile--2 {
+  fill: rgba(96, 200, 140, 0.18);
+}
+
+.tray-preview__tile--3 {
+  fill: rgba(220, 96, 160, 0.18);
+}
+
+.tray-preview__tile--4 {
+  fill: rgba(160, 120, 255, 0.18);
+}
+
+.tray-preview__cell {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+
+.tray-preview__label {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.tray-preview__joint {
+  fill: var(--accent);
+  stroke: var(--bg-panel);
+  stroke-width: 1;
+}

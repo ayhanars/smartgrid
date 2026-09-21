@@ -86,33 +86,56 @@ export function standingPath(points: { h: number; b: number }[], centerX: number
   return points.map((p) => ({ x: centerX + height / 2 - p.h, y: faceY - p.b }))
 }
 
+/** The gentle bend of a round hook: not a U but a sweep of `HOOK_BEND`
+ * degrees on a radius of `HOOK_RADIUS` pegs, then a straight lip. Easy
+ * to tilt into the hole, and it still looks up behind the sheet. */
+export const HOOK_BEND = (55 * Math.PI) / 180
+export const HOOK_RADIUS = 1.6
+
+/** How far a round hook of peg diameter `d` reaches behind the sheet
+ * face (past the gap), and how high its tip rises above the shank. */
+export function roundHookReach(d: number, rise: number): { back: number; up: number } {
+  const R = HOOK_RADIUS * d
+  return { back: R * Math.sin(HOOK_BEND) + rise * Math.cos(HOOK_BEND) + d / 2, up: R * (1 - Math.cos(HOOK_BEND)) + rise * Math.sin(HOOK_BEND) + d / 2 }
+}
+
 /**
  * A round hook as one swept tube, for a round-hole board: a shank
- * through the sheet, a quarter bend (centreline radius = the peg's
- * diameter) and a lip rising behind the sheet. Standing (a bin's hook):
- * `cx` is the hook's centre across the board, `faceY` the mounting face
- * on the canvas, `c` the shank's centre height. Lying flat (a hook that
- * prints on its side): `faceX` is the mounting face along canvas x (the
- * hook's depth axis), `shankY` the shank's centre on canvas y with up =
- * canvas y decreasing, `zc` the tube's centre height above the bed.
+ * through the sheet, a gentle bend (HOOK_BEND on HOOK_RADIUS pegs) and
+ * a straight lip of `rise` looking up behind the sheet. Standing (a
+ * bin's hook): `cx` is the hook's centre across the board, `faceY` the
+ * mounting face on the canvas, `c` the shank's centre height. Lying
+ * flat (a hook that prints on its side): `faceX` is the mounting face
+ * along canvas x (the hook's depth axis), `shankY` the shank's centre on
+ * canvas y with up = canvas y decreasing, `zc` the tube's centre height
+ * above the bed.
  */
 export function roundHookParts(o: { d: number; gap: number; rise: number; embed: number; color: string; name: string } & ({ standing: true; cx: number; faceY: number; c: number } | { standing: false; faceX: number; shankY: number; zc: number })): PartRecipe[] {
   const { d, gap, rise, embed, color, name } = o
-  const R = d
+  const R = HOOK_RADIUS * d
   const r = d / 2
+  const A = HOOK_BEND
+  const sin = Math.sin(A)
+  const cos = Math.cos(A)
   const points = o.standing
-    ? [
-        { x: o.cx, y: o.faceY + embed, z: o.c },
-        { x: o.cx, y: o.faceY - gap, z: o.c },
-        ...arcPoints({ x: o.cx, y: o.faceY - gap, z: o.c + R }, R, { x: 0, y: 0, z: -1 }, { x: 0, y: -1, z: 0 }, 0, Math.PI / 2, 8).slice(1),
-        { x: o.cx, y: o.faceY - gap - R, z: o.c + rise },
-      ]
-    : [
-        { x: o.faceX - embed, y: o.shankY, z: o.zc },
-        { x: o.faceX + gap, y: o.shankY, z: o.zc },
-        ...arcPoints({ x: o.faceX + gap, y: o.shankY - R, z: o.zc }, R, { x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }, 0, Math.PI / 2, 8).slice(1),
-        { x: o.faceX + gap + R, y: o.shankY - rise, z: o.zc },
-      ]
+    ? (() => {
+        const end = { x: o.cx, y: o.faceY - gap - R * sin, z: o.c + R - R * cos }
+        return [
+          { x: o.cx, y: o.faceY + embed, z: o.c },
+          { x: o.cx, y: o.faceY - gap, z: o.c },
+          ...arcPoints({ x: o.cx, y: o.faceY - gap, z: o.c + R }, R, { x: 0, y: 0, z: -1 }, { x: 0, y: -1, z: 0 }, 0, A, 8).slice(1),
+          { x: end.x, y: end.y - rise * cos, z: end.z + rise * sin },
+        ]
+      })()
+    : (() => {
+        const end = { x: o.faceX + gap + R * sin, y: o.shankY - R + R * cos, z: o.zc }
+        return [
+          { x: o.faceX - embed, y: o.shankY, z: o.zc },
+          { x: o.faceX + gap, y: o.shankY, z: o.zc },
+          ...arcPoints({ x: o.faceX + gap, y: o.shankY - R, z: o.zc }, R, { x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }, 0, A, 8).slice(1),
+          { x: end.x + rise * cos, y: end.y - rise * sin, z: end.z },
+        ]
+      })()
   return [{ name, color, outline: { kind: 'tube', radius: r, points }, depth: d }]
 }
 

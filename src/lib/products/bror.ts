@@ -1,6 +1,6 @@
 import { bool, num, str, type PartRecipe, type ProductSpec, type ProductTemplate, type SpecField } from './types'
 import { dividerParts } from './dividers'
-import { jHook, roundHookParts, type MountDims } from './mount'
+import { jHook, roundHookParts, roundHookReach, type MountDims } from './mount'
 import { BROR_BOARD, type PegPattern } from './boards'
 
 /**
@@ -27,20 +27,21 @@ function mountFrom(spec: ProductSpec): { dims: MountDims; pitch: number; pattern
   const pitch = num(spec, 'pitch', 30)
   const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
   const gap = sheet + 0.6
+  const lipRise = Math.max(8, hole + 4)
+  const hook = roundHookReach(peg, lipRise)
   return {
-    // lipThickness here is how far behind the sheet the hook reaches: the
-    // bend (radius = peg) plus the lip's own radius.
-    dims: { tabThickness: peg, tabWidth: peg, lipThickness: 1.5 * peg, gap, lipDrop: 0, lipRise: Math.max(8, hole + 4), round: Math.round((peg / 2 - 0.1) * 10) / 10 },
+    // lipThickness here is how far behind the sheet the hook reaches.
+    dims: { tabThickness: peg, tabWidth: peg, lipThickness: hook.back, gap, lipDrop: 0, lipRise, round: Math.round((peg / 2 - 0.1) * 10) / 10 },
     pitch,
     pattern: { kind: 'round', pitchX: pitch, pitchY: pitch, stagger: false, diameter: hole },
-    reach: gap + 1.5 * peg,
+    reach: gap + hook.back,
   }
 }
 
-/** Height of the hooks' shank centre: the lip's top sits 2 mm under
+/** Height of the hooks' shank centre: the lip's tip sits 2 mm under
  * the bin's top edge. */
 function shankCenter(height: number, dims: MountDims): number {
-  return height - 2 - (dims.lipRise ?? 0) - dims.tabThickness / 2
+  return height - 2 - roundHookReach(dims.tabThickness, dims.lipRise ?? 0).up
 }
 
 /** Rows of straight studs under the hook row: as many as fit and the
@@ -103,7 +104,7 @@ export const brorBin: ProductTemplate = {
     ...MOUNT_FIELDS,
   ],
   defaults: { width: 90, depth: 60, height: 80, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', dividers: 0, drain: false, ...MOUNT_DEFAULTS },
-  notes: 'Prints standing up. Rounded hooks near the top go through the holes and turn up behind the sheet (hang the bin by tilting it in); straight studs below sit in the holes so it cannot tilt. Short horizontal pegs print without support. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
+  notes: 'Prints standing up. Rounded hooks near the top go through the holes and bend gently up behind the sheet (hang the bin by tilting it in); straight studs below sit in the holes so it cannot tilt. Short horizontal pegs print without support. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 90)
     const height = num(spec, 'height', 80)

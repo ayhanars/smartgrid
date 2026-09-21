@@ -80,7 +80,7 @@ export async function buildExportMeshes(
   // its solids leave as the parts of one compound object, each cut on
   // its own, overlapping where they join. (A mesh boolean of the parts
   // left cracks along the seams that slicers "repaired" by filling.)
-  const fuseParts = new Map<string, { parts: ExportMesh[]; layer: ShapeLayer }>()
+  const fuseParts = new Map<string, { parts: ExportMesh[]; layer: ShapeLayer; groupId: string }>()
   const place = (geo: THREE.BufferGeometry, name: string, layer: ShapeLayer): ExportMesh => {
     // Kept indexed when it is: the 3MF writer wants a shared vertex
     // table anyway, and welding a flat list back is the slow part.
@@ -116,19 +116,26 @@ export async function buildExportMeshes(
         console.error(`Hole cut failed for "${layer.name}" during export, exporting it uncut:`, err)
       }
       const world = finalGeo.clone().translate(solidWorld.worldX, solidWorld.worldY, solidWorld.worldZ)
-      const fuseGroup = layer.groupId && groups[layer.groupId]?.recipe?.fuse ? layer.groupId : null
       const mesh = place(world, layer.name, layer)
+      // A fused group split across plates is one body per plate.
+      const fuseGroup = layer.groupId && groups[layer.groupId]?.recipe?.fuse ? `${layer.groupId}:${mesh.plate ?? 1}` : null
       if (fuseGroup) {
-        const entry = fuseParts.get(fuseGroup) ?? { parts: [], layer }
+        const entry = fuseParts.get(fuseGroup) ?? { parts: [], layer, groupId: layer.groupId! }
         entry.parts.push(mesh)
         fuseParts.set(fuseGroup, entry)
       } else meshes.push(mesh)
     }
     done++
   }
-  for (const [groupId, { parts, layer }] of fuseParts) {
-    const name = groups[groupId]?.name ?? layer.name
-    meshes.push({ name, color: layer.color, positions: new Float32Array(0), plate: parts[0]?.plate, components: parts })
+  const bodiesOf = new Map<string, number>()
+  for (const { groupId } of fuseParts.values()) bodiesOf.set(groupId, (bodiesOf.get(groupId) ?? 0) + 1)
+  const numbered = new Map<string, number>()
+  for (const { parts, layer, groupId } of fuseParts.values()) {
+    const base = groups[groupId]?.name ?? layer.name
+    const count = bodiesOf.get(groupId) ?? 1
+    const n = (numbered.get(groupId) ?? 0) + 1
+    numbered.set(groupId, n)
+    meshes.push({ name: count > 1 ? `${base} ${n}/${count}` : base, color: layer.color, positions: new Float32Array(0), plate: parts[0]?.plate, components: parts })
   }
   onProgress?.({ done, total: solidIds.length, stage: 'Writing the file' })
   await breathe()

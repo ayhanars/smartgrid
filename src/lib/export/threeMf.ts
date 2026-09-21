@@ -53,9 +53,21 @@ function indexTriangles(positions: Float32Array, indices?: Uint32Array): { verti
       h = (h + 1) & mask
     }
   }
-  const triangles = new Uint32Array(indices ? indices.length : inCount)
-  for (let t = 0; t < triangles.length; t++) triangles[t] = remap[indices ? indices[t] : t]
-  return { vertices: vertices.subarray(0, outCount * 3), triangles }
+  // Welding can collapse a sliver (a boolean's hairline triangle) onto a
+  // shared vertex; a triangle with two corners on one vertex is dropped.
+  const triCount = (indices ? indices.length : inCount) / 3
+  const triangles = new Uint32Array(triCount * 3)
+  let out = 0
+  for (let t = 0; t < triCount; t++) {
+    const a = remap[indices ? indices[t * 3] : t * 3]
+    const b = remap[indices ? indices[t * 3 + 1] : t * 3 + 1]
+    const c = remap[indices ? indices[t * 3 + 2] : t * 3 + 2]
+    if (a === b || b === c || a === c) continue
+    triangles[out++] = a
+    triangles[out++] = b
+    triangles[out++] = c
+  }
+  return { vertices: vertices.subarray(0, outCount * 3), triangles: triangles.subarray(0, out) }
 }
 
 /**
