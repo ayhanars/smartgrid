@@ -12,24 +12,50 @@ function normalizeColor(hex: string): string {
   return m ? `#${m[1].toUpperCase()}` : '#4D8DFF'
 }
 
-/** Welds the flat triangle list back into a shared vertex table, which 3MF
- * requires (triangles reference vertex indices). */
-function indexTriangles(positions: Float32Array): { vertices: ArrayLike<number>; triangles: ArrayLike<number> } {
-  const vertices: number[] = []
-  const triangles: number[] = []
-  const lookup = new Map<string, number>()
-  for (let i = 0; i < positions.length; i += 3) {
-    const x = positions[i], y = positions[i + 1], z = positions[i + 2]
-    const key = `${x.toFixed(5)},${y.toFixed(5)},${z.toFixed(5)}`
-    let idx = lookup.get(key)
-    if (idx === undefined) {
-      idx = vertices.length / 3
-      lookup.set(key, idx)
-      vertices.push(x, y, z)
+/** Welds vertices that sit at the same spot (to 0.1 µm) into one shared
+ * vertex table. 3MF consumers judge a mesh by index topology: a slicer
+ * sees every unshared edge as an open edge, so a box whose faces each
+ * carry their own vertices (kept apart for shading) looks like a pile of
+ * loose plates and gets "repaired". Works on flat and indexed input. */
+function indexTriangles(positions: Float32Array, indices?: Uint32Array): { vertices: Float32Array; triangles: Uint32Array } {
+  const inCount = positions.length / 3
+  const remap = new Uint32Array(inCount)
+  const vertices = new Float32Array(positions.length)
+  // Quantized coordinates of each welded vertex, for the equality test.
+  const wx = new Int32Array(inCount), wy = new Int32Array(inCount), wz = new Int32Array(inCount)
+  let outCount = 0
+  // Open addressing on the quantized coordinates: a Map keyed by strings
+  // was the slow part of exporting a few million triangles.
+  let tableSize = 1
+  while (tableSize < inCount * 2) tableSize <<= 1
+  const table = new Int32Array(tableSize).fill(-1)
+  const mask = tableSize - 1
+  for (let i = 0; i < inCount; i++) {
+    const x = Math.round(positions[i * 3] * 1e4), y = Math.round(positions[i * 3 + 1] * 1e4), z = Math.round(positions[i * 3 + 2] * 1e4)
+    let h = (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) & mask
+    for (;;) {
+      const j = table[h]
+      if (j === -1) {
+        table[h] = outCount
+        wx[outCount] = x
+        wy[outCount] = y
+        wz[outCount] = z
+        vertices[outCount * 3] = x / 1e4
+        vertices[outCount * 3 + 1] = y / 1e4
+        vertices[outCount * 3 + 2] = z / 1e4
+        remap[i] = outCount++
+        break
+      }
+      if (wx[j] === x && wy[j] === y && wz[j] === z) {
+        remap[i] = j
+        break
+      }
+      h = (h + 1) & mask
     }
-    triangles.push(idx)
   }
-  return { vertices, triangles }
+  const triangles = new Uint32Array(indices ? indices.length : inCount)
+  for (let t = 0; t < triangles.length; t++) triangles[t] = remap[indices ? indices[t] : t]
+  return { vertices: vertices.subarray(0, outCount * 3), triangles }
 }
 
 /**
@@ -78,7 +104,7 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
   const meshObject = (mesh: ExportMesh): { id: number; colorIndex: number } => {
     const objectId = nextId++
     const colorIndex = colors.indexOf(normalizeColor(mesh.color))
-    const { vertices, triangles } = mesh.indices ? { vertices: mesh.positions, triangles: mesh.indices } : indexTriangles(mesh.positions)
+    const { vertices, triangles } = indexTriangles(mesh.positions, mesh.indices)
     const vertexXml: string[] = []
     for (let v = 0; v < vertices.length; v += 3) {
       vertexXml.push(`          <vertex x="${vertices[v].toFixed(4)}" y="${vertices[v + 1].toFixed(4)}" z="${vertices[v + 2].toFixed(4)}" />`)

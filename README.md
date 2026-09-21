@@ -152,7 +152,10 @@ Exports are named after the project; a 3MF is written as a Bambu Studio
 project (generator tag, printer / print / filament preset names in
 `Metadata/project_settings.config`), which is what makes Bambu Studio
 open it with its plates and settings instead of as loose geometry — use
-"Open project", not "Import". The 2D artboard colour is a document
+"Open project", not "Import". Every mesh in a 3MF is written with one
+shared vertex table (vertices welded by position), since slicers judge a
+mesh by index topology and would otherwise see each shading seam as an
+open edge. The 2D artboard colour is a document
 setting (Artboard section when nothing is selected).
 
 Profile: a solid's width along its height (`profile` on the layer:
