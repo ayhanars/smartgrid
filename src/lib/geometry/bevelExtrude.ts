@@ -3,7 +3,7 @@ import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.j
 import type { Point2 } from '../../types/document'
 import { computeSafeBevel, dilatePolygon, erodePolygon, signedArea } from './offset'
 import type { SurfaceTexture } from '../../types/document'
-import { buildTexturedCap, buildTexturedWall } from './surfaceTexture'
+import { buildTexturedCap, buildTexturedWall, textureStep } from './surfaceTexture'
 
 // Below this angle between adjacent faces, normals blend smoothly (a
 // rounded fillet reads as glossy-smooth); at or above it, the edge stays
@@ -54,6 +54,8 @@ export interface BeveledGeometryOptions {
    * turned per height keeps its caps planar, so they can stay two plain
    * fans — the caps are the slow part of a tessellation. */
   tessellateCaps?: boolean
+  /** Coarsest texture step allowed (mm), for quick previews. */
+  minStep?: number
 }
 
 export function buildBeveledGeometry(
@@ -63,7 +65,7 @@ export function buildBeveledGeometry(
   bevelTopRequested: number,
   options: BeveledGeometryOptions = {},
 ): THREE.BufferGeometry {
-  const { flare = false, texture = null, textureSign = -1, textureTopCap = true, tessellate, deferShading = false, tessellateCaps = true } = options
+  const { flare = false, texture = null, textureSign = -1, textureTopCap = true, tessellate, deferShading = false, tessellateCaps = true, minStep } = options
   // Wall and cap triangle winding below assumes the same orientation every
   // primitive shape has (positive signed area). A pen path clicked in the
   // other direction arrives reversed and would build inside-out — every
@@ -164,7 +166,7 @@ export function buildBeveledGeometry(
   // A zero-depth "texture" is just a tessellation.
   const flat: SurfaceTexture = { pattern: 'grid', target: 'both', size: 6, depth: 0 }
   if (depth - safeTop > safeBottom + 1e-6) {
-    if (textureWalls) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, texture, textureSign))
+    if (textureWalls) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, texture, textureSign, minStep ? Math.max(textureStep(texture), minStep) : undefined))
     else if (tessellate) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, flat, textureSign, tessellate))
     else addWall(contour, safeBottom, contour, depth - safeTop)
   }
@@ -199,7 +201,7 @@ export function buildBeveledGeometry(
 
   const topCapRing = dedupeRing(topCap)
   if (textureTop && textureTopCap) {
-    appendPart(buildTexturedCap(topCapRing, depth, texture, undefined, textureSign))
+    appendPart(buildTexturedCap(topCapRing, depth, texture, minStep ? Math.max(textureStep(texture), minStep) : undefined, textureSign))
   } else if (capStep) {
     appendPart(buildTexturedCap(topCapRing, depth, flat, capStep))
   } else {

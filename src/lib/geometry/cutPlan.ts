@@ -2,6 +2,7 @@ import type * as THREE from 'three'
 import type { ShapeLayer } from '../../types/document'
 import { buildFlatCutGeometries, buildLayerCutters, buildLayerGeometries, isFlatHole, perforationTessellation } from './layerGeometry'
 import type { PositionedGeometry } from './holeCut'
+import { buildShellGeometry, canBuildShellDirectly } from './shellMesh'
 
 export interface CutPlan {
   /** The solid's bodies: already cut in 2D where a hole allowed it. */
@@ -25,11 +26,15 @@ export function planCut(
   holeLayers: ShapeLayer[],
   scale: number,
   toWorld: (layer: ShapeLayer) => { worldX: number; worldY: number; worldZ: number },
-  options: { fastShading?: boolean } = {},
+  options: { fastShading?: boolean; minStep?: number } = {},
 ): CutPlan {
+  // The common hollow vase / cup: built as a shell outright, no boolean.
+  if (holeLayers.length === 1 && canBuildShellDirectly(solid, holeLayers[0])) {
+    return { bodies: [buildShellGeometry(solid, holeLayers[0], scale, { minStep: options.minStep })], needsCsg: false, holes: () => [] }
+  }
   const flat = holeLayers.filter((h) => isFlatHole(solid, h))
   const rest = holeLayers.filter((h) => !isFlatHole(solid, h))
-  const bodies = flat.length > 0 ? buildFlatCutGeometries(solid, flat, scale) : buildLayerGeometries(solid, scale, { fastShading: options.fastShading })
+  const bodies = flat.length > 0 ? buildFlatCutGeometries(solid, flat, scale) : buildLayerGeometries(solid, scale, { fastShading: options.fastShading, minStep: options.minStep })
   // Cavities go first and, on a perforated body, are built at the same
   // subdivision: a cavity's few huge faces split against tens of
   // thousands of drilled-wall triangles takes ~40 s instead of 2.
