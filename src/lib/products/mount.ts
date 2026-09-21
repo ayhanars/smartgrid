@@ -16,6 +16,10 @@ export interface MountDims {
   tabWidth: number
   /** Fillet on the tab's side faces, mm: rounds a peg for a round hole. */
   round?: number
+  /** Set for a lip that turns UP behind the sheet (a classic pegboard
+   * hook, hung by tilting) instead of dropping; `lipDrop` is ignored.
+   * Standing, it prints as a column on the shank, no chamfer needed. */
+  lipRise?: number
 }
 
 /**
@@ -26,6 +30,22 @@ export interface MountDims {
  */
 export function mountProfile(m: MountDims, embed: number): { points: { h: number; b: number }[]; height: number } {
   const { tabThickness: t, lipThickness: lt, gap, lipDrop } = m
+  if (m.lipRise) {
+    // Shank from the part through the sheet, lip rising behind it.
+    const back = gap + lt
+    const height = t + m.lipRise
+    return {
+      height,
+      points: [
+        { h: 0, b: -embed },
+        { h: 0, b: back },
+        { h: height, b: back },
+        { h: height, b: gap },
+        { h: t, b: gap },
+        { h: t, b: -embed },
+      ],
+    }
+  }
   const height = t + Math.max(lipDrop, gap + embed)
   const top = height
   const back = gap + lt
@@ -63,16 +83,24 @@ export function jHook(o: { mount: MountDims; reach: number; width: number; arm: 
   const top = plateH + t
   const back = gap + lt
   const offset = plateT + reach
+  const rise = o.mount.lipRise ?? 0
   // (b, h): b backward from the sheet face (negative = in front), h up;
   // lying flat on the canvas x is the depth axis (front to the left) and
   // y is height (top of the hook toward the top of the canvas).
-  const toCanvas = (p: { b: number; h: number }): Point2 => ({ x: p.b + offset, y: top - p.h })
-  const tab: { b: number; h: number }[] = [
-    { b: back, h: top },
-    { b: back, h: top - t - lipDrop },
-    { b: gap, h: top - t - lipDrop + lt },
-    { b: gap, h: top - t },
-  ]
+  const toCanvas = (p: { b: number; h: number }): Point2 => ({ x: p.b + offset, y: top + rise - p.h })
+  const tab: { b: number; h: number }[] = o.mount.lipRise
+    ? [
+        { b: gap, h: top },
+        { b: gap, h: top + o.mount.lipRise },
+        { b: back, h: top + o.mount.lipRise },
+        { b: back, h: top - t },
+      ]
+    : [
+        { b: back, h: top },
+        { b: back, h: top - t - lipDrop },
+        { b: gap, h: top - t - lipDrop + lt },
+        { b: gap, h: top - t },
+      ]
   const body: { b: number; h: number }[] = [
     { b: 0, h: top },
     ...tab,
@@ -87,7 +115,7 @@ export function jHook(o: { mount: MountDims; reach: number; width: number; arm: 
   ]
   const peg = Math.min(width, tabWidth)
   if (peg >= width - 0.05) {
-    return { width: offset + back, height: top, parts: [{ name: 'Hook', color, outline: { kind: 'path', points: body.map(toCanvas) }, depth: width }] }
+    return { width: offset + back, height: top + rise, parts: [{ name: 'Hook', color, outline: { kind: 'path', points: body.map(toCanvas) }, depth: width }] }
   }
   // Plate and arm at full width; the tab as its own narrower piece,
   // embedded one plate thickness into the plate so the union is solid.
@@ -106,5 +134,5 @@ export function jHook(o: { mount: MountDims; reach: number; width: number; arm: 
     { name: 'Hook', color, outline: { kind: 'path', points: plate.map(toCanvas) }, depth: width },
     { name: 'Tab', color, outline: { kind: 'path', points: tabPiece.map(toCanvas) }, depth: peg, z: (width - peg) / 2, bevel: o.mount.round },
   ]
-  return { width: offset + back, height: top, parts, fuse: true }
+  return { width: offset + back, height: top + rise, parts, fuse: true }
 }
