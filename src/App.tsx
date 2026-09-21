@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes, useNavigate, useSearchParams } from 'react-router-dom'
 import { HomeLayout } from './pages/HomeLayout'
 import { RecentsPage } from './pages/RecentsPage'
 import { ProjectsPage } from './pages/ProjectsPage'
@@ -23,10 +23,12 @@ import { emptyDocument } from './state/documentStore'
 /** `/new`: create a project and jump straight into it. */
 function NewProjectRedirect() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const create = params.get('create')
   useEffect(() => {
     const meta = createLocalProject(emptyDocument())
-    navigate(`/p/${meta.id}`, { replace: true })
-  }, [navigate])
+    navigate(`/p/${meta.id}${create ? `?create=${encodeURIComponent(create)}` : ''}`, { replace: true })
+  }, [navigate, create])
   return null
 }
 

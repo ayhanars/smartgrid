@@ -57,6 +57,12 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
   const layer = settings.layerHeight ?? 0.2
   const quality = QUALITY[layer.toFixed(2)] ?? '0.20mm Standard'
   const filaments = colors.length > 0 ? colors : ['#4D8DFF']
+  // Bambu Studio builds a project's presets from its own defaults plus
+  // this file, unless the file says which keys differ from the named
+  // system presets: then everything else (speeds, filament density…)
+  // comes from those presets. Without it a plain box shows 0 g of
+  // filament and a nine-hour estimate.
+  const printKeys = ['layer_height', 'initial_layer_print_height', 'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'sparse_infill_density', 'sparse_infill_pattern', 'seam_position']
   return {
     version: BAMBU_VERSION,
     from: 'project',
@@ -75,5 +81,10 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
     bottom_shell_layers: String(settings.bottomLayers ?? 3),
     sparse_infill_density: `${settings.infillDensity ?? 15}%`,
     sparse_infill_pattern: INFILL[settings.infillPattern ?? 'grid'] ?? 'grid',
+    // The layer seam at the back, where a pegboard product faces the
+    // board: an aligned seam otherwise settles in the concave corner
+    // where a hook meets the box and shows as a pale line.
+    seam_position: 'rear',
+    different_settings_to_system: [printKeys.join(';'), ...filaments.map(() => 'filament_colour'), ''],
   }
 }

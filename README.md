@@ -156,7 +156,12 @@ Exports are named after the project; a 3MF is written as a Bambu Studio
 project (generator tag, printer / print / filament preset names in
 `Metadata/project_settings.config`), which is what makes Bambu Studio
 open it with its plates and settings instead of as loose geometry — use
-"Open project", not "Import". Every mesh in a 3MF is written with one
+"Open project", not "Import". The project config lists which keys differ
+from the named system presets (`different_settings_to_system`), so Bambu
+Studio takes speeds, filament density and the rest from its own profiles
+rather than its bare defaults (which gave 0 g and hours-long
+estimates), and puts the layer seam at the rear (against the board).
+Every mesh in a 3MF is written with one
 shared vertex table (vertices welded by position), since slicers judge a
 mesh by index topology and would otherwise see each shading seam as an
 open edge. The 2D artboard colour is a document
@@ -315,21 +320,31 @@ Moderation tools on top of that:
 
 ### Products in the Create panel
 
+The products are also cards under "Make one now" on the home and
+community pages (`generator_cards`, managed from the admin Generators
+tab: shown or hidden, a picture, the order, a "New" badge that expires).
+A card opens a fresh project with the Create panel already on that
+product (`/new?create=<template>`).
+
 `src/lib/products/` holds the templates: SKÅDIS and BROR pieces, the
 "any pegboard" bin and hook (pick SKÅDIS, BROR or describe your own
 board: round holes or slots, their size, pitch across and down,
 staggered rows, sheet thickness; the fit simulator draws that pattern),
 and the drawer organizers. A drawer tray takes the drawer's size, a
 grid of compartments (even, a narrow first column or a shallow front
-row), wall and floor thickness and an optional perforation pattern on
-the walls; the simulator shows the compartments from above. A tray
+row), one joined tray or separate boxes per compartment, wall and floor
+thickness and an optional perforation pattern on the walls; the
+simulator draws the plan with real wall thickness and one wall from the
+side with its holes. A tray
 bigger than the bed is cut into tiles along compartment lines and each
 tile goes to its own plate (`PartRecipe.tile`; `buildProduct` adds
 plates as needed and puts the user back on the plate they were on),
 with E-profile clips that slide over two neighbouring walls to join the
-tiles in the drawer. Notched divider strips cross each other at the
-same spacing (top notches meet bottom notches); a strip longer than the
-bed is cut with a half-lap. Templates get a `BuildContext` with the bed
+tiles in the drawer. The divider grid is a set of vertical plates,
+plain or patterned, that slot into each other: the plates running one
+way are notched from the top, the others from the bottom, at the same
+spots (optionally with an outer frame); a plate longer than the bed is
+cut with a half-lap. Templates get a `BuildContext` with the bed
 size for this. The panel keeps the last six products added, with their
 specs, under Recent (per browser). Round-hole hooks bend gently (55°
 on a radius of 1.6 pegs) rather than a full U, which tilts into the

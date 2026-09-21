@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../app/AppShell'
 import { serializeDocument, useDocumentStore } from '../state/documentStore'
 import { useViewStore } from '../state/viewStore'
@@ -24,6 +24,16 @@ export function EditorPage() {
   const authLoading = useAuthStore((s) => s.loading)
   const user = useAuthStore((s) => s.user)
   const [loadedId, setLoadedId] = useState<string | null>(null)
+  const [params, setParams] = useSearchParams()
+  const createParam = params.get('create')
+
+  // A generator card: straight into the Create panel on that product.
+  useEffect(() => {
+    if (!createParam || loadedId !== id) return
+    useViewStore.getState().setCreateTemplate(createParam)
+    useViewStore.getState().setCreateOpen(true)
+    setParams({}, { replace: true })
+  }, [createParam, loadedId, id, setParams])
 
   // Load: the browser's copy, or the cloud copy once we know who is signed in.
   useEffect(() => {

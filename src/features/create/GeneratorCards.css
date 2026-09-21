@@ -1,0 +1,113 @@
+.generators {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.generators--compact {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.generators__title-icon {
+  vertical-align: -2px;
+  margin-right: 4px;
+  color: var(--accent);
+}
+
+.generator-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    border-color 0.12s,
+    transform 0.12s;
+}
+
+.generator-card:hover,
+.generator-card:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.generator-card__thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: var(--bg-canvas);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.generator-card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.generator-art {
+  width: 100%;
+  height: 100%;
+}
+
+.generator-art--tray,
+.generator-art--divider {
+  color: #e0a84a;
+}
+
+.generator-art__board circle {
+  fill: currentColor;
+  opacity: 0.18;
+}
+
+.generator-card__new {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.generator-card__cat {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.generator-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 12px;
+}
+
+.generator-card__body strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.generator-card__body span {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}

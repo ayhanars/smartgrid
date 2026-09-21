@@ -388,3 +388,36 @@
   stroke: var(--bg-panel);
   stroke-width: 1;
 }
+
+.tray-preview__floor {
+  fill: rgba(255, 255, 255, 0.04);
+  stroke: none;
+}
+
+.tray-preview__wall {
+  fill: var(--text-muted);
+  stroke: none;
+}
+
+.tray-preview__elev {
+  fill: rgba(224, 168, 74, 0.25);
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+
+.tray-preview__hole {
+  fill: var(--bg-panel);
+  stroke: var(--text-faint);
+  stroke-width: 0.5;
+}
+
+.tray-preview__notch {
+  fill: var(--bg-panel);
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+
+.tray-preview__caption {
+  fill: var(--text-faint);
+  font-size: 10px;
+}

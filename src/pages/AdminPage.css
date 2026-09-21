@@ -367,3 +367,18 @@
     align-items: flex-start;
   }
 }
+
+.admin__thumb--art {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--bg-canvas);
+}
+
+.admin__thumb--art img,
+.admin__thumb--art svg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

@@ -48,7 +48,6 @@ export function describeSpec(spec: ProductSpec): string {
   if (sizes.length) bits.push(sizes.join(' × ') + ' mm')
   if (typeof spec.columns === 'number' && typeof spec.rows === 'number') bits.push(`${spec.columns} × ${spec.rows} compartments`)
   if (typeof spec.board === 'string') bits.push(spec.board === 'custom' ? 'custom board' : String(spec.board).toUpperCase())
-  if (typeof spec.notches === 'number') bits.push(`${spec.notches} notches`)
   if (typeof spec.dividers === 'number' && spec.dividers > 0) bits.push(`${spec.dividers} dividers`)
   return bits.join(' · ')
 }
