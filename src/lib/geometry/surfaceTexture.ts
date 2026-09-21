@@ -224,6 +224,50 @@ function sideOf(nx: number, ny: number): WallSide {
   return ny >= 0 ? 'front' : 'back'
 }
 
+/** Arc length along `ring` (positive winding, as the wall is built) of the
+ * point on it nearest to (x, y). */
+function arcLengthLookup(input: Point2[]): (x: number, y: number) => number {
+  const ring = signedArea(input) < 0 ? [...input].reverse() : input
+  const n = ring.length
+  const starts: number[] = []
+  let u = 0
+  for (let i = 0; i < n; i++) {
+    starts.push(u)
+    const q = ring[(i + 1) % n]
+    u += Math.hypot(q.x - ring[i].x, q.y - ring[i].y)
+  }
+  return (x, y) => {
+    let best = Infinity
+    let bestU = 0
+    for (let i = 0; i < n; i++) {
+      const a = ring[i]
+      const b = ring[(i + 1) % n]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const len2 = dx * dx + dy * dy
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / len2)) : 0
+      const px = a.x + dx * t
+      const py = a.y + dy * t
+      const d = (x - px) * (x - px) + (y - py) * (y - py)
+      if (d < best) {
+        best = d
+        bestU = starts[i] + Math.sqrt(len2) * t
+      }
+    }
+    return bestU
+  }
+}
+
+function signedArea(ring: Point2[]): number {
+  let a = 0
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i]
+    const q = ring[(i + 1) % ring.length]
+    a += p.x * q.y - q.x * p.y
+  }
+  return a / 2
+}
+
 /** Subdivision step for a pattern: fine enough to resolve it, capped so a
  * big plate stays a reasonable triangle count. */
 export function textureStep(texture: SurfaceTexture, override?: number): number {
@@ -293,6 +337,8 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
   const refPerimeter = ref?.perimeter ?? perimeter
   const refHeight = ref?.height ?? height
   const uScale = refPerimeter / Math.max(perimeter, 1e-6)
+  const acrossWall = ref?.ring && ref.ring.length >= 3 ? arcLengthLookup(ref.ring) : null
+  const wallGap = ref?.wall ?? 0
   const phaseV = ref?.phaseV ?? 0
   const rad = ((texture.angle ?? 0) * Math.PI) / 180
   const cosA = Math.cos(rad)
@@ -316,7 +362,7 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
       // bottom and the top of the (reference) wall.
       const softEnds = fade > 0 ? smoothstep(0, fade, v) * (1 - smoothstep(refHeight - fade, refHeight, v)) : 1
       // Pattern coordinates, turned by the angle.
-      const pu = col.u * uScale
+      const pu = acrossWall ? acrossWall(col.p.x + col.nrm.x * wallGap, col.p.y + col.nrm.y * wallGap) : col.u * uScale
       const ru = pu * cosA - v * sinA
       const rv = pu * sinA + v * cosA
       const d = sign * texture.depth * patternStrength(texture, ru, rv, { width: refPerimeter, height: refHeight }) * endFade * bandFade * softEnds * onSide
