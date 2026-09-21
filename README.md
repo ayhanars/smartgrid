@@ -290,10 +290,17 @@ Moderation tools on top of that:
   liking. Nothing is deleted, so `unban_user` restores it all. The person
   gets a notification and a banner on every page.
 - **Reports** (`community_reports`): the Report button on a model asks for
-  a reason (copyright first, since that is the usual case) and details;
-  staff are notified and see it in the Reports tab, where they dismiss it
-  or hide / remove the model (`resolve_report`, which settles every open
-  report of that model and tells the author why).
+  a reason (copyright first, since that is the usual case), details, a
+  link to the original and, for visitors, an optional e-mail. No account
+  is needed: guests insert with a null `reporter_id` (at most five guest
+  reports per model per hour, public models only). Staff are notified and
+  see it in the Reports tab, where they dismiss it or hide / remove the
+  model (`resolve_report`, which settles every open report of that model
+  and tells the author why). The `report-mail` Edge Function also e-mails
+  every moderator and admin through Resend once two function secrets are
+  set (`RESEND_API_KEY`, `MAIL_FROM` such as `smartgrid <reports@your-domain>`
+  from a domain verified in Resend; optional `SITE_URL`). Without them it
+  quietly does nothing and the in-app notification is what staff get.
 - **Settings** (`site_settings`, admins only): who may download shared
   files (everyone, the original behaviour, or members only, which shows
   guests a sign-in gate), whether new models wait for review, whether

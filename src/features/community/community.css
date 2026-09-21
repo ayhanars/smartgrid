@@ -1475,6 +1475,7 @@
   color: var(--text-muted);
 }
 
+.report-dialog__details input,
 .report-dialog__details textarea {
   width: 100%;
   resize: vertical;
@@ -1487,6 +1488,7 @@
   font-size: 13px;
 }
 
+.report-dialog__details input:focus,
 .report-dialog__details textarea:focus {
   outline: none;
   border-color: var(--accent);
