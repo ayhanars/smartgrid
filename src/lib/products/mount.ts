@@ -31,20 +31,10 @@ export interface MountDims {
 export function mountProfile(m: MountDims, embed: number): { points: { h: number; b: number }[]; height: number } {
   const { tabThickness: t, lipThickness: lt, gap, lipDrop } = m
   if (m.lipRise) {
-    // Shank from the part through the sheet, lip rising behind it.
-    const back = gap + lt
+    // Shank from the part through the sheet, lip rising behind it,
+    // joined by a pipe-like elbow.
     const height = t + m.lipRise
-    return {
-      height,
-      points: [
-        { h: 0, b: -embed },
-        { h: 0, b: back },
-        { h: height, b: back },
-        { h: height, b: gap },
-        { h: t, b: gap },
-        { h: t, b: -embed },
-      ],
-    }
+    return { height, points: [{ h: 0, b: -embed }, ...elbowUp(t, gap, height), { h: t, b: -embed }] }
   }
   const height = t + Math.max(lipDrop, gap + embed)
   const top = height
@@ -60,6 +50,30 @@ export function mountProfile(m: MountDims, embed: number): { points: { h: number
     { h: top - t - (gap + embed), b: -embed },
   ]
   return { points, height }
+}
+
+/**
+ * The bend of a shank into an upward lip, as (h, b) from the end of the
+ * shank's underside round to the end of its top: a pipe elbow whose
+ * centreline radius is the pipe's own thickness (outer radius 1.5 t,
+ * inner 0.5 t), then the lip up to `height` and back down its front.
+ */
+function elbowUp(t: number, gap: number, height: number): { h: number; b: number }[] {
+  const back = gap + t
+  const ro = 1.5 * t
+  const ri = 0.5 * t
+  const c = { h: ro, b: back - ro }
+  const arc = (r: number, from: number, to: number, steps: number) =>
+    Array.from({ length: steps + 1 }, (_, i) => {
+      const a = from + ((to - from) * i) / steps
+      return { h: c.h + r * Math.sin(a), b: c.b + r * Math.cos(a) }
+    })
+  return [
+    ...arc(ro, -Math.PI / 2, 0, 8),
+    { h: height, b: back },
+    { h: height, b: gap },
+    ...arc(ri, 0, -Math.PI / 2, 6),
+  ]
 }
 
 /** Side profile → canvas path standing up (rotation y 90°): canvas x
@@ -89,12 +103,12 @@ export function jHook(o: { mount: MountDims; reach: number; width: number; arm: 
   // y is height (top of the hook toward the top of the canvas).
   const toCanvas = (p: { b: number; h: number }): Point2 => ({ x: p.b + offset, y: top + rise - p.h })
   const tab: { b: number; h: number }[] = o.mount.lipRise
-    ? [
-        { b: gap, h: top },
-        { b: gap, h: top + o.mount.lipRise },
-        { b: back, h: top + o.mount.lipRise },
-        { b: back, h: top - t },
-      ]
+    ? // The elbow runs from the shank's underside round to its top; the
+      // hook's outline goes the other way, so it is reversed and lifted
+      // to the plate's top.
+      elbowUp(t, gap, t + o.mount.lipRise)
+        .map((p) => ({ b: p.b, h: p.h + top - t }))
+        .reverse()
     : [
         { b: back, h: top },
         { b: back, h: top - t - lipDrop },
