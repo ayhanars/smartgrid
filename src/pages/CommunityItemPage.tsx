@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Box, Calendar, Clock, Copy, Download, Eye, EyeOff, GitBranch, Layers, MessageCircle, Pencil, PencilLine, Star, Trash2, XCircle } from 'lucide-react'
+import { ArrowLeft, Box, Calendar, Clock, Copy, Download, Eye, EyeOff, Flag, GitBranch, Layers, MessageCircle, Pencil, PencilLine, Star, Trash2, XCircle } from 'lucide-react'
 import {
   deleteCommunityItem,
   getCommunityItem,
@@ -16,6 +16,8 @@ import { isNetworkError } from '../lib/connectivity'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { CollectionPicker, CommentsSection, LikeButton } from '../features/community/Social'
 import { DownloadBox } from '../features/community/DownloadBox'
+import { ReportDialog } from '../features/community/ReportDialog'
+import { requireAccount } from '../features/auth/authGate'
 import { VersionsPanel } from '../features/community/VersionsPanel'
 import { TagInput } from '../features/community/TagInput'
 import { CATEGORIES, categoryLabel } from '../lib/supabase/community'
@@ -42,6 +44,8 @@ export function CommunityItemPage() {
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [parent, setParent] = useState<CommunityItem | null>(null)
+  const [reporting, setReporting] = useState(false)
+  const [reported, setReported] = useState(false)
 
   // The model this one is a version of.
   useEffect(() => {
@@ -282,7 +286,22 @@ export function CommunityItemPage() {
               <div className="social-row">
                 <LikeButton itemId={item.id} count={item.likes} onCount={(likes) => setItem({ ...item, likes })} />
                 <CollectionPicker itemId={item.id} />
+                {!isOwner && (
+                  <button
+                    type="button"
+                    className="social-btn social-btn--quiet"
+                    disabled={reported}
+                    title={reported ? 'Thanks, a moderator will look at it' : 'Report this model to the moderators'}
+                    onClick={() => {
+                      if (requireAccount('social')) setReporting(true)
+                    }}
+                  >
+                    <Flag size={14} />
+                    {reported ? 'Reported' : 'Report'}
+                  </button>
+                )}
               </div>
+              {reporting && <ReportDialog itemId={item.id} title={item.title} onClose={() => setReporting(false)} onSent={() => setReported(true)} />}
               <p className="community-item__hint">
                 {isOwner
                   ? 'New versions are published from the project menu (“Community listing”). A copy starts a separate project you can publish as a version too.'

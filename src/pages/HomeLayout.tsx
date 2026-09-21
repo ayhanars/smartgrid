@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { Bookmark, ChevronDown, Folder, Globe, House, LogOut, Plus, Search, ShieldCheck, UserRound, UserRoundCog } from 'lucide-react'
+import { Ban, Bookmark, ChevronDown, Folder, Globe, House, LogOut, Plus, Search, ShieldCheck, Trash2, UserRound, UserRoundCog } from 'lucide-react'
 import { isSupabaseConfigured } from '../lib/supabase/client'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { AuthDialog } from '../features/auth/AuthDialog'
@@ -10,6 +10,7 @@ import { NotificationBell } from '../features/notifications/NotificationBell'
 import '../state/notificationsStore'
 import '../features/layers/LayerContextMenu.css'
 import '../features/auth/AuthDialog.css'
+import './HomePage.css'
 import './HomeLayout.css'
 
 /**
@@ -75,6 +76,10 @@ export function HomeLayout() {
               Collections
             </NavLink>
           )}
+          <NavLink to="/trash" className={({ isActive }) => `shell__link ${isActive ? 'shell__link--active' : ''}`}>
+            <Trash2 size={16} />
+            Trash
+          </NavLink>
           {isStaffRole(profile) && (
             <NavLink to="/admin" className={({ isActive }) => `shell__link ${isActive ? 'shell__link--active' : ''}`}>
               <ShieldCheck size={16} />
@@ -90,6 +95,15 @@ export function HomeLayout() {
         </div>
       </aside>
       <main className="shell__main">
+        {profile?.bannedAt && (
+          <div className="home__banner home__banner--warn" role="status">
+            <Ban size={16} />
+            <span>
+              <strong>Your account is restricted.</strong> Your shared models, comments and collections are not public and you cannot publish or comment.
+              {profile.banReason ? ` Reason: ${profile.banReason}` : ''}
+            </span>
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

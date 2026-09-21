@@ -81,6 +81,7 @@ export function ProfilePage() {
           <h1>
             {profile.displayName} <span className="level-badge">L{profile.level}</span>
             {profile.role !== 'user' && <span className="profile__role">{profile.role}</span>}
+            {profile.bannedAt && <span className="profile__role profile__role--restricted" title={profile.banReason || 'Restricted by an admin'}>restricted</span>}
           </h1>
           {profile.bio && <p className="profile__bio">{profile.bio}</p>}
           <div className="profile__stats">

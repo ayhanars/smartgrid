@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes, useNavigate } from 'react-router-d
 import { HomeLayout } from './pages/HomeLayout'
 import { RecentsPage } from './pages/RecentsPage'
 import { ProjectsPage } from './pages/ProjectsPage'
+import { TrashPage } from './pages/TrashPage'
 import { CollectionsPage } from './pages/CollectionsPage'
 import { CollectionPage } from './pages/CollectionPage'
 import { EditorPage } from './pages/EditorPage'
@@ -38,6 +39,7 @@ function App() {
         <Route element={<HomeLayout />}>
           <Route path="/" element={<RecentsPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/trash" element={<TrashPage />} />
           <Route path="/collections" element={<CollectionsPage />} />
           <Route path="/collections/:id" element={<CollectionPage />} />
           <Route path="/account" element={<AccountPage />} />

@@ -1320,3 +1320,374 @@ end;
 $$;
 
 grant execute on function public.publish_item_version(uuid, jsonb, text, text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Bans: a banned account keeps its rows, but nothing it shared is visible
+-- to anyone but staff (and itself), and it cannot post. Unbanning restores
+-- everything at once, since it is only the policies that hide it.
+-- ---------------------------------------------------------------------------
+
+alter table public.profiles add column if not exists banned_at timestamptz;
+alter table public.profiles add column if not exists ban_reason text not null default '';
+
+create or replace function public.is_banned(p_user uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select banned_at is not null from public.profiles where id = p_user), false);
+$$;
+
+/** True for a signed-in account in good standing. */
+create or replace function public.can_post()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null and not public.is_banned(auth.uid());
+$$;
+
+-- Only admins change the ban fields (the trigger keeps the old values for anyone else).
+create or replace function public.guard_profile_role()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.is_user_request() then
+    if new.role is distinct from old.role and not public.is_admin() then new.role := old.role; end if;
+    if (new.banned_at is distinct from old.banned_at or new.ban_reason is distinct from old.ban_reason) and not public.is_admin() then
+      new.banned_at := old.banned_at; new.ban_reason := old.ban_reason;
+    end if;
+    if coalesce(current_setting('smartgrid.counting', true), '') <> 'on' and (new.xp is distinct from old.xp or new.level is distinct from old.level or new.followers is distinct from old.followers or new.following is distinct from old.following) then
+      new.xp := old.xp; new.level := old.level; new.followers := old.followers; new.following := old.following;
+    end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create or replace function public.ban_user(p_user uuid, p_reason text default '')
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then raise exception 'admins only' using errcode = '42501'; end if;
+  if p_user = auth.uid() then raise exception 'you cannot ban yourself'; end if;
+  if exists (select 1 from public.profiles where id = p_user and role = 'admin') then raise exception 'admins cannot be banned; change the role first'; end if;
+  update public.profiles set banned_at = now(), ban_reason = coalesce(p_reason, '') where id = p_user;
+  perform public.notify(p_user, 'moderation', 'Your account has been restricted', case when coalesce(p_reason, '') = '' then 'Your shared models and comments are no longer public.' else p_reason end, '/account');
+end;
+$$;
+grant execute on function public.ban_user(uuid, text) to authenticated;
+
+create or replace function public.unban_user(p_user uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then raise exception 'admins only' using errcode = '42501'; end if;
+  update public.profiles set banned_at = null, ban_reason = '' where id = p_user;
+  perform public.notify(p_user, 'moderation', 'Your account is no longer restricted', 'Your shared models and comments are public again.', '/account');
+end;
+$$;
+grant execute on function public.unban_user(uuid) to authenticated;
+
+-- Visibility: a banned author's items, comments and collections are hidden.
+drop policy if exists "Published items are visible to everyone" on public.community_items;
+create policy "Published items are visible to everyone"
+  on public.community_items for select
+  using ((status = 'published' and approval = 'approved' and not public.is_banned(owner_id)) or auth.uid() = owner_id or public.is_staff());
+
+drop policy if exists "Users publish their own items" on public.community_items;
+create policy "Users publish their own items"
+  on public.community_items for insert
+  with check (auth.uid() = owner_id and public.can_post());
+
+drop policy if exists "Comments are visible to everyone" on public.community_comments;
+create policy "Comments are visible to everyone" on public.community_comments for select
+  using (not public.is_banned(author_id) or auth.uid() = author_id or public.is_staff());
+drop policy if exists "Signed-in users comment as themselves" on public.community_comments;
+create policy "Signed-in users comment as themselves" on public.community_comments for insert with check (auth.uid() = author_id and public.can_post());
+
+drop policy if exists "Users like as themselves" on public.community_likes;
+create policy "Users like as themselves" on public.community_likes for insert with check (auth.uid() = user_id and public.can_post());
+
+drop policy if exists "Own or public collections are visible" on public.collections;
+create policy "Own or public collections are visible"
+  on public.collections for select
+  using ((is_public and approval = 'approved' and not public.is_banned(owner_id)) or auth.uid() = owner_id or public.is_staff());
+drop policy if exists "Users create their own collections" on public.collections;
+create policy "Users create their own collections" on public.collections for insert with check (auth.uid() = owner_id and public.can_post());
+
+drop policy if exists "Items of visible collections are visible" on public.collection_items;
+create policy "Items of visible collections are visible" on public.collection_items for select
+  using (exists (select 1 from public.collections c where c.id = collection_id and ((c.is_public and c.approval = 'approved' and not public.is_banned(c.owner_id)) or c.owner_id = auth.uid() or public.is_staff())));
+
+-- ---------------------------------------------------------------------------
+-- Site settings: one row per key, readable by everyone, changed by admins.
+-- The defaults are how the site behaved before settings existed.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.site_settings (
+  key text primary key,
+  value jsonb not null,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references public.profiles (id) on delete set null
+);
+
+alter table public.site_settings enable row level security;
+
+drop policy if exists "Settings are readable by everyone" on public.site_settings;
+create policy "Settings are readable by everyone" on public.site_settings for select using (true);
+drop policy if exists "Admins change settings" on public.site_settings;
+create policy "Admins change settings" on public.site_settings for all using (public.is_admin()) with check (public.is_admin());
+
+insert into public.site_settings (key, value) values
+  ('download_access', '"everyone"'),
+  ('require_approval', 'true'),
+  ('publishing_open', 'true'),
+  ('comments_open', 'true'),
+  ('trash_days', '30')
+on conflict (key) do nothing;
+
+create or replace function public.setting_text(p_key text, p_default text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select value #>> '{}' from public.site_settings where key = p_key), p_default);
+$$;
+
+-- Approval only when the setting asks for it; publishing can be paused.
+create or replace function public.set_initial_approval()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.is_user_request() and not public.is_staff() and public.setting_text('publishing_open', 'true') <> 'true' then
+    raise exception 'Publishing is paused for now' using errcode = 'P0001';
+  end if;
+  if public.is_staff() or not public.is_user_request() or public.setting_text('require_approval', 'true') <> 'true' then
+    new.approval := 'approved';
+  else
+    new.approval := 'pending';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.guard_comment_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.is_user_request() and not public.is_staff() and public.setting_text('comments_open', 'true') <> 'true' then
+    raise exception 'Comments are paused for now' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists community_comments_guard on public.community_comments;
+create trigger community_comments_guard before insert on public.community_comments for each row execute function public.guard_comment_insert();
+
+-- ---------------------------------------------------------------------------
+-- Trash: deleting a project only marks it; it can be restored for
+-- `trash_days` (30) days, after which the next listing purges it.
+-- ---------------------------------------------------------------------------
+
+alter table public.projects add column if not exists deleted_at timestamptz;
+create index if not exists projects_deleted_idx on public.projects (owner_id, deleted_at) where deleted_at is not null;
+
+create or replace function public.purge_deleted_projects()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n integer;
+  days integer := coalesce(public.setting_text('trash_days', '30')::integer, 30);
+begin
+  delete from public.projects where deleted_at is not null and deleted_at < now() - make_interval(days => days) and (auth.uid() is null or owner_id = auth.uid() or public.is_admin());
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+grant execute on function public.purge_deleted_projects() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Reports: anyone signed in can flag a shared model (copyright, and so on);
+-- staff get a notification and decide from the admin page.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.community_reports (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references public.community_items (id) on delete cascade,
+  reporter_id uuid not null references public.profiles (id) on delete cascade,
+  reason text not null check (reason in ('copyright', 'inappropriate', 'spam', 'broken', 'other')),
+  details text not null default '',
+  status text not null default 'open' check (status in ('open', 'resolved', 'dismissed')),
+  resolution text not null default '',
+  resolved_by uuid references public.profiles (id) on delete set null,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists community_reports_status_idx on public.community_reports (status, created_at desc);
+create index if not exists community_reports_item_idx on public.community_reports (item_id);
+
+alter table public.community_reports enable row level security;
+
+drop policy if exists "Reporters and staff read reports" on public.community_reports;
+create policy "Reporters and staff read reports" on public.community_reports for select using (auth.uid() = reporter_id or public.is_staff());
+drop policy if exists "Signed-in users report" on public.community_reports;
+create policy "Signed-in users report" on public.community_reports for insert with check (auth.uid() = reporter_id and public.can_post());
+
+create or replace function public.on_report_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  item_title text;
+begin
+  select title into item_title from public.community_items where id = new.item_id;
+  perform public.notify_staff('report', format('"%s" was reported (%s)', coalesce(item_title, 'A model'), new.reason), left(new.details, 140), '/admin?tab=reports');
+  return new;
+end;
+$$;
+drop trigger if exists community_reports_events on public.community_reports;
+create trigger community_reports_events after insert on public.community_reports for each row execute function public.on_report_insert();
+
+/** Staff: close a report. p_action: 'none' keeps the model as is, 'hide'
+ * or 'remove' changes its status (the author hears about it). */
+create or replace function public.resolve_report(p_report uuid, p_status text, p_action text default 'none', p_note text default '')
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r public.community_reports%rowtype;
+  item_owner uuid;
+  item_title text;
+begin
+  if not public.is_staff() then raise exception 'staff only' using errcode = '42501'; end if;
+  if p_status not in ('resolved', 'dismissed') then raise exception 'bad status'; end if;
+  if p_action not in ('none', 'hide', 'remove') then raise exception 'bad action'; end if;
+  select * into r from public.community_reports where id = p_report;
+  if r.id is null then raise exception 'no such report'; end if;
+  if p_action <> 'none' then
+    select owner_id, title into item_owner, item_title from public.community_items where id = r.item_id;
+    update public.community_items set status = case when p_action = 'hide' then 'hidden' else 'removed' end where id = r.item_id;
+    perform public.notify(item_owner, 'moderation', format('"%s" was %s after a report', item_title, case when p_action = 'hide' then 'hidden' else 'removed' end), coalesce(p_note, ''), '/c/' || r.item_id);
+  end if;
+  update public.community_reports set status = p_status, resolution = coalesce(p_note, ''), resolved_by = auth.uid(), resolved_at = now() where id = p_report;
+  -- Other open reports of the same model are settled by the same decision.
+  update public.community_reports set status = p_status, resolution = coalesce(p_note, ''), resolved_by = auth.uid(), resolved_at = now() where item_id = r.item_id and status = 'open';
+end;
+$$;
+grant execute on function public.resolve_report(uuid, text, text, text) to authenticated;
+
+-- Admin listing with bans, and the stats with open reports and the trash.
+drop function if exists public.admin_users(text, integer);
+create or replace function public.admin_users(p_query text default '', p_limit integer default 100)
+returns table (
+  id uuid,
+  email text,
+  display_name text,
+  avatar_url text,
+  role text,
+  xp integer,
+  level integer,
+  created_at timestamptz,
+  last_sign_in_at timestamptz,
+  projects integer,
+  community_items integer,
+  banned_at timestamptz,
+  ban_reason text
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_staff() then
+    raise exception 'staff only' using errcode = '42501';
+  end if;
+  return query
+    select
+      u.id,
+      u.email::text,
+      p.display_name,
+      p.avatar_url,
+      p.role,
+      p.xp,
+      p.level,
+      u.created_at,
+      u.last_sign_in_at,
+      (select count(*)::integer from public.projects pr where pr.owner_id = u.id and pr.deleted_at is null),
+      (select count(*)::integer from public.community_items ci where ci.owner_id = u.id and ci.status <> 'removed'),
+      p.banned_at,
+      p.ban_reason
+    from auth.users u
+    left join public.profiles p on p.id = u.id
+    where p_query = '' or u.email ilike '%' || p_query || '%' or p.display_name ilike '%' || p_query || '%'
+    order by u.created_at desc
+    limit greatest(1, least(p_limit, 500));
+end;
+$$;
+grant execute on function public.admin_users(text, integer) to authenticated;
+
+create or replace function public.admin_stats()
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  result json;
+begin
+  if not public.is_staff() then
+    raise exception 'staff only' using errcode = '42501';
+  end if;
+  select json_build_object(
+    'users', (select count(*) from auth.users),
+    'users_7d', (select count(*) from auth.users where created_at > now() - interval '7 days'),
+    'users_banned', (select count(*) from public.profiles where banned_at is not null),
+    'projects', (select count(*) from public.projects where deleted_at is null),
+    'projects_trashed', (select count(*) from public.projects where deleted_at is not null),
+    'assets', (select count(*) from public.user_assets),
+    'community_published', (select count(*) from public.community_items where status = 'published' and approval = 'approved'),
+    'community_pending', (select count(*) from public.community_items where approval = 'pending' and status <> 'removed') + (select count(*) from public.collections where approval = 'pending'),
+    'community_hidden', (select count(*) from public.community_items where status = 'hidden'),
+    'community_removed', (select count(*) from public.community_items where status = 'removed'),
+    'community_downloads', (select coalesce(sum(downloads), 0) from public.community_items),
+    'community_likes', (select coalesce(sum(likes), 0) from public.community_items),
+    'community_comments', (select count(*) from public.community_comments),
+    'collections', (select count(*) from public.collections),
+    'reports_open', (select count(*) from public.community_reports where status = 'open')
+  ) into result;
+  return result;
+end;
+$$;

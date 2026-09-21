@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, Eye, EyeOff, ExternalLink, RefreshCw, Search, ShieldCheck, Star, Trash2, XCircle } from 'lucide-react'
+import { Ban, Check, Eye, EyeOff, ExternalLink, Flag, RefreshCw, Search, ShieldCheck, Star, Trash2, XCircle } from 'lucide-react'
 import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { Avatar } from '../features/community/CommunityCard'
 import { isSupabaseConfigured } from '../lib/supabase/client'
-import { fetchAdminStats, fetchAdminUsers, setUserRole, type AdminStats, type AdminUser } from '../lib/supabase/admin'
+import { banUser, fetchAdminStats, fetchAdminUsers, setUserRole, unbanUser, type AdminStats, type AdminUser } from '../lib/supabase/admin'
+import { listReports, reasonLabel, resolveReport, type CommunityReport, type ReportStatus } from '../lib/supabase/reports'
+import { useSiteSettings, type SiteSettings } from '../lib/supabase/settings'
 import { deleteCommunityItem, listCommunityItems, moderateCommunityItem, reviewCommunityItem, type CommunityItem, type CommunityStatus } from '../lib/supabase/community'
 import { listPendingCollections, reviewCollection, type Collection } from '../lib/supabase/collections'
 import { useNotifications } from '../state/notificationsStore'
@@ -14,7 +16,7 @@ import './HomePage.css'
 import './AccountPage.css'
 import './AdminPage.css'
 
-type Tab = 'overview' | 'approvals' | 'community' | 'users'
+type Tab = 'overview' | 'approvals' | 'reports' | 'community' | 'users' | 'settings'
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Something went wrong')
 
@@ -27,7 +29,7 @@ export function AdminPage() {
   const profile = useAuthStore((s) => s.profile)
   const [params, setParams] = useSearchParams()
   const tabParam = params.get('tab')
-  const tab: Tab = tabParam === 'approvals' || tabParam === 'community' || tabParam === 'users' ? tabParam : 'overview'
+  const tab: Tab = tabParam === 'approvals' || tabParam === 'reports' || tabParam === 'community' || tabParam === 'users' || tabParam === 'settings' ? tabParam : 'overview'
   const setTab = (t: Tab) => {
     const next = new URLSearchParams(params)
     if (t === 'overview') next.delete('tab')
@@ -50,8 +52,10 @@ export function AdminPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'approvals', label: 'Approvals' },
+    { id: 'reports', label: 'Reports' },
     { id: 'community', label: 'Community' },
     { id: 'users', label: 'Users' },
+    ...(admin ? [{ id: 'settings' as Tab, label: 'Settings' }] : []),
   ]
 
   return (
@@ -71,6 +75,8 @@ export function AdminPage() {
         </div>
         {tab === 'overview' && <Overview />}
         {tab === 'approvals' && <Approvals navigate={navigate} />}
+        {tab === 'reports' && <Reports navigate={navigate} />}
+        {tab === 'settings' && admin && <SettingsAdmin />}
         {tab === 'community' && <CommunityAdmin admin={admin} navigate={navigate} />}
         {tab === 'users' && <UsersAdmin admin={admin} selfId={user.id} />}
       </div>
@@ -101,9 +107,10 @@ const fmt = (n: number) => n.toLocaleString()
 function Overview() {
   const { data, error, busy, reload } = useLoader(fetchAdminStats)
   const tiles: { label: string; value: (s: AdminStats) => string; hint?: (s: AdminStats) => string }[] = [
-    { label: 'Users', value: (s) => fmt(s.users), hint: (s) => `${fmt(s.users_7d)} joined in the last 7 days` },
-    { label: 'Cloud projects', value: (s) => fmt(s.projects), hint: (s) => `${fmt(s.assets)} personal assets` },
+    { label: 'Users', value: (s) => fmt(s.users), hint: (s) => `${fmt(s.users_7d)} joined in the last 7 days${s.users_banned ? ` · ${fmt(s.users_banned)} restricted` : ''}` },
+    { label: 'Cloud projects', value: (s) => fmt(s.projects), hint: (s) => `${fmt(s.assets)} personal assets · ${fmt(s.projects_trashed ?? 0)} in trash` },
     { label: 'Waiting for review', value: (s) => fmt(s.community_pending), hint: () => 'models and collections' },
+    { label: 'Open reports', value: (s) => fmt(s.reports_open ?? 0), hint: () => 'copyright and other flags' },
     { label: 'Community models', value: (s) => fmt(s.community_published), hint: (s) => `${fmt(s.community_hidden)} hidden · ${fmt(s.community_removed)} removed` },
     { label: 'Copies opened', value: (s) => fmt(s.community_downloads), hint: (s) => `${fmt(s.community_likes)} likes · ${fmt(s.community_comments)} comments` },
     { label: 'Collections', value: (s) => fmt(s.collections) },
@@ -416,6 +423,29 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
   const { data, error, busy, reload, setData } = useLoader(load)
   const [actionError, setActionError] = useState<string | null>(null)
 
+  const toggleBan = async (u: AdminUser) => {
+    if (u.bannedAt) {
+      if (!window.confirm(`Lift the restriction on ${u.email}? Everything they shared becomes public again.`)) return
+      try {
+        await unbanUser(u.id)
+        setData((list) => (list ? list.map((x) => (x.id === u.id ? { ...x, bannedAt: null, banReason: '' } : x)) : list))
+        setActionError(null)
+      } catch (err) {
+        setActionError(errorText(err))
+      }
+      return
+    }
+    const reason = window.prompt(`Restrict ${u.email}? Their shared models, comments and collections disappear from the site and they cannot post. They will see this reason:`, '')
+    if (reason === null) return
+    try {
+      await banUser(u.id, reason)
+      setData((list) => (list ? list.map((x) => (x.id === u.id ? { ...x, bannedAt: Date.now(), banReason: reason } : x)) : list))
+      setActionError(null)
+    } catch (err) {
+      setActionError(errorText(err))
+    }
+  }
+
   const changeRole = async (u: AdminUser, role: UserRole) => {
     if (u.id === selfId && role !== 'admin' && !window.confirm('Remove your own admin role? You will lose access to this page.')) return
     try {
@@ -454,6 +484,7 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
               <th>Shared</th>
               <th>Joined</th>
               <th>Last sign-in</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -463,7 +494,14 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
                   <span className="admin__author">
                     <Avatar name={u.displayName || u.email} url={u.avatarUrl} />
                     <span className="admin__user">
-                      <strong>{u.displayName || '—'}</strong>
+                      <strong>
+                        {u.displayName || '—'}
+                        {u.bannedAt && (
+                          <span className="admin__status admin__status--removed" style={{ marginLeft: 6 }} title={u.banReason || 'No reason given'}>
+                            restricted
+                          </span>
+                        )}
+                      </strong>
                       <span>{u.email}</span>
                     </span>
                   </span>
@@ -486,12 +524,223 @@ function UsersAdmin({ admin, selfId }: { admin: boolean; selfId: string }) {
                 <td>{u.communityItems}</td>
                 <td>{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td>{u.lastSignInAt ? new Date(u.lastSignInAt).toLocaleString() : '—'}</td>
+                <td className="admin__actions">
+                  {admin && u.id !== selfId && u.role !== 'admin' && (
+                    <button type="button" className={`admin__icon-btn ${u.bannedAt ? '' : 'admin__icon-btn--danger'}`} title={u.bannedAt ? `Lift restriction (${u.banReason || 'no reason given'})` : 'Restrict: hide everything they shared and stop them posting'} aria-label={u.bannedAt ? 'Lift restriction' : 'Restrict user'} onClick={() => void toggleBan(u)}>
+                      {u.bannedAt ? <Check size={13} /> : <Ban size={13} />}
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      {!admin && <p className="community-item__hint">Only admins can change roles.</p>}
+      {!admin && <p className="community-item__hint">Only admins can change roles or restrict accounts.</p>}
+    </section>
+  )
+}
+
+function Reports({ navigate }: { navigate: (to: string) => void }) {
+  const [filter, setFilter] = useState<ReportStatus | 'all'>('open')
+  const load = useCallback(() => listReports(filter), [filter])
+  const { data, error, busy, reload, setData } = useLoader(load)
+  const refreshNotifications = useNotifications((s) => s.refresh)
+  const [actionError, setActionError] = useState<string | null>(null)
+
+  const settle = async (r: CommunityReport, status: 'resolved' | 'dismissed', action: 'none' | 'hide' | 'remove') => {
+    const note =
+      action === 'none'
+        ? status === 'dismissed'
+          ? ''
+          : (window.prompt('A note for the record (optional):', '') ?? null)
+        : window.prompt(`${action === 'hide' ? 'Hide' : 'Remove'} "${r.itemTitle}"? The author is told why:`, r.reason === 'copyright' ? 'Removed after a copyright report.' : '')
+    if (note === null) return
+    try {
+      await resolveReport(r.id, status, action, note)
+      setData((list) => (list ? list.filter((x) => x.id !== r.id && !(x.itemId === r.itemId && x.status === 'open')) : list))
+      setActionError(null)
+      void refreshNotifications()
+    } catch (err) {
+      setActionError(errorText(err))
+    }
+  }
+
+  return (
+    <section>
+      <Toolbar busy={busy} onReload={reload}>
+        <div className="community-filter" role="group" aria-label="Status">
+          {(['open', 'resolved', 'dismissed', 'all'] as const).map((f) => (
+            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+              {f}
+            </button>
+          ))}
+        </div>
+        <span className="admin__count">{data?.length ?? 0} reports · settling one settles every open report of the same model</span>
+      </Toolbar>
+      {(error || actionError) && <p className="account__error">{error ?? actionError}</p>}
+      <div className="admin__table-wrap">
+        <table className="admin__table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Reason</th>
+              <th>Reported by</th>
+              <th>When</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {(data ?? []).map((r) => (
+              <tr key={r.id}>
+                <td>
+                  <button type="button" className="admin__link" onClick={() => navigate(`/c/${r.itemId}`)}>
+                    {r.itemThumbnail ? <img className="admin__thumb" src={r.itemThumbnail} alt="" /> : <span className="admin__thumb" />}
+                    <span>
+                      {r.itemTitle}
+                      <span className="admin__muted"> by {r.itemOwnerName}</span>
+                    </span>
+                  </button>
+                  <div className="admin__muted">
+                    <span className={`admin__status admin__status--${r.itemStatus === 'published' ? 'published' : r.itemStatus === 'hidden' ? 'hidden' : 'removed'}`}>{r.itemStatus}</span>
+                    {r.status !== 'open' && (
+                      <span className="admin__status admin__status--hidden" style={{ marginLeft: 4 }}>
+                        {r.status}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <strong>
+                    <Flag size={11} className="admin__star" /> {reasonLabel(r.reason)}
+                  </strong>
+                  {r.details && <div className="admin__muted admin__details">{r.details}</div>}
+                  {r.resolution && <div className="admin__muted">Decision: {r.resolution}</div>}
+                </td>
+                <td>{r.reporterName}</td>
+                <td>{new Date(r.createdAt).toLocaleString()}</td>
+                <td className="admin__actions">
+                  {r.status === 'open' && r.itemStatus !== 'deleted' && (
+                    <>
+                      <button type="button" className="admin__approve" title="No action: the model stays as it is" onClick={() => void settle(r, 'dismissed', 'none')}>
+                        <Check size={13} />
+                        Dismiss
+                      </button>
+                      {r.itemStatus === 'published' && (
+                        <button type="button" className="admin__icon-btn" title="Hide the model (the author can appeal)" aria-label="Hide model" onClick={() => void settle(r, 'resolved', 'hide')}>
+                          <EyeOff size={13} />
+                        </button>
+                      )}
+                      {r.itemStatus !== 'removed' && (
+                        <button type="button" className="admin__reject" title="Remove the model from the site" onClick={() => void settle(r, 'resolved', 'remove')}>
+                          <Trash2 size={13} />
+                          Remove
+                        </button>
+                      )}
+                    </>
+                  )}
+                  <button type="button" className="admin__icon-btn" title="Open" aria-label="Open" onClick={() => navigate(`/c/${r.itemId}`)}>
+                    <ExternalLink size={13} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {data && data.length === 0 && (
+              <tr>
+                <td colSpan={5} className="admin__empty">
+                  No reports {filter === 'all' ? 'yet' : filter === 'open' ? 'waiting' : filter}.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function SettingRow({ title, hint, saved, children }: { title: string; hint: string; saved: boolean; children: React.ReactNode }) {
+  return (
+    <div className="admin__setting">
+      <div className="admin__setting-text">
+        <strong>{title}</strong>
+        <span>{hint}</span>
+      </div>
+      <div className="admin__setting-control">
+        {children}
+        {saved && <span className="admin__saved">Saved</span>}
+      </div>
+    </div>
+  )
+}
+
+/** Admins: the site-wide switches (public.site_settings). */
+function SettingsAdmin() {
+  const settings = useSiteSettings((s) => s.settings)
+  const save = useSiteSettings((s) => s.set)
+  const refresh = useSiteSettings((s) => s.refresh)
+  const [busy, setBusy] = useState<keyof SiteSettings | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState<keyof SiteSettings | null>(null)
+  useEffect(() => void refresh(), [refresh])
+
+  const change = async <K extends keyof SiteSettings>(key: K, value: SiteSettings[K]) => {
+    setBusy(key)
+    setError(null)
+    try {
+      await save(key, value)
+      setSaved(key)
+      window.setTimeout(() => setSaved((k) => (k === key ? null : k)), 1500)
+    } catch (err) {
+      setError(errorText(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <section>
+      {error && <p className="account__error">{error}</p>}
+      <div className="admin__settings">
+        <SettingRow saved={saved === 'downloadAccess'} title="Who can download shared models" hint="Members: guests see the model but must sign in for the 3MF / STL. Everyone is how the site started.">
+          <select className="admin__select" value={settings.downloadAccess} disabled={busy !== null} onChange={(e) => void change('downloadAccess', e.target.value === 'members' ? 'members' : 'everyone')}>
+            <option value="everyone">Everyone, including guests</option>
+            <option value="members">Members only</option>
+          </select>
+        </SettingRow>
+        <SettingRow saved={saved === 'requireApproval'} title="Review new models before they go public" hint="On: models and collections from members wait in Approvals. Off: they are public at once (staff can still hide them).">
+          <label className="admin__toggle">
+            <input type="checkbox" checked={settings.requireApproval} disabled={busy !== null} onChange={(e) => void change('requireApproval', e.target.checked)} />
+            <span>{settings.requireApproval ? 'Reviewed first' : 'Public at once'}</span>
+          </label>
+        </SettingRow>
+        <SettingRow saved={saved === 'publishingOpen'} title="Members can publish" hint="Off pauses new listings and versions from members (staff can still publish). Existing models stay up.">
+          <label className="admin__toggle">
+            <input type="checkbox" checked={settings.publishingOpen} disabled={busy !== null} onChange={(e) => void change('publishingOpen', e.target.checked)} />
+            <span>{settings.publishingOpen ? 'Open' : 'Paused'}</span>
+          </label>
+        </SettingRow>
+        <SettingRow saved={saved === 'commentsOpen'} title="Members can comment" hint="Off pauses new comments from members; existing comments stay.">
+          <label className="admin__toggle">
+            <input type="checkbox" checked={settings.commentsOpen} disabled={busy !== null} onChange={(e) => void change('commentsOpen', e.target.checked)} />
+            <span>{settings.commentsOpen ? 'Open' : 'Paused'}</span>
+          </label>
+        </SettingRow>
+        <SettingRow saved={saved === 'trashDays'} title="Days a deleted project stays in the trash" hint="Cloud projects are purged after this many days; the browser-only trash keeps 30.">
+          <input
+            className="admin__select"
+            type="number"
+            min={1}
+            max={365}
+            defaultValue={settings.trashDays}
+            disabled={busy !== null}
+            onBlur={(e) => {
+              const v = Math.max(1, Math.min(365, Math.round(Number(e.target.value) || 30)))
+              if (v !== settings.trashDays) void change('trashDays', v)
+            }}
+          />
+        </SettingRow>
+      </div>
     </section>
   )
 }

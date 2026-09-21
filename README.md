@@ -281,6 +281,30 @@ admins also change roles there and can delete removed items for good. The
 first admin comes from `bootstrap_admins` in the schema; promote others
 from the Users tab.
 
+Moderation tools on top of that:
+
+- **Restricting a user** (Users tab, admins only): `ban_user` stamps
+  `profiles.banned_at`; every visibility policy (models, comments,
+  collections, collection contents) then excludes that author, and the
+  insert policies (`can_post()`) stop them publishing, commenting or
+  liking. Nothing is deleted, so `unban_user` restores it all. The person
+  gets a notification and a banner on every page.
+- **Reports** (`community_reports`): the Report button on a model asks for
+  a reason (copyright first, since that is the usual case) and details;
+  staff are notified and see it in the Reports tab, where they dismiss it
+  or hide / remove the model (`resolve_report`, which settles every open
+  report of that model and tells the author why).
+- **Settings** (`site_settings`, admins only): who may download shared
+  files (everyone, the original behaviour, or members only, which shows
+  guests a sign-in gate), whether new models wait for review, whether
+  members may publish or comment at all, and how long the trash keeps a
+  project. Read by everyone at page load (`useSiteSettings`), enforced in
+  the database triggers.
+- **Trash** (`/trash`): deleting a project sets `projects.deleted_at`
+  (browser-only projects move to a local trash index); the Trash page
+  restores or purges, and `purge_deleted_projects` drops anything older
+  than the keep period whenever the trash is listed.
+
 ## Custom domain
 
 Point the domain at GitHub Pages (Settings → Pages → Custom domain; add a

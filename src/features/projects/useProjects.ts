@@ -127,7 +127,7 @@ export function useProjects() {
   }
   const remove = (entry: ProjectEntry) => {
     const where = entry.cloud && entry.local ? 'from this browser and the cloud' : entry.cloud ? 'from the cloud' : 'from this browser'
-    if (!window.confirm(`Delete "${entry.name}" ${where}? This can't be undone.`)) return
+    if (!window.confirm(`Move "${entry.name}" to the trash ${where}? You can restore it from Trash for 30 days.`)) return
     void deleteProjectEverywhere(entry.id).then(() => {
       refresh()
       refreshCloud()

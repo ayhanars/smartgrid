@@ -4,6 +4,9 @@ import type { UserRole } from './profiles'
 export interface AdminStats {
   users: number
   users_7d: number
+  users_banned: number
+  projects_trashed: number
+  reports_open: number
   projects: number
   assets: number
   community_published: number
@@ -28,6 +31,8 @@ export interface AdminUser {
   lastSignInAt: number | null
   projects: number
   communityItems: number
+  bannedAt: number | null
+  banReason: string
 }
 
 export async function fetchAdminStats(): Promise<AdminStats> {
@@ -51,6 +56,8 @@ export async function fetchAdminUsers(query = ''): Promise<AdminUser[]> {
     lastSignInAt: r.last_sign_in_at ? Date.parse(r.last_sign_in_at as string) : null,
     projects: (r.projects as number) ?? 0,
     communityItems: (r.community_items as number) ?? 0,
+    bannedAt: r.banned_at ? Date.parse(r.banned_at as string) : null,
+    banReason: (r.ban_reason as string) ?? '',
   }))
 }
 
@@ -60,4 +67,16 @@ export async function setUserRole(userId: string, role: UserRole): Promise<UserR
   const { data, error } = await supabase.from('profiles').update({ role }).eq('id', userId).select('role').single()
   if (error) throw error
   return (data as { role: UserRole }).role
+}
+
+/** Admins only: hides everything the account shared and stops it posting;
+ * `unbanUser` restores it all. The person is notified either way. */
+export async function banUser(userId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('ban_user', { p_user: userId, p_reason: reason })
+  if (error) throw error
+}
+
+export async function unbanUser(userId: string): Promise<void> {
+  const { error } = await supabase.rpc('unban_user', { p_user: userId })
+  if (error) throw error
 }

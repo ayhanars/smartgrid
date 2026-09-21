@@ -15,6 +15,9 @@ export interface Profile {
   followers: number
   following: number
   createdAt: number
+  /** Set by an admin: nothing this account shared is public and it cannot post. */
+  bannedAt: number | null
+  banReason: string
 }
 
 interface ProfileRow {
@@ -28,6 +31,8 @@ interface ProfileRow {
   followers: number | null
   following: number | null
   created_at: string
+  banned_at?: string | null
+  ban_reason?: string | null
 }
 
 const toProfile = (row: ProfileRow): Profile => ({
@@ -41,9 +46,11 @@ const toProfile = (row: ProfileRow): Profile => ({
   followers: row.followers ?? 0,
   following: row.following ?? 0,
   createdAt: Date.parse(row.created_at),
+  bannedAt: row.banned_at ? Date.parse(row.banned_at) : null,
+  banReason: row.ban_reason ?? '',
 })
 
-const COLUMNS = 'id, display_name, avatar_url, role, xp, level, bio, followers, following, created_at'
+const COLUMNS = 'id, display_name, avatar_url, role, xp, level, bio, followers, following, created_at, banned_at, ban_reason'
 
 export async function loadProfile(id: string): Promise<Profile | null> {
   const { data, error } = await supabase.from('profiles').select(COLUMNS).eq('id', id).maybeSingle()
