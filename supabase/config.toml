@@ -4,3 +4,7 @@ project_id = "smartgrid"
 
 [functions.account]
 verify_jwt = true
+
+# Anyone may file a report, so this one takes calls without a session.
+[functions.report-mail]
+verify_jwt = false

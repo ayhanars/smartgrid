@@ -615,6 +615,14 @@ function Reports({ navigate }: { navigate: (to: string) => void }) {
                     <Flag size={11} className="admin__star" /> {reasonLabel(r.reason)}
                   </strong>
                   {r.details && <div className="admin__muted admin__details">{r.details}</div>}
+                  {r.originalUrl && (
+                    <div className="admin__muted admin__details">
+                      Original:{' '}
+                      <a href={r.originalUrl} target="_blank" rel="noreferrer noopener">
+                        {r.originalUrl}
+                      </a>
+                    </div>
+                  )}
                   {r.resolution && <div className="admin__muted">Decision: {r.resolution}</div>}
                 </td>
                 <td>{r.reporterName}</td>

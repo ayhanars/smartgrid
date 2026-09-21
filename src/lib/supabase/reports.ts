@@ -1,4 +1,4 @@
-import { supabase } from './client'
+import { functionsUrl, supabase, supabaseAnonKeyValue } from './client'
 
 export type ReportReason = 'copyright' | 'inappropriate' | 'spam' | 'broken' | 'other'
 export type ReportStatus = 'open' | 'resolved' | 'dismissed'
@@ -21,8 +21,10 @@ export interface CommunityReport {
   itemStatus: string
   itemOwnerId: string
   itemOwnerName: string
-  reporterId: string
+  reporterId: string | null
   reporterName: string
+  reporterEmail: string
+  originalUrl: string
   reason: ReportReason
   details: string
   status: ReportStatus
@@ -34,7 +36,9 @@ export interface CommunityReport {
 interface ReportRow {
   id: string
   item_id: string
-  reporter_id: string
+  reporter_id: string | null
+  reporter_email: string
+  original_url: string
   reason: ReportReason
   details: string
   status: ReportStatus
@@ -45,7 +49,7 @@ interface ReportRow {
   reporter: { display_name: string } | null
 }
 
-const COLUMNS = 'id, item_id, reporter_id, reason, details, status, resolution, created_at, resolved_at, item:community_items (title, thumbnail, status, owner_id, owner:profiles!community_items_owner_id_fkey (display_name)), reporter:profiles!community_reports_reporter_id_fkey (display_name)'
+const COLUMNS = 'id, item_id, reporter_id, reporter_email, original_url, reason, details, status, resolution, created_at, resolved_at, item:community_items (title, thumbnail, status, owner_id, owner:profiles!community_items_owner_id_fkey (display_name)), reporter:profiles!community_reports_reporter_id_fkey (display_name)'
 
 const toReport = (r: ReportRow): CommunityReport => ({
   id: r.id,
@@ -56,7 +60,9 @@ const toReport = (r: ReportRow): CommunityReport => ({
   itemOwnerId: r.item?.owner_id ?? '',
   itemOwnerName: r.item?.owner?.display_name ?? '—',
   reporterId: r.reporter_id,
-  reporterName: r.reporter?.display_name ?? '—',
+  reporterName: r.reporter?.display_name ?? (r.reporter_email ? `visitor · ${r.reporter_email}` : 'visitor'),
+  reporterEmail: r.reporter_email ?? '',
+  originalUrl: r.original_url ?? '',
   reason: r.reason,
   details: r.details,
   status: r.status,
@@ -65,13 +71,25 @@ const toReport = (r: ReportRow): CommunityReport => ({
   resolvedAt: r.resolved_at ? Date.parse(r.resolved_at) : null,
 })
 
-/** Signed-in users flag a model; staff hear about it at once. */
-export async function reportCommunityItem(itemId: string, reason: ReportReason, details: string): Promise<void> {
+/** Anyone flags a model, signed in or not; staff get a notification at
+ * once and, when a mail provider is configured, an e-mail. */
+export async function reportCommunityItem(itemId: string, reason: ReportReason, details: string, extra: { email?: string; originalUrl?: string } = {}): Promise<void> {
   const { data: session } = await supabase.auth.getSession()
-  const reporter_id = session.session?.user.id
-  if (!reporter_id) throw new Error('Not signed in')
-  const { error } = await supabase.from('community_reports').insert({ item_id: itemId, reporter_id, reason, details: details.trim() })
+  const reporter_id = session.session?.user.id ?? null
+  // The id is minted here: a guest cannot read the row back (no select
+  // policy for them), and RETURNING would trip over that.
+  const id = crypto.randomUUID()
+  const row = { id, item_id: itemId, reporter_id, reason, details: details.trim(), reporter_email: (extra.email ?? '').trim(), original_url: (extra.originalUrl ?? '').trim() }
+  const { error } = await supabase.from('community_reports').insert(row)
   if (error) throw error
+  // Best effort: the notification is already in; the mail is a bonus.
+  if (functionsUrl) {
+    void fetch(`${functionsUrl}/report-mail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: supabaseAnonKeyValue, Authorization: `Bearer ${session.session?.access_token ?? supabaseAnonKeyValue}` },
+      body: JSON.stringify({ reportId: id }),
+    }).catch((err: unknown) => console.warn('Report mail not sent', err))
+  }
 }
 
 /** The caller's own reports of one model (to say "you reported this"). */

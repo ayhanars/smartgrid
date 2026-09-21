@@ -17,7 +17,6 @@ import { isStaffRole, useAuthStore } from '../features/auth/useAuthStore'
 import { CollectionPicker, CommentsSection, LikeButton } from '../features/community/Social'
 import { DownloadBox } from '../features/community/DownloadBox'
 import { ReportDialog } from '../features/community/ReportDialog'
-import { requireAccount } from '../features/auth/authGate'
 import { VersionsPanel } from '../features/community/VersionsPanel'
 import { TagInput } from '../features/community/TagInput'
 import { CATEGORIES, categoryLabel } from '../lib/supabase/community'
@@ -292,9 +291,7 @@ export function CommunityItemPage() {
                     className="social-btn social-btn--quiet"
                     disabled={reported}
                     title={reported ? 'Thanks, a moderator will look at it' : 'Report this model to the moderators'}
-                    onClick={() => {
-                      if (requireAccount('social')) setReporting(true)
-                    }}
+                    onClick={() => setReporting(true)}
                   >
                     <Flag size={14} />
                     {reported ? 'Reported' : 'Report'}

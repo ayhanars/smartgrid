@@ -1691,3 +1691,79 @@ begin
   return result;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Reports from anyone: no account needed. A guest leaves an e-mail (so a
+-- moderator can ask for more) and, for copyright claims, a link to the
+-- original. Staff get a notification, and an e-mail when the report-mail
+-- function has a mail provider configured.
+-- ---------------------------------------------------------------------------
+
+alter table public.community_reports alter column reporter_id drop not null;
+alter table public.community_reports add column if not exists reporter_email text not null default '';
+alter table public.community_reports add column if not exists original_url text not null default '';
+alter table public.community_reports add column if not exists emailed_at timestamptz;
+
+drop policy if exists "Signed-in users report" on public.community_reports;
+create policy "Anyone can report"
+  on public.community_reports for insert
+  with check ((auth.uid() is null and reporter_id is null) or (auth.uid() = reporter_id and public.can_post()));
+
+grant insert on public.community_reports to anon;
+
+-- Guests: at most a handful of reports per model per hour, and only on
+-- models that are actually public.
+create or replace function public.guard_report_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.community_items i where i.id = new.item_id and i.status = 'published' and i.approval = 'approved') then
+    raise exception 'This model is not public' using errcode = 'P0001';
+  end if;
+  if new.reporter_id is null then
+    if (select count(*) from public.community_reports r where r.item_id = new.item_id and r.reporter_id is null and r.created_at > now() - interval '1 hour') >= 5 then
+      raise exception 'This model has just been reported several times; a moderator is on it' using errcode = 'P0001';
+    end if;
+    if new.reporter_email <> '' and new.reporter_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+      raise exception 'That e-mail address does not look right' using errcode = 'P0001';
+    end if;
+  end if;
+  new.details := left(new.details, 2000);
+  new.original_url := left(new.original_url, 500);
+  new.reporter_email := left(lower(new.reporter_email), 200);
+  return new;
+end;
+$$;
+drop trigger if exists community_reports_guard on public.community_reports;
+create trigger community_reports_guard before insert on public.community_reports for each row execute function public.guard_report_insert();
+
+create or replace function public.on_report_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  item_title text;
+  who text;
+begin
+  select title into item_title from public.community_items where id = new.item_id;
+  who := case when new.reporter_id is null then coalesce(nullif(new.reporter_email, ''), 'a visitor') else coalesce((select display_name from public.profiles where id = new.reporter_id), 'a member') end;
+  perform public.notify_staff('report', format('"%s" was reported (%s)', coalesce(item_title, 'A model'), new.reason), left(format('By %s. %s%s', who, new.details, case when new.original_url <> '' then ' Original: ' || new.original_url else '' end), 240), '/admin?tab=reports');
+  return new;
+end;
+$$;
+
+/** The report-mail function (service role) marks a report as mailed. */
+create or replace function public.mark_report_emailed(p_report uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.community_reports set emailed_at = now() where id = p_report and emailed_at is null;
+$$;
+revoke execute on function public.mark_report_emailed(uuid) from public, anon, authenticated;

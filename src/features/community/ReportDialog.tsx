@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Flag, X } from 'lucide-react'
 import { REPORT_REASONS, reportCommunityItem, type ReportReason } from '../../lib/supabase/reports'
+import { useAuthStore } from '../auth/useAuthStore'
 import '../auth/AuthDialog.css'
 import './community.css'
 
@@ -9,6 +10,9 @@ import './community.css'
 export function ReportDialog({ itemId, title, onClose, onSent }: { itemId: string; title: string; onClose: () => void; onSent: () => void }) {
   const [reason, setReason] = useState<ReportReason>('copyright')
   const [details, setDetails] = useState('')
+  const [email, setEmail] = useState('')
+  const [originalUrl, setOriginalUrl] = useState('')
+  const user = useAuthStore((s) => s.user)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const chosen = REPORT_REASONS.find((r) => r.id === reason)!
@@ -16,14 +20,22 @@ export function ReportDialog({ itemId, title, onClose, onSent }: { itemId: strin
 
   const send = async () => {
     if (busy) return
-    if (needsDetails && details.trim().length < 10) {
-      setError(reason === 'copyright' ? 'Tell us whose work it is, or link to the original.' : 'Tell us what is wrong in a sentence or two.')
+    if (reason === 'copyright' && details.trim().length < 10 && originalUrl.trim().length < 8) {
+      setError('Tell us whose work it is, or link to the original.')
+      return
+    }
+    if (reason === 'other' && details.trim().length < 10) {
+      setError('Tell us what is wrong in a sentence or two.')
+      return
+    }
+    if (email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+      setError('That e-mail address does not look right.')
       return
     }
     setBusy(true)
     setError(null)
     try {
-      await reportCommunityItem(itemId, reason, details)
+      await reportCommunityItem(itemId, reason, details, { email: user ? '' : email, originalUrl })
       onSent()
       onClose()
     } catch (err) {
@@ -42,7 +54,7 @@ export function ReportDialog({ itemId, title, onClose, onSent }: { itemId: strin
         <h2 id="report-title">
           <Flag size={15} /> Report “{title}”
         </h2>
-        <p className="auth-dialog__lead">A moderator looks at every report. The author is not told who reported it.</p>
+        <p className="auth-dialog__lead">A moderator looks at every report, no account needed. The author is not told who reported it.</p>
         <div className="report-dialog__reasons" role="radiogroup" aria-label="Reason">
           {REPORT_REASONS.map((r) => (
             <label key={r.id} className={`report-dialog__reason ${reason === r.id ? 'report-dialog__reason--on' : ''}`}>
@@ -54,6 +66,12 @@ export function ReportDialog({ itemId, title, onClose, onSent }: { itemId: strin
             </label>
           ))}
         </div>
+        {reason === 'copyright' && (
+          <label className="report-dialog__details">
+            <span>Link to the original (optional)</span>
+            <input type="url" value={originalUrl} maxLength={500} placeholder="https://… where the original design lives" onChange={(e) => setOriginalUrl(e.target.value)} />
+          </label>
+        )}
         <label className="report-dialog__details">
           <span>Details{needsDetails ? '' : ' (optional)'}</span>
           <textarea
@@ -64,6 +82,12 @@ export function ReportDialog({ itemId, title, onClose, onSent }: { itemId: strin
             onChange={(e) => setDetails(e.target.value)}
           />
         </label>
+        {!user && (
+          <label className="report-dialog__details">
+            <span>Your e-mail (optional, only so a moderator can ask you for more)</span>
+            <input type="email" value={email} maxLength={200} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} />
+          </label>
+        )}
         {error && (
           <p className="auth-dialog__error" role="alert">
             {error}
