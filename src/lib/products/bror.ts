@@ -18,32 +18,37 @@ const MOUNT_DEFAULTS: ProductSpec = { hole: BROR_BOARD.pattern.kind === 'round' 
 
 /** A rounded peg that fills a round hole: as wide and as thick as the
  * hole less 0.4 mm of play, with its edges filleted to half that, so
- * the cross-section is close to a circle. The lip behind the sheet is
- * as thick as the peg. */
+ * the cross-section is close to a circle. Behind the sheet the peg
+ * turns up (the bin is hung by tilting it in), as pegboard hooks do. */
 function mountFrom(spec: ProductSpec): { dims: MountDims; pitch: number; pattern: PegPattern } {
   const hole = num(spec, 'hole', 6)
   const sheet = num(spec, 'sheet', 1.5)
   const pitch = num(spec, 'pitch', 30)
   const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
   return {
-    dims: { tabThickness: peg, tabWidth: peg, lipThickness: Math.max(3, peg), gap: sheet + 0.6, lipDrop: Math.max(8, hole + 4), round: Math.round((peg / 2 - 0.1) * 10) / 10 },
+    dims: { tabThickness: peg, tabWidth: peg, lipThickness: peg, gap: sheet + 0.6, lipDrop: 0, lipRise: Math.max(6, hole + 2), round: Math.round((peg / 2 - 0.1) * 10) / 10 },
     pitch,
     pattern: { kind: 'round', pitchX: pitch, pitchY: pitch, stagger: false, diameter: hole },
   }
 }
 
-/** One row of pegs, or two when the bin is big enough to lever hard on
- * them (deep, or tall and wide) — and tall enough for the second row to
- * fit under the first. */
-function rowCount(spec: ProductSpec, height: number, pitch: number, dims: MountDims): number {
-  const fits = height - pitch > dims.lipDrop + dims.tabThickness
-  if (!fits) return 1
+/** Height of the hooks' shank centre: the lip's top sits 2 mm under
+ * the bin's top edge. */
+function shankCenter(height: number, dims: MountDims): number {
+  return height - 2 - (dims.lipRise ?? 0) - dims.tabThickness / 2
+}
+
+/** Rows of straight studs under the hook row: as many as fit and the
+ * size asks for — one on any bin taller than a pitch and a half, two on
+ * a big one (deep, or tall and wide, or over about half a litre). */
+function studRows(spec: ProductSpec, height: number, pitch: number, dims: MountDims): number {
+  const most = Math.max(0, Math.floor((shankCenter(height, dims) - dims.tabThickness / 2 - 3) / pitch))
   const choice = str(spec, 'rows', 'auto')
-  if (choice === '1') return 1
-  if (choice === '2') return 2
+  if (choice !== 'auto') return Math.min(most, Math.max(0, parseInt(choice, 10) || 0))
   const width = num(spec, 'width', 90)
   const depth = num(spec, 'depth', 60)
-  return depth >= 80 || (height >= 100 && width >= 120) || width * depth * height >= 480000 ? 2 : 1
+  const big = depth >= 80 || (height >= 100 && width >= 120) || width * depth * height >= 480000
+  return Math.min(most, big ? 2 : 1)
 }
 
 function hookCount(width: number, choice: string, pitch: number, peg: number): number {
@@ -79,29 +84,32 @@ export const brorBin: ProductTemplate = {
     {
       kind: 'select',
       id: 'rows',
-      label: 'Peg rows',
+      label: 'Stud rows below',
       options: [
-        { value: 'auto', label: 'Auto (second row on a big bin)' },
-        { value: '1', label: '1 (top edge)' },
-        { value: '2', label: '2 (one pitch lower too)' },
+        { value: 'auto', label: 'Auto (by size)' },
+        { value: '0', label: 'None' },
+        { value: '1', label: '1' },
+        { value: '2', label: '2' },
       ],
+      hint: 'Straight studs one pitch under the hooks: they sit in the holes so the bin cannot tilt or swing.',
     },
     { kind: 'boolean', id: 'drain', label: 'Drain hole in the floor' },
     ...MOUNT_FIELDS,
   ],
   defaults: { width: 90, depth: 60, height: 80, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', drain: false, ...MOUNT_DEFAULTS },
-  notes: 'Prints standing up; rounded pegs at the back top edge go through the round holes and drop behind the sheet. Peg and lip undersides are 45°, no support needed. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
+  notes: 'Prints standing up. Rounded hooks near the top go through the holes and turn up behind the sheet (hang the bin by tilting it in); straight studs below sit in the holes so it cannot tilt. Short horizontal pegs print without support. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 90)
     const height = num(spec, 'height', 80)
     const { dims, pitch, pattern } = mountFrom(spec)
     const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pitch, dims.tabWidth)
-    const rows = rowCount(spec, height, pitch, dims)
+    const studs = studRows(spec, height, pitch, dims)
     const span = (hooks - 1) * pitch
+    const top = height - shankCenter(height, dims) - dims.tabThickness / 2
     const anchors = []
-    for (let r = 0; r < rows; r++) for (let i = 0; i < hooks; i++) anchors.push({ x: width / 2 - span / 2 + i * pitch - dims.tabWidth / 2, y: r * pitch, width: dims.tabWidth, height: dims.tabThickness })
-    const auto = str(spec, 'rows', 'auto') === 'auto' && rows === 2 ? ' · second row added for the load' : ''
-    return { pattern, silhouette: { width, height }, anchors, caption: `Back view · ${hooks * rows} peg${hooks * rows === 1 ? '' : 's'} on the ${pitch} mm grid${auto}` }
+    for (let r = 0; r <= studs; r++) for (let i = 0; i < hooks; i++) anchors.push({ x: width / 2 - span / 2 + i * pitch - dims.tabWidth / 2, y: top + r * pitch, width: dims.tabWidth, height: dims.tabThickness })
+    const studNote = studs > 0 ? ` + ${hooks * studs} stud${hooks * studs === 1 ? '' : 's'}` : ''
+    return { pattern, silhouette: { width, height }, anchors, caption: `Back view · ${hooks} hook${hooks === 1 ? '' : 's'}${studNote} on the ${pitch} mm grid` }
   },
   build: (spec: ProductSpec) => {
     const width = num(spec, 'width', 90)
@@ -112,9 +120,11 @@ export const brorBin: ProductTemplate = {
     const drain = bool(spec, 'drain', false)
     const { dims, pitch } = mountFrom(spec)
     const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pitch, dims.tabWidth)
-    const rows = rowCount(spec, height, pitch, dims)
-    const { points: profile, height: tabHeight } = mountProfile(dims, Math.min(1, wall / 2))
+    const studs = studRows(spec, height, pitch, dims)
+    const embed = Math.min(1, wall / 2)
+    const { points: profile, height: tabHeight } = mountProfile(dims, embed)
     const boxY = dims.gap + dims.lipThickness
+    const center = shankCenter(height, dims)
     const parts: PartRecipe[] = [
       { name: 'Bin', color: COLOR, outline: { kind: 'rect', x: 0, y: boxY, width, height: depth }, depth: height, cornerRadius: corner, hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' } },
     ]
@@ -123,18 +133,34 @@ export const brorBin: ProductTemplate = {
       parts.push({ name: 'Drain', outline: { kind: 'circle', x: width / 2 - d / 2, y: boxY + depth / 2 - d / 2, width: d, height: d }, depth: Math.max(wall, 1.6) + 2, z: -1, isHole: true })
     }
     const span = (hooks - 1) * pitch
+    for (let i = 0; i < hooks; i++) {
+      parts.push({
+        name: hooks === 1 ? 'Hook' : `Hook ${i + 1}`,
+        color: COLOR,
+        outline: { kind: 'path', points: standingPath(profile, width / 2 - span / 2 + i * pitch, tabHeight, boxY) },
+        depth: dims.tabWidth,
+        bevel: dims.round,
+        rotation: { y: 90 },
+        z: center - dims.tabThickness / 2,
+      })
+    }
+    // Straight studs: a cylinder from inside the wall to just behind the
+    // sheet (tilted 90° about x, a circle's extrusion runs along depth).
+    const studLength = embed + dims.gap + 1.5
+    const d = dims.tabThickness
     let n = 0
-    for (let r = 0; r < rows; r++) {
+    for (let r = 1; r <= studs; r++) {
       for (let i = 0; i < hooks; i++) {
         n++
+        const cx = width / 2 - span / 2 + i * pitch
+        const centerB = (dims.gap + 1.5 - embed) / 2
         parts.push({
-          name: hooks * rows === 1 ? 'Peg' : `Peg ${n}`,
+          name: hooks * studs === 1 ? 'Stud' : `Stud ${n}`,
           color: COLOR,
-          outline: { kind: 'path', points: standingPath(profile, width / 2 - span / 2 + i * pitch, tabHeight, boxY) },
-          depth: dims.tabWidth,
-          bevel: dims.round,
-          rotation: { y: 90 },
-          z: height - tabHeight - r * pitch,
+          outline: { kind: 'circle', x: cx - d / 2, y: boxY - centerB - d / 2, width: d, height: d },
+          depth: studLength,
+          rotation: { x: 90 },
+          z: center - r * pitch - d / 2,
         })
       }
     }
@@ -157,13 +183,14 @@ export const brorHook: ProductTemplate = {
     ...MOUNT_FIELDS,
   ],
   defaults: { reach: 40, width: 12, arm: 5, tip: 10, plate: 30, ...MOUNT_DEFAULTS },
-  notes: 'Prints lying on its side. A rounded peg sized to the hole goes through it and its lip drops behind the sheet; a hook wider than the peg gets the peg as a fused centre piece. Check hole diameter and sheet thickness on your board first.',
+  notes: 'Prints lying on its side. A rounded peg sized to the hole goes through it and turns up behind the sheet; a hook wider than the peg gets the peg as a fused centre piece. Check hole diameter and sheet thickness on your board first.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 12)
     const plateH = num(spec, 'plate', 30)
     const { dims, pattern } = mountFrom(spec)
     const peg = Math.min(width, dims.tabWidth)
-    return { pattern, silhouette: { width, height: plateH + dims.tabThickness }, anchors: [{ x: width / 2 - peg / 2, y: 0, width: peg, height: dims.tabThickness }], caption: 'Back view · one hole' }
+    const rise = dims.lipRise ?? 0
+    return { pattern, silhouette: { width, height: plateH + dims.tabThickness + rise }, anchors: [{ x: width / 2 - peg / 2, y: rise, width: peg, height: dims.tabThickness }], caption: 'Back view · one hole' }
   },
   build: (spec: ProductSpec) => {
     const { dims } = mountFrom(spec)
