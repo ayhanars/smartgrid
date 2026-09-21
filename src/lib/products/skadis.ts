@@ -28,6 +28,18 @@ const COLOR = '#4d8dff'
 /** The SKÅDIS tab in the shared mount-profile terms. */
 const SKADIS_MOUNT: MountDims = { tabThickness: SKADIS.tabThickness, lipThickness: SKADIS.lipThickness, gap: SKADIS.gap, lipDrop: SKADIS.lipDrop, tabWidth: SKADIS.tabWidth }
 
+/** One row of hooks, or two (40 mm lower, same slots column) when the
+ * box is big enough to lever hard on them and tall enough to fit them. */
+function rowCount(spec: ProductSpec, height: number): number {
+  if (height - SKADIS.pitch <= SKADIS.lipDrop + SKADIS.tabThickness) return 1
+  const choice = str(spec, 'rows', 'auto')
+  if (choice === '1') return 1
+  if (choice === '2') return 2
+  const width = num(spec, 'width', 80)
+  const depth = num(spec, 'depth', 50)
+  return depth >= 80 || (height >= 100 && width >= 120) || width * depth * height >= 480000 ? 2 : 1
+}
+
 function hookCount(width: number, choice: string): number {
   if (choice !== 'auto') return Math.max(1, parseInt(choice, 10) || 1)
   return Math.max(1, Math.round((width - 10) / SKADIS.pitch))
@@ -57,20 +69,34 @@ export const skadisContainer: ProductTemplate = {
         { value: '4', label: '4' },
       ],
     },
+    {
+      kind: 'select',
+      id: 'rows',
+      label: 'Hook rows',
+      options: [
+        { value: 'auto', label: 'Auto (second row on a big box)' },
+        { value: '1', label: '1 (top edge)' },
+        { value: '2', label: '2 (40 mm lower too)' },
+      ],
+    },
     { kind: 'boolean', id: 'drain', label: 'Drain hole in the floor' },
   ],
-  defaults: { width: 80, depth: 50, height: 60, wall: 2, corner: 6, hooks: 'auto', drain: false },
+  defaults: { width: 80, depth: 50, height: 60, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', drain: false },
   notes: 'Prints standing up, hooks at the back top edge; the tab and lip undersides are 45° so no support is needed. Hooks sit 40 mm apart to match the pegboard. The parts export as one body.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 80)
     const height = num(spec, 'height', 60)
     const hooks = Math.min(hookCount(width, str(spec, 'hooks', 'auto')), Math.max(1, Math.floor((width - SKADIS.tabWidth) / SKADIS.pitch) + 1))
+    const rows = rowCount(spec, height)
     const span = (hooks - 1) * SKADIS.pitch
+    const anchors = []
+    for (let r = 0; r < rows; r++) for (let i = 0; i < hooks; i++) anchors.push({ x: width / 2 - span / 2 + i * SKADIS.pitch - SKADIS.tabWidth / 2, y: r * SKADIS.pitch, width: SKADIS.tabWidth, height: SKADIS.tabThickness })
+    const auto = str(spec, 'rows', 'auto') === 'auto' && rows === 2 ? ' · second row added for the load' : ''
     return {
       pattern: SKADIS_BOARD.pattern,
       silhouette: { width, height },
-      anchors: Array.from({ length: hooks }, (_, i) => ({ x: width / 2 - span / 2 + i * SKADIS.pitch - SKADIS.tabWidth / 2, y: 0, width: SKADIS.tabWidth, height: SKADIS.tabThickness })),
-      caption: `Back view · ${hooks} hook${hooks === 1 ? '' : 's'} on the 40 mm grid`,
+      anchors,
+      caption: `Back view · ${hooks * rows} hook${hooks * rows === 1 ? '' : 's'} on the 40 mm grid${auto}`,
     }
   },
   build: (spec: ProductSpec) => {
@@ -102,16 +128,21 @@ export const skadisContainer: ProductTemplate = {
       parts.push({ name: 'Drain', outline: { kind: 'circle', x: width / 2 - d / 2, y: boxY + depth / 2 - d / 2, width: d, height: d }, depth: Math.max(wall, 1.6) + 2, z: -1, isHole: true })
     }
     const span = (hooks - 1) * SKADIS.pitch
-    for (let i = 0; i < hooks; i++) {
-      const cx = width / 2 - span / 2 + i * SKADIS.pitch
-      parts.push({
-        name: hooks === 1 ? 'Hook' : `Hook ${i + 1}`,
-        color: COLOR,
-        outline: { kind: 'path', points: standingPath(profile, cx, hookHeight, boxY) },
-        depth: SKADIS.tabWidth,
-        rotation: { y: 90 },
-        z: height - hookHeight,
-      })
+    const rows = rowCount(spec, height)
+    let n = 0
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0; i < hooks; i++) {
+        n++
+        const cx = width / 2 - span / 2 + i * SKADIS.pitch
+        parts.push({
+          name: hooks * rows === 1 ? 'Hook' : `Hook ${n}`,
+          color: COLOR,
+          outline: { kind: 'path', points: standingPath(profile, cx, hookHeight, boxY) },
+          depth: SKADIS.tabWidth,
+          rotation: { y: 90 },
+          z: height - hookHeight - r * SKADIS.pitch,
+        })
+      }
     }
     return { width, height: boxY + depth, parts, fuse: true }
   },
