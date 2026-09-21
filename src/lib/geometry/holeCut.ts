@@ -2,6 +2,10 @@ import * as THREE from 'three'
 import { ADDITION, Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg'
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
+/** Weld tolerance for a boolean's output: the evaluator leaves hairline
+ * cracks between split faces, which a slicer reads as holes to repair. */
+const WELD = 1e-4
+
 // A single Evaluator is reusable across calls (it just holds scratch state
 // for the operation), so we don't pay setup cost per shape per frame.
 let sharedEvaluator: Evaluator | null = null
@@ -54,7 +58,7 @@ export function cutHolesFromSolid(solid: PositionedGeometry, holes: PositionedGe
   // ones that coincide (same position and normal) cuts the vertex count
   // several-fold, which is what the vertex stage, the outline pass and
   // the exported file all pay for.
-  const welded = mergeVertices(brush.geometry, 1e-6)
+  const welded = mergeVertices(brush.geometry, WELD)
   welded.clearGroups()
   return welded
 }
@@ -75,7 +79,7 @@ export function fuseSolids(parts: PositionedGeometry[]): THREE.BufferGeometry {
     brush = evaluator.evaluate(brush, other, ADDITION)
     brush.updateMatrixWorld()
   }
-  const welded = mergeVertices(brush.geometry, 1e-6)
+  const welded = mergeVertices(brush.geometry, WELD)
   welded.clearGroups()
   return welded
 }

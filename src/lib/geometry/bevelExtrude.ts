@@ -3,7 +3,7 @@ import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.j
 import type { Point2 } from '../../types/document'
 import { computeSafeBevel, dilatePolygon, erodePolygon, signedArea } from './offset'
 import type { SurfaceTexture } from '../../types/document'
-import { buildTexturedCap, buildTexturedWall, textureStep } from './surfaceTexture'
+import { buildTexturedCap, buildTexturedWall, subdivideRing, textureStep } from './surfaceTexture'
 
 // Below this angle between adjacent faces, normals blend smoothly (a
 // rounded fillet reads as glossy-smooth); at or above it, the edge stays
@@ -70,7 +70,14 @@ export function buildBeveledGeometry(
   // primitive shape has (positive signed area). A pen path clicked in the
   // other direction arrives reversed and would build inside-out — every
   // face back-face culled, "the sides disappear" — so normalize it first.
-  const contour = signedArea(inputContour) < 0 ? [...inputContour].reverse() : inputContour
+  const oriented = signedArea(inputContour) < 0 ? [...inputContour].reverse() : inputContour
+  // A subdivided wall is built on a pre-subdivided ring, so its columns
+  // are the ring's points and the caps and bevel rings, triangulated on
+  // the same ring, meet it vertex for vertex (a closed mesh, no
+  // T-junctions for the slicer to "repair").
+  const wallTexture = texture && texture.depth > 0 && (texture.target === 'walls' || texture.target === 'both') ? texture : null
+  const wallStep = wallTexture ? (minStep ? Math.max(textureStep(wallTexture), minStep) : textureStep(wallTexture)) : tessellate
+  const contour = wallStep ? subdivideRing(oriented, wallStep) : oriented
   const n = contour.length
   if (n < 3 || depth <= 0) return new THREE.BufferGeometry()
 
@@ -166,7 +173,7 @@ export function buildBeveledGeometry(
   // A zero-depth "texture" is just a tessellation.
   const flat: SurfaceTexture = { pattern: 'grid', target: 'both', size: 6, depth: 0 }
   if (depth - safeTop > safeBottom + 1e-6) {
-    if (textureWalls) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, texture, textureSign, minStep ? Math.max(textureStep(texture), minStep) : undefined))
+    if (textureWalls) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, texture, textureSign, wallStep))
     else if (tessellate) appendPart(buildTexturedWall(contour, safeBottom, depth - safeTop, flat, textureSign, tessellate))
     else addWall(contour, safeBottom, contour, depth - safeTop)
   }

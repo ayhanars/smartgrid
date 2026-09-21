@@ -63,7 +63,7 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
   const metadata = options.metadata ?? {}
   const plateNames = options.plates && options.plates.length > 1 ? options.plates : null
   const bambu = options.bambu && isBambuPrinter(options.bambu.bedPresetId) ? options.bambu : null
-  const colors = [...new Set(meshes.map((m) => normalizeColor(m.color)))]
+  const colors = [...new Set(meshes.flatMap((m) => (m.components ?? [m]).map((c) => normalizeColor(c.color))))]
 
   const baseMaterials = colors
     .map((c, i) => `      <base name="${escapeXml(`Color ${i + 1}`)}" displaycolor="${c}FF" />`)
@@ -72,8 +72,11 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
   const objects: string[] = []
   const buildItems: string[] = []
   const objectSettings: string[] = []
-  meshes.forEach((mesh, i) => {
-    const objectId = i + 2 // id 1 is the basematerials group
+  /** The object id each build item (top-level mesh) got, for the plates. */
+  const itemIds: number[] = []
+  let nextId = 2 // id 1 is the basematerials group
+  const meshObject = (mesh: ExportMesh): { id: number; colorIndex: number } => {
+    const objectId = nextId++
     const colorIndex = colors.indexOf(normalizeColor(mesh.color))
     const { vertices, triangles } = mesh.indices ? { vertices: mesh.positions, triangles: mesh.indices } : indexTriangles(mesh.positions)
     const vertexXml: string[] = []
@@ -89,12 +92,44 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
         `      <mesh>\n        <vertices>\n${vertexXml.join('\n')}\n        </vertices>\n` +
         `        <triangles>\n${triXml.join('\n')}\n        </triangles>\n      </mesh>\n    </object>`,
     )
+    return { id: objectId, colorIndex }
+  }
+  for (const mesh of meshes) {
+    if (mesh.components && mesh.components.length > 0) {
+      // A compound: its parts as mesh objects, then one object made of
+      // components, which is what goes on the build (Bambu Studio and
+      // PrusaSlicer open it as one object with parts).
+      const parts = mesh.components.map((c) => ({ mesh: c, ...meshObject(c) }))
+      const objectId = nextId++
+      objects.push(
+        `    <object id="${objectId}" name="${escapeXml(mesh.name)}" type="model">\n      <components>\n` +
+          parts.map((p) => `        <component objectid="${p.id}" />`).join('\n') +
+          `\n      </components>\n    </object>`,
+      )
+      buildItems.push(`    <item objectid="${objectId}" />`)
+      itemIds.push(objectId)
+      objectSettings.push(
+        `  <object id="${objectId}">\n    <metadata key="name" value="${escapeXml(mesh.name)}"/>\n` +
+          `    <metadata key="extruder" value="${parts[0].colorIndex + 1}"/>\n` +
+          parts
+            .map(
+              (p) =>
+                `    <part id="${p.id}" subtype="normal_part">\n      <metadata key="name" value="${escapeXml(p.mesh.name)}"/>\n` +
+                `      <metadata key="extruder" value="${p.colorIndex + 1}"/>\n    </part>`,
+            )
+            .join('\n') +
+          `\n  </object>`,
+      )
+      continue
+    }
+    const { id: objectId, colorIndex } = meshObject(mesh)
     buildItems.push(`    <item objectid="${objectId}" />`)
+    itemIds.push(objectId)
     objectSettings.push(
       `  <object id="${objectId}">\n    <metadata key="name" value="${escapeXml(mesh.name)}"/>\n` +
         `    <metadata key="extruder" value="${colorIndex + 1}"/>\n  </object>`,
     )
-  })
+  }
 
   const model =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
@@ -125,7 +160,7 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
   const plateBlocks = plateNames
     ? plateNames.map((name, i) => {
         const instances = meshes
-          .map((m, mi) => ({ m, objectId: mi + 2 }))
+          .map((m, mi) => ({ m, objectId: itemIds[mi] }))
           .filter(({ m }) => (m.plate ?? 1) === i + 1)
           .map(({ objectId }) => `    <model_instance>\n      <metadata key="object_id" value="${objectId}"/>\n      <metadata key="instance_id" value="0"/>\n    </model_instance>`)
         return (

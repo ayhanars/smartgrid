@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { Point2, ShapeLayer, SurfaceTexture } from '../../types/document'
 import { effectiveContour, holeFootprintsInLocalFrame, rotationBake } from './layerGeometry'
 import { applyProfile, applyTwist, footprintCenter, profileTessellation, reshade } from './profile'
-import { buildTexturedWall, textureStep, type MeshPart } from './surfaceTexture'
+import { buildTexturedWall, subdivideRing, textureStep, type MeshPart } from './surfaceTexture'
 import { signedArea } from './offset'
 
 /** A texture's zero-depth stand-in: just a subdivision. */
@@ -39,8 +39,8 @@ export function canBuildShellDirectly(solid: ShapeLayer, cavity: ShapeLayer): bo
  */
 export function buildShellGeometry(solid: ShapeLayer, cavity: ShapeLayer, scale: number, options: { minStep?: number } = {}): THREE.BufferGeometry {
   const depth = Math.max(0.2, solid.extrusionDepth)
-  const outer = orient(dedupe(effectiveContour(solid)!))
-  const inner = orient(dedupe(holeFootprintsInLocalFrame(solid, cavity)[0]))
+  const outerRaw = orient(dedupe(effectiveContour(solid)!))
+  const innerRaw = orient(dedupe(holeFootprintsInLocalFrame(solid, cavity)[0]))
   const link = cavity.shellOf!
   const openTop = link.openFrom === 'top'
   // Floor (or ceiling) thickness as the cavity was actually built.
@@ -57,6 +57,13 @@ export function buildShellGeometry(solid: ShapeLayer, cavity: ShapeLayer, scale:
     return step
   }
   const solidTexture = solid.texture && solid.texture.depth > 0 ? solid.texture : undefined
+  const cavityTextured = cavity.texture && cavity.texture.depth > 0 ? cavity.texture : undefined
+  // Rings pre-subdivided at their wall's step, so the walls, the rim and
+  // the floor share vertices (see buildBeveledGeometry).
+  const outerStep = stepFor(solidTexture)
+  const innerStep = stepFor(cavityTextured)
+  const outer = outerStep < PLAIN ? subdivideRing(outerRaw, outerStep) : outerRaw
+  const inner = innerStep < PLAIN ? subdivideRing(innerRaw, innerStep) : innerRaw
   const solidSign = ((solid.texture?.relief === 'raised' ? 1 : -1) as 1 | -1)
   // The cavity's texture, re-based to the solid's frame: heights are the
   // solid's, and the lookup ring across the wall is the solid's outline.
@@ -85,8 +92,8 @@ export function buildShellGeometry(solid: ShapeLayer, cavity: ShapeLayer, scale:
 
   // Outer wall faces out; the inner wall, built the same way, is turned
   // to face into the cavity.
-  append(buildTexturedWall(outer, 0, depth, solidTexture ?? FLAT, solidSign, stepFor(solidTexture)))
-  append(buildTexturedWall(inner, innerA, innerB, cavityTexture ?? FLAT, cavitySign, stepFor(cavityTexture)), true)
+  append(buildTexturedWall(outer, 0, depth, solidTexture ?? FLAT, solidSign, outerStep))
+  append(buildTexturedWall(inner, innerA, innerB, cavityTexture ?? FLAT, cavitySign, innerStep), true)
 
   // Caps: bottom faces -Y with the ring's natural winding, top faces +Y
   // with the reverse (as in buildBeveledGeometry).

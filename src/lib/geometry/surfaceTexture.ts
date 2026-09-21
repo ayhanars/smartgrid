@@ -268,6 +268,26 @@ function signedArea(ring: Point2[]): number {
   return a / 2
 }
 
+/** The ring with every edge split into pieces no longer than `step`,
+ * by arc length. A wall built on such a ring puts one column on every
+ * ring point, so caps and bevel rings triangulated on the same ring meet
+ * the wall vertex for vertex: no T-junctions, a closed mesh. */
+export function subdivideRing(ring: Point2[], step: number): Point2[] {
+  const out: Point2[] = []
+  const n = ring.length
+  for (let i = 0; i < n; i++) {
+    const p = ring[i]
+    const q = ring[(i + 1) % n]
+    const len = Math.hypot(q.x - p.x, q.y - p.y)
+    const m = Math.max(1, Math.ceil(len / step))
+    for (let k = 0; k < m; k++) {
+      const t = k / m
+      out.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t })
+    }
+  }
+  return out
+}
+
 /** Corners turning more than this get their own column on each face. */
 const SHARP_CORNER = Math.PI / 3
 

@@ -208,8 +208,13 @@ a spec schema plus a `build(spec)` that lays out parts). The first
 family is IKEA SKÅDIS: a container with mounting hooks on its back (one
 per 40 mm of width, tab and lip undersides at 45° so it prints standing
 with no support) and a J-hook that prints lying flat. A product whose
-parts print as one body (`fuse`) is unioned in the CSG worker at export
-time, so the hooks and the box leave as a single object. The second
+parts print as one body (`fuse`) leaves the 3MF as one compound object
+whose parts are the group's solids (a `components` object; Bambu Studio
+and PrusaSlicer open it as one object with parts and union them layer
+by layer), which is far more robust than a mesh boolean of the parts.
+Bodies are built closed: a subdivided wall is built on a pre-subdivided
+ring so caps and bevel rings meet it vertex for vertex, and a tube is
+capped with matching winding. The second
 family is IKEA BROR, the 840 × 450 mm round-hole pegboard on a 30 mm
 grid (a bin with square pegs sized to the hole, and a J-hook); hole
 diameter and sheet thickness are fields with starting values, to be
