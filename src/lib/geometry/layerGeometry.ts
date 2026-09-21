@@ -127,7 +127,10 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
       const frame = layer.bendFrame ?? { z: 0, depth }
       if (layer.profile && layer.profile.points.length > 0) geo = applyProfile(geo, layer.profile, frame.depth, footprintCenter(contour), frame.z)
       if (layer.twist) geo = applyTwist(geo, layer.twist, frame.depth, footprintCenter(contour), frame.z)
-      geo = reshade(geo, options.fastShading)
+      // Averaged normals: the tessellated wall is split at sharp corners
+      // and shares no vertices with the caps, and crease detection would
+      // serrate a tall relief (see buildBeveledGeometry).
+      geo = reshade(geo, true)
     }
     geo.scale(scale, scale, scale)
     geometries = [geo]

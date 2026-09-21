@@ -268,6 +268,9 @@ function signedArea(ring: Point2[]): number {
   return a / 2
 }
 
+/** Corners turning more than this get their own column on each face. */
+const SHARP_CORNER = Math.PI / 3
+
 /** Subdivision step for a pattern: fine enough to resolve it, capped so a
  * big plate stays a reasonable triangle count. */
 export function textureStep(texture: SurfaceTexture, override?: number): number {
@@ -313,14 +316,28 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
     return { x: (x / len) * miter, y: (y / len) * miter }
   })
 
-  // Columns around the ring: each edge split by arc length.
-  const columns: { p: Point2; nrm: Point2; u: number; side: WallSide }[] = []
+  // Columns around the ring: each edge split by arc length. A sharp
+  // corner (over the crease angle) starts a fresh column at the same
+  // point, so the two faces do not share vertices there and averaged
+  // normals keep the edge crisp while the relief itself shades smooth.
+  const columns: { p: Point2; nrm: Point2; u: number; side: WallSide; split?: boolean }[] = []
+  const sharp = (i: number) => {
+    const a = edgeNormals[(i - 1 + n) % n]
+    const b = edgeNormals[i]
+    return a.x * b.x + a.y * b.y < Math.cos(SHARP_CORNER)
+  }
   let u = 0
   for (let i = 0; i < n; i++) {
     const p = ring[i]
     const q = ring[(i + 1) % n]
     const len = Math.hypot(q.x - p.x, q.y - p.y)
     const m = Math.max(1, Math.ceil(len / step))
+    if (sharp(i)) {
+      // Close the previous face at this corner with its own copy of the
+      // corner column (same mitred position as the next face's first).
+      const prevNrm = vertexNormals[i]
+      columns.push({ p: { x: p.x, y: p.y }, nrm: { x: prevNrm.x, y: prevNrm.y }, u, side: sideOf(edgeNormals[(i - 1 + n) % n].x, edgeNormals[(i - 1 + n) % n].y), split: true })
+    }
     for (let k = 0; k < m; k++) {
       const t = k / m
       // Along an edge the offset direction blends from one mitred corner
@@ -384,6 +401,9 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
   }
   const stride = rows + 1
   for (let c = 0; c < cols; c++) {
+    // A split column only closes the face before it; the next face
+    // starts from its own copy of the corner.
+    if (columns[c].split) continue
     const c1 = (c + 1) % cols
     for (let j = 0; j < rows; j++) {
       const a0 = c * stride + j
