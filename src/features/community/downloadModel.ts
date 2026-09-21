@@ -57,7 +57,7 @@ export async function downloadSnapshot(snapshot: DocumentSnapshot, title: string
   const bed = getBedPreset(printer)
   const plates = snapshot.plates && snapshot.plates.length > 1 ? snapshot.plates : undefined
   const layout = bed ? { plates: plates ?? [{ id: 'plate-1', name: 'Plate 1' }], bedWidth: bed.width, bedDepth: bed.height } : undefined
-  const meshes = await buildExportMeshes(snapshot.layers, snapshot.order, layout)
+  const meshes = await buildExportMeshes(snapshot.layers, snapshot.order, layout, undefined, snapshot.groups)
   if (meshes.length === 0) return false
   const slug = slugify(title)
   if (format === 'stl') {

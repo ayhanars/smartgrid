@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { cutHolesFromSolid, type PositionedGeometry } from './holeCut'
+import { cutHolesFromSolid, fuseSolids, type PositionedGeometry } from './holeCut'
 import { packGeometry, transferables, unpackGeometry } from './csgPack'
 import type { CsgRequest, CsgResponse } from './csg.worker'
 
@@ -45,14 +45,24 @@ function getWorker(): Worker | null {
 }
 
 export function cutHolesAsync(solid: PositionedGeometry, holes: PositionedGeometry[]): CsgJob {
-  if (holes.length === 0) return { promise: Promise.resolve(solid.geometry), cancel: () => {} }
+  return runCsg(solid, holes, 'subtract')
+}
+
+/** Unions `parts` into one body, in the first part's local frame. */
+export function fuseAsync(parts: PositionedGeometry[]): CsgJob {
+  if (parts.length === 0) return { promise: Promise.resolve(new THREE.BufferGeometry()), cancel: () => {} }
+  return runCsg(parts[0], parts.slice(1), 'union')
+}
+
+function runCsg(solid: PositionedGeometry, others: PositionedGeometry[], op: 'subtract' | 'union'): CsgJob {
+  if (others.length === 0) return { promise: Promise.resolve(solid.geometry), cancel: () => {} }
   const w = getWorker()
   if (!w) {
     // No workers here (an old browser, a test runtime): do it inline.
     return {
       promise: new Promise((resolve, reject) => {
         try {
-          resolve(cutHolesFromSolid(solid, holes))
+          resolve(op === 'union' ? fuseSolids([solid, ...others]) : cutHolesFromSolid(solid, others))
         } catch (err) {
           reject(err instanceof Error ? err : new Error(String(err)))
         }
@@ -64,7 +74,8 @@ export function cutHolesAsync(solid: PositionedGeometry, holes: PositionedGeomet
   const request: CsgRequest = {
     id,
     solid: packGeometry(solid.geometry, solid.worldX, solid.worldY, solid.worldZ),
-    holes: holes.map((h) => packGeometry(h.geometry, h.worldX, h.worldY, h.worldZ)),
+    holes: others.map((h) => packGeometry(h.geometry, h.worldX, h.worldY, h.worldZ)),
+    op,
   }
   const promise = new Promise<THREE.BufferGeometry>((resolve, reject) => {
     pending.set(id, { resolve, reject })

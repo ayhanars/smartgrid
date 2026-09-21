@@ -2,6 +2,19 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+  container-type: inline-size;
+}
+
+/* A narrow pane (the split view) keeps the tool row on one line: the
+ * Create button drops its label. */
+@container (max-width: 560px) {
+  .canvas-2d__toolbar .create-launcher {
+    padding: 0 9px;
+  }
+  .canvas-2d__toolbar .create-launcher span,
+  .canvas-2d__toolbar .canvas-2d__toolbar-optional {
+    display: none;
+  }
 }
 
 .canvas-2d__ruler {

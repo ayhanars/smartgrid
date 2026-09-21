@@ -195,6 +195,22 @@ seconds later, and the exporter gets the same mesh. Anything else (a
 second hole, perforation, bevels, a top-face texture) still goes through
 the CSG worker.
 
+**Create** (the accent button at the end of the tool row; a floating one
+in 3D-only view) opens the product picker: search, categories, and a
+spec form for the product picked. "Add to plate" builds the product on
+the active plate as a group of ordinary shapes — a box is a hollowed
+rectangle, a hook is a drawn side profile stood up with a 90° tilt —
+so everything stays editable, and the group keeps its recipe
+(`ShapeGroup.recipe`): select it and the right panel shows the specs
+with "Update product", which rebuilds the parts in place. Templates
+live in `src/lib/products/` (one file per product family; a template is
+a spec schema plus a `build(spec)` that lays out parts). The first
+family is IKEA SKÅDIS: a container with mounting hooks on its back (one
+per 40 mm of width, tab and lip undersides at 45° so it prints standing
+with no support) and a J-hook that prints lying flat. A product whose
+parts print as one body (`fuse`) is unioned in the CSG worker at export
+time, so the hooks and the box leave as a single object.
+
 A wall texture has an angle (−90..90°, so flutes can run diagonally), a
 fade-out length at the bottom and top ends (the relief eases to flat
 over that many mm), and "Through the wall": the cavity of a hollowed

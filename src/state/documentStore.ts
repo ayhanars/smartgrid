@@ -17,6 +17,7 @@ import { holeOutline, prism } from '../lib/geometry/perforation'
 export { rotatedLocalPoints, shapeWorldBounds }
 import { DEFAULT_BED_ID, getBedPreset } from '../lib/geometry/bedPresets'
 import { applyBooleanOp, type BooleanOp } from '../lib/geometry/boolean'
+import { cleanSpec, productTemplate, type ProductRecipe, type ProductSpec } from '../lib/products'
 
 let idCounter = 0
 function generateId() {
@@ -48,6 +49,9 @@ export interface Guide {
 export interface ShapeGroup {
   id: string
   name: string
+  /** Set on a group the Create panel generated: the product and the
+   * specs it was built from, so they can be changed and rebuilt. */
+  recipe?: ProductRecipe
 }
 
 /** One build plate: the printer bed printed once. A project can have up
@@ -200,6 +204,13 @@ interface DocumentActions {
   groupShapes: (ids: string[]) => string | null
   ungroupShapes: (ids: string[]) => void
   reorderLayer: (id: string, where: 'front' | 'back') => void
+  /** Builds a product from the Create panel on the active plate, as a
+   * group of ordinary shapes that remembers its recipe. Returns the
+   * group id, or null when the template is unknown. */
+  generateProduct: (templateId: string, spec: ProductSpec) => string | null
+  /** Rebuilds a generated group from new specs, in place (same plate,
+   * same corner). Parts edited by hand are replaced. */
+  regenerateProduct: (groupId: string, spec: ProductSpec) => string | null
 }
 
 /** The ids that a click on `id` should select: every member of its group,
@@ -241,6 +252,78 @@ export function orderOnPlate(state: Pick<DocumentState, 'layers' | 'order' | 'pl
 export function artboardSize(state: Pick<DocumentState, 'bedPresetId' | 'customBedWidth' | 'customBedHeight'>) {
   const preset = getBedPreset(state.bedPresetId)
   return { width: preset?.width ?? state.customBedWidth, height: preset?.height ?? state.customBedHeight }
+}
+
+/** A corner for a new `width` × `height` product on the active plate:
+ * the middle of the bed, nudged right (then down) until it overlaps
+ * nothing already there. */
+function freeSpot(state: DocumentState, width: number, height: number): Point2 {
+  const bed = artboardSize(state)
+  const others = orderOnPlate(state, state.activePlateId).map((id) => shapeWorldBounds(state.layers[id]))
+  const clear = (x: number, y: number) => !others.some((b) => x < b.x + b.width + 4 && x + width + 4 > b.x && y < b.y + b.height + 4 && y + height + 4 > b.y)
+  const start = { x: Math.max(0, Math.round(bed.width / 2 - width / 2)), y: Math.max(0, Math.round(bed.height / 2 - height / 2)) }
+  if (clear(start.x, start.y)) return start
+  const step = 10
+  for (let ring = 1; ring < 60; ring++) {
+    for (const [dx, dy] of [
+      [ring, 0],
+      [-ring, 0],
+      [0, ring],
+      [0, -ring],
+      [ring, ring],
+      [-ring, ring],
+      [ring, -ring],
+      [-ring, -ring],
+    ]) {
+      const x = start.x + dx * step
+      const y = start.y + dy * step
+      if (x < 0 || y < 0 || x + width > bed.width || y + height > bed.height) continue
+      if (clear(x, y)) return { x, y }
+    }
+  }
+  return start
+}
+
+/** Creates a product's parts at `origin` (document mm), groups them and
+ * stores the recipe on the group. One undo step. */
+function buildProduct(templateId: string, spec: ProductSpec, build: { parts: import('../lib/products').PartRecipe[]; fuse?: boolean }, origin: Point2, plateId: string | null, name?: string): string | null {
+  const api = useDocumentStore.getState()
+  const template = productTemplate(templateId)
+  if (!template) return null
+  const wasEditing = useDocumentStore.getState().editing
+  if (!wasEditing) api.beginTransientEdit()
+  const ids: string[] = []
+  for (const part of build.parts) {
+    let id: string
+    if (part.outline.kind === 'path') {
+      id = api.addPenShape(part.outline.points.map((p) => ({ x: p.x + origin.x, y: p.y + origin.y })))
+    } else {
+      const kind = part.isHole ? 'hole' : part.outline.kind
+      id = api.addShape(kind, { x: part.outline.x + origin.x, y: part.outline.y + origin.y, width: part.outline.width, height: part.outline.height })
+    }
+    ids.push(id)
+    api.renameLayer(id, part.name)
+    if (part.color) api.setColor(id, part.color)
+    api.setExtrusionDepth(id, part.depth)
+    if (part.cornerRadius) api.setCornerRadius(id, part.cornerRadius)
+    if (part.rotation) api.setRotation(id, part.rotation)
+    // Always explicit: a new shape otherwise climbs onto whatever is
+    // under its footprint (a hook onto its box).
+    api.setLayerZ(id, part.z ?? 0)
+    if (part.texture) api.setTexture(id, part.texture)
+    if (part.hollow) {
+      const made = api.hollowOut(id, part.hollow)
+      if (made) ids.push(made.cavityId)
+    }
+  }
+  if (plateId && plateId !== useDocumentStore.getState().plates[0]?.id) api.moveShapesToPlate(ids, plateId)
+  const groupId = api.groupShapes(ids)
+  if (groupId) {
+    api.renameGroup(groupId, name ?? template.name)
+    useDocumentStore.setState((s) => ({ groups: { ...s.groups, [groupId]: { ...s.groups[groupId], recipe: { template: templateId, spec, fuse: build.fuse } } } }))
+  }
+  if (!wasEditing) api.commitTransientEdit()
+  return groupId
 }
 
 export type DocumentStore = DocumentState & DocumentActions
@@ -1419,6 +1502,38 @@ export const useDocumentStore = create<DocumentStore>()(
           for (const gid of affectedGroups) delete groups[gid]
           return { layers, groups }
         }),
+
+      generateProduct: (templateId, spec) => {
+        const template = productTemplate(templateId)
+        if (!template) return null
+        const state = get()
+        const build = template.build(cleanSpec(template, spec))
+        return buildProduct(templateId, cleanSpec(template, spec), build, freeSpot(state, build.width, build.height), null)
+      },
+
+      regenerateProduct: (groupId, spec) => {
+        const state = get()
+        const group = state.groups[groupId]
+        const template = group?.recipe ? productTemplate(group.recipe.template) : undefined
+        if (!group || !template) return null
+        const members = state.order.filter((id) => state.layers[id]?.groupId === groupId)
+        if (members.length === 0) return null
+        let x = Infinity
+        let y = Infinity
+        for (const id of members) {
+          const b = shapeWorldBounds(state.layers[id])
+          x = Math.min(x, b.x)
+          y = Math.min(y, b.y)
+        }
+        const plateId = layerPlateId(state.layers[members[0]], state.plates)
+        const clean = cleanSpec(template, spec)
+        const build = template.build(clean)
+        get().beginTransientEdit()
+        get().removeShapes(members)
+        const id = buildProduct(template.id, clean, build, { x, y }, plateId, group.name)
+        get().commitTransientEdit()
+        return id
+      },
 
       reorderLayer: (id, where) =>
         set((state) => {

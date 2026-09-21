@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg'
+import { ADDITION, Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg'
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
 // A single Evaluator is reusable across calls (it just holds scratch state
@@ -54,6 +54,27 @@ export function cutHolesFromSolid(solid: PositionedGeometry, holes: PositionedGe
   // ones that coincide (same position and normal) cuts the vertex count
   // several-fold, which is what the vertex stage, the outline pass and
   // the exported file all pay for.
+  const welded = mergeVertices(brush.geometry, 1e-6)
+  welded.clearGroups()
+  return welded
+}
+
+/** Unions several placed bodies into one (a box with its hooks), in the
+ * first body's local frame — the same convention as cutHolesFromSolid. */
+export function fuseSolids(parts: PositionedGeometry[]): THREE.BufferGeometry {
+  if (parts.length === 0) return new THREE.BufferGeometry()
+  if (parts.length === 1) return parts[0].geometry
+  let brush: Brush = new Brush(parts[0].geometry)
+  brush.position.set(parts[0].worldX, parts[0].worldY, parts[0].worldZ)
+  brush.updateMatrixWorld()
+  const evaluator = getEvaluator()
+  for (const part of parts.slice(1)) {
+    const other = new Brush(part.geometry)
+    other.position.set(part.worldX, part.worldY, part.worldZ)
+    other.updateMatrixWorld()
+    brush = evaluator.evaluate(brush, other, ADDITION)
+    brush.updateMatrixWorld()
+  }
   const welded = mergeVertices(brush.geometry, 1e-6)
   welded.clearGroups()
   return welded
