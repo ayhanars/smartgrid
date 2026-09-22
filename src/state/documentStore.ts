@@ -461,6 +461,17 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
   return firstGroup
 }
 
+/** Whether the 3D view shows every plate side by side: on by default,
+ * and the person's choice is remembered in this browser. */
+const ALL_PLATES_KEY = 'smartgrid:show-all-plates'
+function readShowAllPlates(): boolean {
+  try {
+    return localStorage.getItem(ALL_PLATES_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
 export type DocumentStore = DocumentState & DocumentActions
 
 /** A solid drawn inside a bigger one is almost always meant to sit ON it
@@ -717,7 +728,7 @@ export const useDocumentStore = create<DocumentStore>()(
       groups: {},
       plates: defaultPlates(),
       activePlateId: FIRST_PLATE_ID,
-      showAllPlates: false,
+      showAllPlates: readShowAllPlates(),
       order: [],
       selection: [],
       editing: false,
@@ -756,7 +767,7 @@ export const useDocumentStore = create<DocumentStore>()(
           groups: snapshot.groups ?? {},
           plates,
           activePlateId: plates[0].id,
-          showAllPlates: false,
+          showAllPlates: readShowAllPlates(),
           selection: [],
           bedPresetId: snapshot.bedPresetId,
           customBedWidth: snapshot.customBedWidth,
@@ -1491,7 +1502,14 @@ export const useDocumentStore = create<DocumentStore>()(
       setBedPreset: (id) => set({ bedPresetId: id }),
       setActivePlate: (id) =>
         set((state) => (state.plates.some((p) => p.id === id) && id !== state.activePlateId ? { activePlateId: id, selection: [] } : {})),
-      setShowAllPlates: (on) => set({ showAllPlates: on }),
+      setShowAllPlates: (on) => {
+        try {
+          localStorage.setItem(ALL_PLATES_KEY, on ? 'on' : 'off')
+        } catch {
+          /* a preference only */
+        }
+        set({ showAllPlates: on })
+      },
       addPlate: () => {
         const state = get()
         if (state.plates.length >= MAX_PLATES) return null
