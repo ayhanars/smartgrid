@@ -1,6 +1,6 @@
 import { bool, num, str, type MountPreview, type PartRecipe, type ProductBuild, type ProductSpec, type ProductTemplate, type SpecField } from './types'
 import { dividerParts } from './dividers'
-import { binOutline, jHook, mountProfile, straightPegParts, straightPegReach, standingPath, type MountDims } from './mount'
+import { binOutline, jHook, mountProfile, ROD_LIFT, rodParts, rodReach, standingPath, type MountDims } from './mount'
 import { BROR_BOARD, SKADIS_BOARD, type PegPattern } from './boards'
 
 /**
@@ -62,11 +62,11 @@ function slotMount(slotWidth: number, slotHeight: number, sheet: number): MountD
   return { tabThickness, lipThickness: tabWidth, gap: sheet + 0.6, lipDrop: Math.max(8, slotHeight - 3), tabWidth }
 }
 
-/** The rounded peg that turns up behind a round hole of this size. */
+/** The BROR-style rod for a round hole of this size (see rodParts). */
 function roundMount(hole: number, sheet: number): MountDims {
   const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
-  const reach = straightPegReach(peg)
-  return { tabThickness: peg, tabWidth: peg, lipThickness: reach.back, gap: sheet + 0.6, lipDrop: 0, lipRise: reach.up - peg / 2, round: Math.round((peg / 2 - 0.1) * 10) / 10 }
+  const reach = rodReach(peg)
+  return { tabThickness: peg, tabWidth: peg, lipThickness: reach.back, gap: sheet + 0.6, lipDrop: 0, lipRise: reach.up, round: Math.round((peg / 2 - 0.1) * 10) / 10 }
 }
 
 export function boardFrom(spec: ProductSpec): Board {
@@ -104,7 +104,7 @@ const hookCount = (width: number, choice: string, pitch: number, tabWidth: numbe
 /** Extra rows of mounts under the top row: none on a small bin, one on
  * anything taller than a pitch and a half, two on a big one. */
 function extraRows(spec: ProductSpec, height: number, pitchY: number, board: Board): number {
-  const top = board.round ? height - 2 - straightPegReach(board.dims.tabThickness).up : height - board.dims.tabThickness
+  const top = board.round ? height + ROD_LIFT + board.dims.tabThickness / 2 : height - board.dims.tabThickness
   const most = Math.max(0, Math.floor((top - board.dims.tabThickness / 2 - (board.round ? 3 : board.dims.lipDrop)) / pitchY))
   const choice = str(spec, 'rows', 'auto')
   if (choice !== 'auto') return Math.min(most, Math.max(0, parseInt(choice, 10) || 0))
@@ -165,7 +165,7 @@ export const pegboardBin: ProductTemplate = {
     const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pattern.pitchX, dims.tabWidth)
     const rows = extraRows(spec, height, pattern.pitchY, board)
     const span = (hooks - 1) * pattern.pitchX
-    const top = board.round ? 2 + straightPegReach(dims.tabThickness).up - dims.tabThickness / 2 : 0
+    const top = board.round ? -(ROD_LIFT + dims.tabThickness) : 0
     const anchors = []
     for (let r = 0; r <= rows; r++) for (let i = 0; i < hooks; i++) anchors.push({ x: width / 2 - span / 2 + i * pattern.pitchX - dims.tabWidth / 2, y: top + r * pattern.pitchY, width: dims.tabWidth, height: dims.tabThickness })
     const below = rows > 0 ? ` + ${hooks * rows} ${board.round ? 'stud' : 'hook'}${hooks * rows === 1 ? '' : 's'} below` : ''
@@ -194,8 +194,8 @@ export const pegboardBin: ProductTemplate = {
     const span = (hooks - 1) * pattern.pitchX
     const cxOf = (i: number) => width / 2 - span / 2 + i * pattern.pitchX
     if (board.round) {
-      const center = height - 2 - straightPegReach(dims.tabThickness).up
-      for (let i = 0; i < hooks; i++) parts.push(...straightPegParts({ standing: true, d: dims.tabThickness, gap: dims.gap, embed, color: COLOR, name: hooks === 1 ? 'Peg' : `Peg ${i + 1}`, cx: cxOf(i), faceY: boxY, c: center }))
+      const center = height + ROD_LIFT + dims.tabThickness / 2
+      for (let i = 0; i < hooks; i++) parts.push(...rodParts({ standing: true, d: dims.tabThickness, gap: dims.gap, wall, color: COLOR, name: hooks === 1 ? 'Rod' : `Rod ${i + 1}`, cx: cxOf(i), faceY: boxY, top: height }))
       const d = dims.tabThickness
       const studLength = embed + dims.gap + d
       const centerB = (dims.gap + d - embed) / 2
@@ -255,7 +255,7 @@ export const pegboardHook: ProductTemplate = {
     const d = dims.tabThickness
     const base = jHook({ mount: { ...dims, tabWidth: 0 }, reach, width, arm, tip, plateH, color: COLOR })
     const plateT = 4
-    const peg = straightPegParts({ standing: false, d, gap: dims.gap, embed: plateT - 0.5, color: COLOR, name: 'Peg', faceX: plateT + reach, shankY: straightPegReach(d).up, zc: Math.max(d / 2, width / 2) })
+    const peg = rodParts({ standing: false, d, gap: dims.gap, wall: plateT, color: COLOR, name: 'Rod', faceX: plateT + reach, topY: dims.lipRise ?? 0, zc: Math.max(d / 2, width / 2) })
     return { width: base.width, height: base.height, parts: [base.parts[0], ...peg], fuse: true }
   },
 }

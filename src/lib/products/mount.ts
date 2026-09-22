@@ -100,39 +100,65 @@ export function roundHookReach(d: number, rise: number): { back: number; up: num
 }
 
 /**
- * The straight peg of a round-hole board, measured off a printed BROR
- * holder: a plain cylinder that goes through the sheet and `PEG_BEYOND`
- * mm past it, its last `PEG_TIP` mm turned up by `PEG_TIP_ANGLE` so the
- * end is cut at a slant and the peg "looks up" once it is in. No curl:
- * it goes straight into the hole.
+ * The rod of a round-hole board, copied 1:1 off a printed BROR holder
+ * (the reference STL: a Ø5.5 rod). It rests on top of the back wall
+ * rather than through it: its underside is `ROD_LIFT` above the wall's
+ * top, it reaches `ROD_BEYOND` past the sheet with a flat, vertical end
+ * (no upturn at all), a 45° gusset fills the corner under its root, and
+ * over the wall it dips into the wall's top so it merges with the body
+ * instead of ending in a stub. Everything scales with the rod diameter
+ * except the two small lengths, which are what the reference has.
  */
-export const PEG_BEYOND = 6
-export const PEG_TIP = 2.5
-export const PEG_TIP_ANGLE = (25 * Math.PI) / 180
+export const ROD_LIFT = 2.1
+export const ROD_GUSSET = 2.3
+export const ROD_BEYOND = 5.6
 
-export function straightPegReach(d: number): { back: number; up: number } {
-  return { back: PEG_BEYOND + d / 2, up: PEG_TIP * Math.sin(PEG_TIP_ANGLE) + d / 2 }
+/** How far the rod reaches behind the sheet face (past the gap), and
+ * how far it rises above the wall it sits on. */
+export function rodReach(d: number): { back: number; up: number } {
+  return { back: ROD_BEYOND, up: ROD_LIFT + d }
 }
 
-/** A straight peg as one swept tube; the same conventions as
- * roundHookParts for standing / lying flat. */
-export function straightPegParts(o: { d: number; gap: number; embed: number; color: string; name: string } & ({ standing: true; cx: number; faceY: number; c: number } | { standing: false; faceX: number; shankY: number; zc: number })): PartRecipe[] {
-  const { d, gap, embed, color, name } = o
-  const straight = gap + PEG_BEYOND - PEG_TIP
-  const cos = Math.cos(PEG_TIP_ANGLE)
-  const sin = Math.sin(PEG_TIP_ANGLE)
-  const points = o.standing
-    ? [
-        { x: o.cx, y: o.faceY + embed, z: o.c },
-        { x: o.cx, y: o.faceY - straight, z: o.c },
-        { x: o.cx, y: o.faceY - straight - PEG_TIP * cos, z: o.c + PEG_TIP * sin },
-      ]
-    : [
-        { x: o.faceX - embed, y: o.shankY, z: o.zc },
-        { x: o.faceX + straight, y: o.shankY, z: o.zc },
-        { x: o.faceX + straight + PEG_TIP * cos, y: o.shankY - PEG_TIP * sin, z: o.zc },
-      ]
-  return [{ name, color, outline: { kind: 'tube', radius: d / 2, points }, depth: d }]
+/** The rod (a swept tube) with its gusset, standing (a bin's back wall,
+ * `top` = the wall's top height, `wall` its thickness, the face at
+ * `faceY` with the bin toward larger y) or lying flat (a hook's plate:
+ * the back face at `faceX`, the plate's top edge at canvas `topY`, the
+ * rod's centre `zc` above the bed). */
+export function rodParts(o: { d: number; gap: number; wall: number; color: string; name: string } & ({ standing: true; cx: number; faceY: number; top: number } | { standing: false; faceX: number; topY: number; zc: number })): PartRecipe[] {
+  const { d, gap, wall, color, name } = o
+  const reach = gap + ROD_BEYOND
+  const axis = ROD_LIFT + d / 2
+  // Where the centreline meets the inner face, above the wall's top.
+  const dip = 0.25 * d
+  const bend = ROD_GUSSET + 0.2
+  // (b, h): b behind the face, h above the wall's top.
+  const gusset = [
+    { b: 0, h: 0 },
+    { b: ROD_GUSSET, h: ROD_LIFT },
+    { b: ROD_GUSSET, h: axis },
+    { b: -wall, h: dip },
+    { b: -wall, h: 0 },
+  ]
+  if (o.standing) {
+    const points = [
+      { x: o.cx, y: o.faceY - reach, z: o.top + axis },
+      { x: o.cx, y: o.faceY - bend, z: o.top + axis },
+      { x: o.cx, y: o.faceY + wall, z: o.top + dip },
+    ]
+    return [
+      { name, color, outline: { kind: 'tube', radius: d / 2, points }, depth: d },
+      { name: `${name} gusset`, color, outline: { kind: 'path', points: standingPath(gusset, o.cx, axis, o.faceY) }, depth: d, rotation: { y: 90 }, z: o.top },
+    ]
+  }
+  const points = [
+    { x: o.faceX + reach, y: o.topY - axis, z: o.zc },
+    { x: o.faceX + bend, y: o.topY - axis, z: o.zc },
+    { x: o.faceX - wall, y: o.topY - dip, z: o.zc },
+  ]
+  return [
+    { name, color, outline: { kind: 'tube', radius: d / 2, points }, depth: d },
+    { name: `${name} gusset`, color, outline: { kind: 'path', points: gusset.map((p) => ({ x: o.faceX + p.b, y: o.topY - p.h })) }, depth: d, z: o.zc - d / 2 },
+  ]
 }
 
 /** A bin's footprint with rounded front corners and sharp back corners

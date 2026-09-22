@@ -372,10 +372,13 @@ way are notched from the top, the others from the bottom, at the same
 spots (optionally with an outer frame); a plate longer than the bed is
 cut with a half-lap. Templates get a `BuildContext` with the bed
 size for this. The panel keeps the last six products added, with their
-specs, under Recent (per browser). Round-hole pegs are straight, measured off a printed BROR holder: the
-peg goes 6 mm past the sheet and its last 2.5 mm turn up 25°, so the
-end is cut at a slant. Bins have sharp back corners (rounded in front)
-so the layer seam has an edge to hide in.
+specs, under Recent (per browser). Round-hole rods are a printed BROR
+holder's, copied 1:1 from its STL (`rodParts` in `mount.ts`): a rod of
+the hole's diameter less 0.4 mm that rests on top of the back wall (its
+underside 2.1 mm above the wall's top), reaches 5.6 mm past the sheet
+with a flat vertical end, has a 45° gusset under its root, and dips
+into the wall's top on the inside. Bins have sharp back corners
+(rounded in front) so the layer seam has an edge to hide in.
 
 ## Custom domain
 
