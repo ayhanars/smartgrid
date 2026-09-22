@@ -279,7 +279,9 @@ export function subdivideRing(ring: Point2[], step: number): Point2[] {
     const p = ring[i]
     const q = ring[(i + 1) % n]
     const len = Math.hypot(q.x - p.x, q.y - p.y)
-    const m = Math.max(1, Math.ceil(len / step))
+    // A hair under the step still counts as one piece: an edge that is
+    // already exactly `step` long must not be halved by float error.
+    const m = Math.max(1, Math.ceil(len / step - 1e-6))
     for (let k = 0; k < m; k++) {
       const t = k / m
       out.push({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t })
@@ -351,7 +353,7 @@ export function buildTexturedWall(ring: Point2[], zA: number, zB: number, textur
     const p = ring[i]
     const q = ring[(i + 1) % n]
     const len = Math.hypot(q.x - p.x, q.y - p.y)
-    const m = Math.max(1, Math.ceil(len / step))
+    const m = Math.max(1, Math.ceil(len / step - 1e-6))
     if (sharp(i)) {
       // Close the previous face at this corner with its own copy of the
       // corner column (same mitred position as the next face's first).

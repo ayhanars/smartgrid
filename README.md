@@ -162,10 +162,11 @@ Studio takes speeds, filament density and the rest from its own profiles
 rather than its bare defaults (which gave 0 g and hours-long
 estimates); seams are aligned and scarf-joined, and a bin's back-left corner is
 written as a painted seam enforcer (`paint_seam="4"` on its outward
-wall triangles, from `ShapeLayer.seamHint`; the exporter builds such a
-body with 6 mm wall columns so the corner strip has triangles of its
-own), so the seam sits on that edge instead of wandering down the back
-wall.
+wall triangles): every exported body gets a 2.6 mm strip on each face
+of its back-left vertical edge (`ShapeLayer.seamHint` picks another
+corner), and the exporter builds bodies with 2.6 mm wall columns so
+the strip has triangles of its own. The seam then sits on that edge
+instead of wandering across a wall.
 Every mesh in a 3MF is written with one
 shared vertex table (vertices welded by position), since slicers judge a
 mesh by index topology and would otherwise see each shading seam as an

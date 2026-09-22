@@ -29,7 +29,11 @@ export interface ExportMesh {
 /** Marks the outward-facing wall triangles on one back corner of the
  * body (slicer coordinates: +y is the back), a strip `margin` mm wide,
  * as seam enforcers. */
-function paintSeam(positions: Float32Array, indices: Uint32Array | undefined, hint: 'back-left' | 'back-right', margin = 9): Uint8Array {
+/** Width of the seam strip on each face of the corner, mm: narrow, so
+ * the seam cannot wander across the face inside it. */
+const SEAM_STRIP = 2.6
+
+function paintSeam(positions: Float32Array, indices: Uint32Array | undefined, hint: 'back-left' | 'back-right', margin = SEAM_STRIP): Uint8Array {
   const count = indices ? indices.length / 3 : positions.length / 9
   const out = new Uint8Array(count)
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
@@ -124,7 +128,9 @@ export async function buildExportMeshes(
     const placed = geo.applyMatrix4(Y_UP_TO_Z_UP).translate(0, bedDepth, 0)
     const mesh: ExportMesh = { name, color: layer.color, positions: placed.getAttribute('position').array as Float32Array }
     if (placed.index) mesh.indices = Uint32Array.from(placed.index.array)
-    if (layer.seamHint) mesh.seam = paintSeam(mesh.positions, mesh.indices, layer.seamHint)
+    // Every body gets its layer seam steered to its back-left vertical
+    // edge (a corner when it has one, the rearmost point otherwise).
+    mesh.seam = paintSeam(mesh.positions, mesh.indices, layer.seamHint ?? 'back-left')
     if (multi) {
       const idx = plateIndex(layer)
       const origin = plateOrigin(idx, multi.plates.length, multi.bedWidth, multi.bedDepth)
@@ -144,9 +150,9 @@ export async function buildExportMeshes(
     const solidWorld = toWorld(layer)
     const holeLayers = overlapping.map((hid) => layers[hid])
     // Same plan as the viewport (see useCutGeometries).
-    // A body with a seam hint gets its walls split into columns, so
-    // there are triangles within the corner strip to paint.
-    const plan = planCut(layer, holeLayers, 1, toWorld, layer.seamHint ? { outerStep: 6 } : {})
+    // Walls are split into narrow columns so the seam strip on the
+    // back-left edge has triangles of its own to paint.
+    const plan = planCut(layer, holeLayers, 1, toWorld, { outerStep: SEAM_STRIP })
 
     for (const geo of plan.bodies) {
       let finalGeo: THREE.BufferGeometry = geo
