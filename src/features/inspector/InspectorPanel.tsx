@@ -27,7 +27,7 @@ import * as THREE from 'three'
 import type { ProfilePoint, ShapeProfile } from '../../types/document'
 import { InspectorFooter } from './InspectorFooter'
 import { IconButton } from '../../components/IconButton'
-import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, HOLE_SHAPES, INFILL_PATTERNS, defaultWallMargin, LAYER_HEIGHT_PRESETS_MM, TEXTURE_PATTERNS, type InfillPattern, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
+import { DEFAULT_PERFORATION, DEFAULT_TEXTURE, HOLE_SHAPES, INFILL_PATTERNS, defaultWallMargin, LAYER_HEIGHT_PRESETS_MM, SEAM_PLACEMENTS, TEXTURE_PATTERNS, type InfillPattern, type SeamPlacement, type Perforation, type ShapeLayer, type SurfaceTexture, type TexturePattern, type WallSide } from '../../types/document'
 import { TexturePreview } from './TexturePreview'
 import { prepareTile } from '../../lib/geometry/customTile'
 import { roundPolygonCorners, smartPolishCorners } from '../../lib/geometry/rounding'
@@ -1147,7 +1147,26 @@ function PrintSettingsSection() {
             </select>
           </span>
         </label>
+        <label className="inspector-field">
+          <span className="inspector-field__label">Layer seam</span>
+          <span className="inspector-field__input-wrap">
+            <select
+              className="inspector-select"
+              value={settings.seam ?? 'random'}
+              aria-label="Layer seam"
+              title={SEAM_PLACEMENTS.find((s) => s.id === (settings.seam ?? 'random'))?.hint}
+              onChange={(e) => setPrintSettings({ seam: e.target.value as SeamPlacement })}
+            >
+              {SEAM_PLACEMENTS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
       </div>
+      <p className="inspector-note">{SEAM_PLACEMENTS.find((s) => s.id === (settings.seam ?? 'random'))?.hint}</p>
       <p className="inspector-note">
         What the print preview simulates — match these to your Bambu Studio profile. Pockets snap to whole layers of this height.
       </p>

@@ -1,4 +1,4 @@
-import type { PrintSettings } from '../../types/document'
+import type { PrintSettings, SeamPlacement } from '../../types/document'
 
 /**
  * What makes Bambu Studio open a 3MF as one of its own projects — plates,
@@ -52,6 +52,8 @@ export const isBambuPrinter = (bedPresetId: string) => bedPresetId in PRINTERS
 
 /** The Metadata/project_settings.config contents for this printer, print
  * settings and filament colours (one filament per colour). */
+const SEAM_POSITION: Record<SeamPlacement, string> = { random: 'random', corner: 'aligned', back: 'back' }
+
 export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintSettings>, colors: string[]): Record<string, unknown> {
   const printer = PRINTERS[bedPresetId] ?? PRINTERS.a1
   const layer = settings.layerHeight ?? 0.2
@@ -81,13 +83,13 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
     bottom_shell_layers: String(settings.bottomLayers ?? 3),
     sparse_infill_density: `${settings.infillDensity ?? 15}%`,
     sparse_infill_pattern: INFILL[settings.infillPattern ?? 'grid'] ?? 'grid',
-    // Seams: aligned, and every body paints its back corner as a seam
-    // enforcer, so the seam sits in a sharp corner on every layer. No
+    // Seams: scattered (`random`) unless the project pins them. With
+    // `corner`, every body paints its back corner as a seam enforcer and
+    // the aligned seam sits in that sharp corner on every layer. No
     // scarf joint: a scarf ramps the seam over ~10 mm, and on a corner
     // that ramp wraps onto the neighbouring face, which is exactly the
-    // dashed line it was meant to hide. Marketplace models that print
-    // cleanly are sliced with the same plain corner seam.
-    seam_position: 'aligned',
+    // dashed line it was meant to hide.
+    seam_position: SEAM_POSITION[settings.seam ?? 'random'],
     seam_slope_type: 'none',
     seam_slope_conditional: '1',
     different_settings_to_system: [printKeys.join(';'), ...filaments.map(() => 'filament_colour'), ''],

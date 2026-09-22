@@ -105,6 +105,9 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
   const metadata = options.metadata ?? {}
   const plateNames = options.plates && options.plates.length > 1 ? options.plates : null
   const bambu = options.bambu && isBambuPrinter(options.bambu.bedPresetId) ? options.bambu : null
+  // A painted seam enforcer overrides the slicer's seam position, so it
+  // is only written when the project asks for the corner seam.
+  const paintSeams = bambu?.printSettings?.seam === 'corner'
   const colors = [...new Set(meshes.flatMap((m) => (m.components ?? [m]).map((c) => normalizeColor(c.color))))]
 
   const baseMaterials = colors
@@ -129,7 +132,7 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
     for (let t = 0; t < triangles.length; t += 3) {
       // paint_seam="4": Bambu Studio's per-triangle seam enforcer (one
       // unsplit triangle in state 1), as its own painting tool writes it.
-      const seam = mesh.seam && mesh.seam[kept[t / 3]] ? ' paint_seam="4"' : ''
+      const seam = paintSeams && mesh.seam && mesh.seam[kept[t / 3]] ? ' paint_seam="4"' : ''
       triXml.push(`          <triangle v1="${triangles[t]}" v2="${triangles[t + 1]}" v3="${triangles[t + 2]}"${seam} />`)
     }
     objects.push(
