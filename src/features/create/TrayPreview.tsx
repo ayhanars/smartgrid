@@ -6,21 +6,22 @@ import type { TrayPreview as TrayPreviewData } from '../../lib/products'
  * the seams; and, underneath, one wall seen from the side with its
  * height, hole pattern and notches. Redraws as the specs change.
  */
-export function TrayPreview({ preview }: { preview: TrayPreviewData }) {
+export function TrayPreview({ preview, large = false }: { preview: TrayPreviewData; large?: boolean }) {
+  const box = large ? { w: 920, top: 330, cap: 470 } : { w: 460, top: 150, cap: 230 }
   const { width, depth, cells, walls, tiles, joints, elevation } = preview
   const pad = 6
   const many = tiles.length > 1
-  const topH = 150
-  const scale = Math.min(460 / (width + 2 * pad), topH / (depth + 2 * pad))
+  const topH = box.top
+  const scale = Math.min(box.w / (width + 2 * pad), topH / (depth + 2 * pad))
   const px = (v: number) => (v + pad) * scale
   const w = (width + 2 * pad) * scale
   const h = (depth + 2 * pad) * scale
   const minWall = 1.5
   // Elevation under the plan, at its own scale.
   const elevGap = 10
-  const ew = elevation ? Math.min(460, elevation.length * Math.min(scale, 460 / elevation.length)) : 0
+  const ew = elevation ? Math.min(box.w, elevation.length * Math.min(scale, box.w / elevation.length)) : 0
   const es = elevation ? ew / elevation.length : 1
-  const eh = elevation ? Math.max(14, Math.min(60, elevation.height * es)) : 0
+  const eh = elevation ? Math.max(14, Math.min(large ? 110 : 60, elevation.height * es)) : 0
   const esY = elevation ? eh / elevation.height : 1
   const total = h + (elevation ? elevGap + eh + 14 : 0)
   const holeDots = () => {
@@ -45,7 +46,7 @@ export function TrayPreview({ preview }: { preview: TrayPreviewData }) {
   }
   return (
     <figure className="board-preview">
-      <svg viewBox={`0 0 ${Math.max(w, ew)} ${total}`} style={{ width: '100%', height: Math.min(230, total) }} role="img" aria-label={preview.caption ?? 'Tray preview'}>
+      <svg viewBox={`0 0 ${Math.max(w, ew)} ${total}`} style={{ width: '100%', height: Math.min(box.cap, total) }} role="img" aria-label={preview.caption ?? 'Tray preview'}>
         <rect x={0} y={0} width={w} height={h} className="board-preview__sheet" />
         {tiles.map((t, i) => (
           <rect key={`t${i}`} x={px(t.x)} y={px(t.y)} width={t.width * scale} height={t.height * scale} className={`tray-preview__tile ${many ? `tray-preview__tile--${i % 5}` : ''}`} />

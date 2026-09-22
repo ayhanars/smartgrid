@@ -251,13 +251,19 @@ export const drawerTray: ProductTemplate = {
     const { perforation } = patternFrom(spec, 'walls', 3)
     const hollow = { wall: l.wall, floor: l.floor, openFrom: 'top' as const }
     if (l.separate) {
+      // Each box is its own body and its own group, with a one-cell
+      // recipe so it can be resized on its own later; the plates pack
+      // as many as fit.
       const cells = trayCells(l)
-      const tileOf = (c: { x: number; y: number }) => l.tiles.findIndex((t) => c.x >= t.x - 1e-6 && c.x < t.x + t.width - 1e-6 && c.y >= t.y - 1e-6 && c.y < t.y + t.height - 1e-6)
+      const groups: NonNullable<ProductBuild['groups']> = []
       cells.forEach((c, i) => {
-        const k = Math.max(0, tileOf(c))
-        parts.push({ name: cells.length === 1 ? 'Box' : `Box ${i + 1}`, color: COLOR, outline: { kind: 'rect', x: c.x + GAP / 2, y: c.y + GAP / 2, width: c.width - GAP, height: c.height - GAP }, depth: l.height, cornerRadius: Math.min(l.corner, (Math.min(c.width, c.height) - GAP) / 2 - l.wall), hollow, perforation, tile: k })
+        const name = cells.length === 1 ? 'Box' : `Box ${i + 1}`
+        const width = c.width - GAP
+        const depth = c.height - GAP
+        parts.push({ name, color: COLOR, outline: { kind: 'rect', x: c.x + GAP / 2, y: c.y + GAP / 2, width, height: depth }, depth: l.height, cornerRadius: Math.min(l.corner, Math.min(width, depth) / 2 - l.wall), hollow, perforation, tile: i })
+        groups.push({ name, spec: { ...spec, width: Math.round(width * 10) / 10, depth: Math.round(depth * 10) / 10, columns: 1, rows: 1, layout: 'even', build: 'joined', split: 'none', clips: false }, parts: [parts.length - 1] })
       })
-      return { width: l.width, height: l.depth, parts, fuse: false, tiles: l.tiles.length > 1 ? l.tiles.map((t) => t.name) : undefined }
+      return { width: l.width, height: l.depth, parts, fuse: false, groups }
     }
     l.tiles.forEach((t, k) => {
       parts.push({ name: t.name, color: COLOR, outline: { kind: 'rect', x: t.x, y: t.y, width: t.width, height: t.height }, depth: l.height, cornerRadius: l.corner, hollow, perforation, tile: k })
@@ -419,21 +425,12 @@ export const drawerDivider: ProductTemplate = {
     const gap = 4
     let y0 = 0
     let tile = 0
-    const perBed = Math.max(1, Math.floor((ctx.bed.height - 4) / (l.height + gap + (feet ? Math.max(8, l.height / 3) : 0))))
-    let onThisTile = 0
-    const next = (pieces: number) => {
-      // A new plate row on the plate; a fresh tile when this one is full.
-      if (onThisTile >= perBed) {
-        onThisTile = 0
-        tile += Math.max(1, pieces)
-        y0 = 0
-      }
-    }
+    // Every piece is its own body; the store packs the bodies onto as
+    // many plates as they need.
     const add = (name: string, length: number, notchAt: number[], fromTop: boolean, pieces: number) => {
-      next(pieces)
       parts.push(...platePart({ name, length, y0, l, notchAt, fromTop, pieces, tileBase: tile, feet }))
+      tile += pieces
       y0 += l.height + gap + (feet ? Math.max(8, l.height / 3) : 0)
-      onThisTile++
     }
     // Left-to-right plates (along the width): notched from the top where
     // the front-to-back plates cross.
@@ -450,7 +447,6 @@ export const drawerDivider: ProductTemplate = {
       // One column, one row: a single plain plate the width of the drawer.
       add('Plate', l.width, [], true, l.piecesAlong)
     }
-    const tiles = tile > 0 || l.piecesAlong > 1 || l.piecesAcross > 1 ? Array.from({ length: Math.max(...parts.map((p) => (p.tile ?? 0) + 1)) }, (_, i) => `Plate set ${i + 1}`) : undefined
-    return { width: Math.max(l.width, l.depth), height: y0, parts, fuse: true, tiles }
+    return { width: Math.max(l.width, l.depth), height: y0, parts, fuse: true }
   },
 }

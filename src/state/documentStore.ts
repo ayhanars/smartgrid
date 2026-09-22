@@ -261,7 +261,14 @@ export function artboardSize(state: Pick<DocumentState, 'bedPresetId' | 'customB
  * the middle of the bed, nudged right (then down) until it overlaps
  * nothing already there. */
 function freeSpot(state: DocumentState, width: number, height: number, plateId = state.activePlateId): Point2 {
+  return freeSpotOrNull(state, width, height, plateId) ?? { x: Math.max(0, Math.round(artboardSize(state).width / 2 - width / 2)), y: Math.max(0, Math.round(artboardSize(state).height / 2 - height / 2)) }
+}
+
+/** Like freeSpot, but null when the footprint does not fit on the plate
+ * beside what is already there (or does not fit the bed at all). */
+function freeSpotOrNull(state: DocumentState, width: number, height: number, plateId = state.activePlateId): Point2 | null {
   const bed = artboardSize(state)
+  if (width > bed.width || height > bed.height) return null
   const others = orderOnPlate(state, plateId).map((id) => shapeWorldBounds(state.layers[id]))
   const clear = (x: number, y: number) => !others.some((b) => x < b.x + b.width + 4 && x + width + 4 > b.x && y < b.y + b.height + 4 && y + height + 4 > b.y)
   const start = { x: Math.max(0, Math.round(bed.width / 2 - width / 2)), y: Math.max(0, Math.round(bed.height / 2 - height / 2)) }
@@ -284,7 +291,13 @@ function freeSpot(state: DocumentState, width: number, height: number, plateId =
       if (clear(x, y)) return { x, y }
     }
   }
-  return start
+  // A finer sweep from the top-left corner, for a crowded plate.
+  for (let y = 0; y + height <= bed.height; y += 5) {
+    for (let x = 0; x + width <= bed.width; x += 5) {
+      if (clear(x, y)) return { x, y }
+    }
+  }
+  return null
 }
 
 /** Footprint of a part's outline, in product mm. */
@@ -301,43 +314,77 @@ function partBounds(part: import('../lib/products').PartRecipe): Bounds {
 }
 
 /** Creates a product's parts at `origin` (document mm), groups them and
- * stores the recipe on the group. Parts of a tile beyond the first go
- * to their own plate (created as needed), each at a free spot there.
- * One undo step. */
-function buildProduct(templateId: string, spec: ProductSpec, build: { parts: import('../lib/products').PartRecipe[]; fuse?: boolean; tiles?: string[] }, origin: Point2, plateId: string | null, name?: string): string | null {
+ * stores the recipe on the group. The parts form bodies (`tile`): the
+ * first body goes at `origin` on the base plate, and every further
+ * body is packed onto the first plate with room for it, new plates
+ * added while there are fewer than MAX_PLATES (after that, the last
+ * plate takes what is left). One undo step. */
+function buildProduct(templateId: string, spec: ProductSpec, build: { parts: import('../lib/products').PartRecipe[]; fuse?: boolean; tiles?: string[]; groups?: { name: string; spec: ProductSpec; parts: number[] }[] }, origin: Point2, plateId: string | null, name?: string): string | null {
   const api = useDocumentStore.getState()
   const template = productTemplate(templateId)
   if (!template) return null
   const wasEditing = useDocumentStore.getState().editing
   if (!wasEditing) api.beginTransientEdit()
-  const ids: string[] = []
   const basePlate: string = plateId ?? useDocumentStore.getState().activePlateId
-  // Where each tile goes: tile 0 at `origin` on the base plate, the
-  // rest on the plates after it (new ones while there is room), each
-  // shifted from its own bounds to a free spot there.
-  const tileCount = Math.max(1, ...build.parts.map((p) => (p.tile ?? 0) + 1))
-  const placements: { plateId: string; shift: Point2 }[] = [{ plateId: basePlate, shift: origin }]
-  for (let k = 1; k < tileCount; k++) {
-    const state = useDocumentStore.getState()
-    const baseIndex = state.plates.findIndex((p) => p.id === basePlate)
-    const target: string | null = state.plates[baseIndex + k]?.id ?? api.addPlate()
-    if (!target) {
-      // No room for another plate: the tile shares the previous one.
-      placements.push({ plateId: placements[k - 1].plateId, shift: { x: placements[k - 1].shift.x, y: placements[k - 1].shift.y + 10 } })
-      continue
-    }
-    const tileParts = build.parts.filter((p) => (p.tile ?? 0) === k && !p.isHole)
+  const bodyCount = Math.max(1, ...build.parts.map((p) => (p.tile ?? 0) + 1))
+  const boundsOf = (k: number): Bounds => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
-    for (const part of tileParts) {
+    for (const part of build.parts) {
+      if ((part.tile ?? 0) !== k || part.isHole) continue
       const b = partBounds(part)
       x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height)
     }
-    if (!Number.isFinite(x0)) { x0 = 0; y0 = 0; x1 = 0; y1 = 0 }
-    const spot = freeSpot(useDocumentStore.getState(), x1 - x0, y1 - y0, target)
-    placements.push({ plateId: target, shift: { x: spot.x - x0, y: spot.y - y0 } })
+    return Number.isFinite(x0) ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : { x: 0, y: 0, width: 0, height: 0 }
   }
+  // Where each body goes. Bodies already placed in this call are not
+  // yet in the store as shapes on their plate, so they are tracked here.
+  const placements: { plateId: string; shift: Point2 }[] = []
+  const taken = new Map<string, Bounds[]>()
+  const fits = (pid: string, b: Bounds, at: Point2) => {
+    const state = useDocumentStore.getState()
+    const bed = artboardSize(state)
+    if (at.x < 0 || at.y < 0 || at.x + b.width > bed.width || at.y + b.height > bed.height) return false
+    const others = [...orderOnPlate(state, pid).map((id) => shapeWorldBounds(state.layers[id])), ...(taken.get(pid) ?? [])]
+    return !others.some((o) => at.x < o.x + o.width + 4 && at.x + b.width + 4 > o.x && at.y < o.y + o.height + 4 && at.y + b.height + 4 > o.y)
+  }
+  const spotOn = (pid: string, b: Bounds): Point2 | null => {
+    const state = useDocumentStore.getState()
+    const bed = artboardSize(state)
+    if (b.width > bed.width || b.height > bed.height) return null
+    const others = [...orderOnPlate(state, pid).map((id) => shapeWorldBounds(state.layers[id])), ...(taken.get(pid) ?? [])]
+    const clear = (x: number, y: number) => x >= 0 && y >= 0 && x + b.width <= bed.width && y + b.height <= bed.height && !others.some((o) => x < o.x + o.width + 4 && x + b.width + 4 > o.x && y < o.y + o.height + 4 && y + b.height + 4 > o.y)
+    // Packed from the corner with a 6 mm margin, so several bodies share
+    // a plate; centring the first one would waste the rest of it.
+    for (let y = 6; y + b.height <= bed.height; y += 4) for (let x = 6; x + b.width <= bed.width; x += 4) if (clear(x, y)) return { x, y }
+    return null
+  }
+  let plateCursor = basePlate
+  for (let k = 0; k < bodyCount; k++) {
+    const b = boundsOf(k)
+    let placed: { plateId: string; shift: Point2 } | null = null
+    if (k === 0 && fits(basePlate, b, { x: b.x + origin.x, y: b.y + origin.y })) placed = { plateId: basePlate, shift: origin }
+    while (!placed) {
+      const spot = spotOn(plateCursor, b)
+      if (spot) placed = { plateId: plateCursor, shift: { x: spot.x - b.x, y: spot.y - b.y } }
+      else {
+        const state = useDocumentStore.getState()
+        const idx = state.plates.findIndex((p) => p.id === plateCursor)
+        const next: string | null = state.plates[idx + 1]?.id ?? api.addPlate()
+        if (!next) {
+          // Out of plates: it lands on this one regardless.
+          const bed = artboardSize(state)
+          placed = { plateId: plateCursor, shift: { x: Math.max(0, bed.width / 2 - b.width / 2) - b.x, y: Math.max(0, bed.height / 2 - b.height / 2) - b.y } }
+        } else plateCursor = next
+      }
+    }
+    placements.push(placed)
+    taken.set(placed.plateId, [...(taken.get(placed.plateId) ?? []), { x: b.x + placed.shift.x, y: b.y + placed.shift.y, width: b.width, height: b.height }])
+  }
+  const ids: string[] = []
+  const idOfPart: string[] = []
   const byPlate = new Map<string, string[]>()
-  for (const part of build.parts) {
+  const cavityOf = new Map<string, string>()
+  build.parts.forEach((part, index) => {
     const place = placements[Math.min(part.tile ?? 0, placements.length - 1)]
     const shift = place.shift
     let id: string
@@ -347,10 +394,11 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
         part.outline.radius,
       )
       ids.push(id)
+      idOfPart[index] = id
       api.renameLayer(id, part.name)
       if (part.color) api.setColor(id, part.color)
       byPlate.set(place.plateId, [...(byPlate.get(place.plateId) ?? []), id])
-      continue
+      return
     }
     if (part.outline.kind === 'path') {
       id = api.addPenShape(part.outline.points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y })))
@@ -359,6 +407,7 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
       id = api.addShape(kind, { x: part.outline.x + shift.x, y: part.outline.y + shift.y, width: part.outline.width, height: part.outline.height })
     }
     ids.push(id)
+    idOfPart[index] = id
     const onPlate = byPlate.get(place.plateId) ?? []
     onPlate.push(id)
     byPlate.set(place.plateId, onPlate)
@@ -381,20 +430,35 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
       if (made) {
         ids.push(made.cavityId)
         onPlate.push(made.cavityId)
+        cavityOf.set(id, made.cavityId)
       }
     }
-  }
+  })
   // Shapes are created on the active plate, which adding plates moved:
-  // put every part on its tile's plate, and the user back where they were.
+  // put every part on its body's plate, and the user back where they were.
   for (const [pid, members] of byPlate) api.moveShapesToPlate(members, pid)
   useDocumentStore.setState({ activePlateId: basePlate })
-  const groupId = api.groupShapes(ids)
-  if (groupId) {
-    api.renameGroup(groupId, name ?? template.name)
-    useDocumentStore.setState((s) => ({ groups: { ...s.groups, [groupId]: { ...s.groups[groupId], recipe: { template: templateId, spec, fuse: build.fuse } } } }))
+  const makeGroup = (members: string[], groupName: string, recipeSpec: ProductSpec): string | null => {
+    const groupId = api.groupShapes(members)
+    if (groupId) {
+      api.renameGroup(groupId, groupName)
+      useDocumentStore.setState((s) => ({ groups: { ...s.groups, [groupId]: { ...s.groups[groupId], recipe: { template: templateId, spec: recipeSpec, fuse: build.fuse } } } }))
+    }
+    return groupId
   }
+  let firstGroup: string | null = null
+  if (build.groups && build.groups.length > 0) {
+    const owned = new Set<number>()
+    for (const g of build.groups) for (const i of g.parts) owned.add(i)
+    build.groups.forEach((g, gi) => {
+      const indexes = gi === 0 ? [...g.parts, ...build.parts.map((_, i) => i).filter((i) => !owned.has(i))] : g.parts
+      const members = indexes.flatMap((i) => (idOfPart[i] ? [idOfPart[i], ...(cavityOf.has(idOfPart[i]) ? [cavityOf.get(idOfPart[i])!] : [])] : []))
+      const groupId = members.length > 0 ? makeGroup(members, g.name, g.spec) : null
+      if (gi === 0) firstGroup = groupId
+    })
+  } else firstGroup = makeGroup(ids, name ?? template.name, spec)
   if (!wasEditing) api.commitTransientEdit()
-  return groupId
+  return firstGroup
 }
 
 export type DocumentStore = DocumentState & DocumentActions

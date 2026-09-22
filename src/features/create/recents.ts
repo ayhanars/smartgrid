@@ -15,17 +15,23 @@ export function listRecentProducts(): RecentProduct[] {
   try {
     const raw = localStorage.getItem(KEY)
     const list = raw ? (JSON.parse(raw) as RecentProduct[]) : []
-    return Array.isArray(list) ? list.filter((r) => r && typeof r.template === 'string' && r.spec && typeof r.spec === 'object') : []
+    if (!Array.isArray(list)) return []
+    // One per product (older entries could repeat a product).
+    const seen = new Set<string>()
+    return list.filter((r) => {
+      if (!r || typeof r.template !== 'string' || !r.spec || typeof r.spec !== 'object' || seen.has(r.template)) return false
+      seen.add(r.template)
+      return true
+    })
   } catch {
     return []
   }
 }
 
-/** Adds (or moves to the front) a template + spec; the same specs on
- * the same template count as one entry. */
+/** Adds (or moves to the front) a product with the specs it was last
+ * added with: one entry per product. */
 export function rememberRecentProduct(template: string, spec: ProductSpec) {
-  const same = (r: RecentProduct) => r.template === template && JSON.stringify(r.spec) === JSON.stringify(spec)
-  const next = [{ template, spec, at: Date.now() }, ...listRecentProducts().filter((r) => !same(r))].slice(0, MAX)
+  const next = [{ template, spec, at: Date.now() }, ...listRecentProducts().filter((r) => r.template !== template)].slice(0, MAX)
   try {
     localStorage.setItem(KEY, JSON.stringify(next))
   } catch {
