@@ -65,7 +65,7 @@ function slotMount(slotWidth: number, slotHeight: number, sheet: number): MountD
 /** The rounded peg that turns up behind a round hole of this size. */
 function roundMount(hole: number, sheet: number): MountDims {
   const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
-  const lipRise = Math.max(8, hole + 4)
+  const lipRise = Math.max(2, Math.round(hole * 0.5 * 10) / 10)
   return { tabThickness: peg, tabWidth: peg, lipThickness: roundHookReach(peg, lipRise).back, gap: sheet + 0.6, lipDrop: 0, lipRise, round: Math.round((peg / 2 - 0.1) * 10) / 10 }
 }
 

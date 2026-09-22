@@ -62,7 +62,7 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
   // system presets: then everything else (speeds, filament density…)
   // comes from those presets. Without it a plain box shows 0 g of
   // filament and a nine-hour estimate.
-  const printKeys = ['layer_height', 'initial_layer_print_height', 'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'sparse_infill_density', 'sparse_infill_pattern', 'seam_position']
+  const printKeys = ['layer_height', 'initial_layer_print_height', 'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'sparse_infill_density', 'sparse_infill_pattern', 'seam_position', 'seam_slope_type', 'seam_slope_conditional']
   return {
     version: BAMBU_VERSION,
     from: 'project',
@@ -81,10 +81,12 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
     bottom_shell_layers: String(settings.bottomLayers ?? 3),
     sparse_infill_density: `${settings.infillDensity ?? 15}%`,
     sparse_infill_pattern: INFILL[settings.infillPattern ?? 'grid'] ?? 'grid',
-    // The layer seam at the back, where a pegboard product faces the
-    // board: an aligned seam otherwise settles in the concave corner
-    // where a hook meets the box and shows as a pale line.
-    seam_position: 'rear',
+    // Seams: aligned into corners, and joined with a scarf (the seam is
+    // ramped over a few mm instead of a butt joint), which is what hides
+    // the pale line a seam leaves on a wall.
+    seam_position: 'aligned',
+    seam_slope_type: 'external',
+    seam_slope_conditional: '0',
     different_settings_to_system: [printKeys.join(';'), ...filaments.map(() => 'filament_colour'), ''],
   }
 }
