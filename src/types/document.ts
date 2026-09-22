@@ -59,7 +59,7 @@ export interface PrintSettings {
   infillDensity: number
   infillPattern: InfillPattern
   /** Layer seam placement written to the Bambu project. Older projects
-   * have none: treated as `random`. */
+   * have none: treated as `corner`. */
   seam?: SeamPlacement
 }
 
@@ -70,14 +70,14 @@ export const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   bottomLayers: 3,
   infillDensity: 15,
   infillPattern: 'grid',
-  seam: 'random',
+  seam: 'corner',
 }
 
 export const LAYER_HEIGHT_PRESETS_MM = [0.08, 0.12, 0.16, 0.2, 0.24, 0.28]
 
 export const SEAM_PLACEMENTS: { id: SeamPlacement; label: string; hint: string }[] = [
-  { id: 'random', label: 'Scattered', hint: 'A different spot on every layer: no line, tiny dots all over.' },
   { id: 'corner', label: 'Back corner', hint: 'Hidden in the back-left vertical edge; one line, in the corner.' },
+  { id: 'random', label: 'Scattered', hint: 'A different spot on every layer: no line, tiny dots all over.' },
   { id: 'back', label: 'Back face', hint: 'One line down the middle of the back face; hidden on a wall.' },
 ]
 

@@ -161,8 +161,8 @@ from the named system presets (`different_settings_to_system`), so Bambu
 Studio takes speeds, filament density and the rest from its own profiles
 rather than its bare defaults (which gave 0 g and hours-long
 estimates). The "Layer seam" print setting (`PrintSettings.seam`)
-picks the seam position: scattered (`random`, the default: no line,
-tiny dots everywhere), back face, or back corner. Seams never get a
+picks the seam position: back corner (the default), back face, or
+scattered (`random`: no line, tiny dots everywhere). Seams never get a
 scarf joint (a scarf ramps the seam over ~10 mm, and on a corner the
 ramp wraps onto the next face as a dashed line). With the corner
 choice a bin's back-left corner is
