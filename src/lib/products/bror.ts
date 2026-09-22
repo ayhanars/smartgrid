@@ -27,7 +27,7 @@ function mountFrom(spec: ProductSpec): { dims: MountDims; pitch: number; pattern
   const pitch = num(spec, 'pitch', 30)
   const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
   const gap = sheet + 0.6
-  const lipRise = Math.max(2, Math.round(hole * 0.5 * 10) / 10)
+  const lipRise = Math.max(1.5, Math.round(hole * 0.35 * 10) / 10)
   const hook = roundHookReach(peg, lipRise)
   return {
     // lipThickness here is how far behind the sheet the hook reaches.
