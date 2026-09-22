@@ -89,8 +89,8 @@ export function standingPath(points: { h: number; b: number }[], centerX: number
 /** The bend of a round hook: a short sweep of `HOOK_BEND` degrees on a
  * radius of `HOOK_RADIUS` pegs, then a short lip. Short enough to tilt
  * into the hole, and it still looks up behind the sheet. */
-export const HOOK_BEND = (45 * Math.PI) / 180
-export const HOOK_RADIUS = 0.75
+export const HOOK_BEND = (40 * Math.PI) / 180
+export const HOOK_RADIUS = 0.6
 
 /** How far a round hook of peg diameter `d` reaches behind the sheet
  * face (past the gap), and how high its tip rises above the shank. */
