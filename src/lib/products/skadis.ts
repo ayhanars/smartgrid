@@ -1,6 +1,6 @@
 import { bool, num, str, type PartRecipe, type ProductSpec, type ProductTemplate } from './types'
 import { dividerParts } from './dividers'
-import { jHook, mountProfile, standingPath, type MountDims } from './mount'
+import { binOutline, jHook, mountProfile, standingPath, type MountDims } from './mount'
 import { SKADIS_BOARD } from './boards'
 
 /**
@@ -119,9 +119,8 @@ export const skadisContainer: ProductTemplate = {
       {
         name: 'Box',
         color: COLOR,
-        outline: { kind: 'rect', x: 0, y: boxY, width, height: depth },
+        outline: { kind: 'path', points: binOutline(width, depth, Math.max(0, corner), boxY) },
         depth: height,
-        cornerRadius: Math.max(0, corner),
         hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' },
         seam: 'back-left',
       },

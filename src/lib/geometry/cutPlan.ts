@@ -26,15 +26,15 @@ export function planCut(
   holeLayers: ShapeLayer[],
   scale: number,
   toWorld: (layer: ShapeLayer) => { worldX: number; worldY: number; worldZ: number },
-  options: { fastShading?: boolean; minStep?: number } = {},
+  options: { fastShading?: boolean; minStep?: number; outerStep?: number } = {},
 ): CutPlan {
   // The common hollow vase / cup: built as a shell outright, no boolean.
   if (holeLayers.length === 1 && canBuildShellDirectly(solid, holeLayers[0])) {
-    return { bodies: [buildShellGeometry(solid, holeLayers[0], scale, { minStep: options.minStep })], needsCsg: false, holes: () => [] }
+    return { bodies: [buildShellGeometry(solid, holeLayers[0], scale, { minStep: options.minStep, outerStep: options.outerStep })], needsCsg: false, holes: () => [] }
   }
   const flat = holeLayers.filter((h) => isFlatHole(solid, h))
   const rest = holeLayers.filter((h) => !isFlatHole(solid, h))
-  const bodies = flat.length > 0 ? buildFlatCutGeometries(solid, flat, scale) : buildLayerGeometries(solid, scale, { fastShading: options.fastShading, minStep: options.minStep })
+  const bodies = flat.length > 0 ? buildFlatCutGeometries(solid, flat, scale) : buildLayerGeometries(solid, scale, { fastShading: options.fastShading, minStep: options.minStep, outerStep: options.outerStep })
   // Cavities go first and, on a perforated body, are built at the same
   // subdivision: a cavity's few huge faces split against tens of
   // thousands of drilled-wall triangles takes ~40 s instead of 2.

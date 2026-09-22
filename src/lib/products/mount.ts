@@ -100,6 +100,66 @@ export function roundHookReach(d: number, rise: number): { back: number; up: num
 }
 
 /**
+ * The straight peg of a round-hole board, measured off a printed BROR
+ * holder: a plain cylinder that goes through the sheet and `PEG_BEYOND`
+ * mm past it, its last `PEG_TIP` mm turned up by `PEG_TIP_ANGLE` so the
+ * end is cut at a slant and the peg "looks up" once it is in. No curl:
+ * it goes straight into the hole.
+ */
+export const PEG_BEYOND = 6
+export const PEG_TIP = 2.5
+export const PEG_TIP_ANGLE = (25 * Math.PI) / 180
+
+export function straightPegReach(d: number): { back: number; up: number } {
+  return { back: PEG_BEYOND + d / 2, up: PEG_TIP * Math.sin(PEG_TIP_ANGLE) + d / 2 }
+}
+
+/** A straight peg as one swept tube; the same conventions as
+ * roundHookParts for standing / lying flat. */
+export function straightPegParts(o: { d: number; gap: number; embed: number; color: string; name: string } & ({ standing: true; cx: number; faceY: number; c: number } | { standing: false; faceX: number; shankY: number; zc: number })): PartRecipe[] {
+  const { d, gap, embed, color, name } = o
+  const straight = gap + PEG_BEYOND - PEG_TIP
+  const cos = Math.cos(PEG_TIP_ANGLE)
+  const sin = Math.sin(PEG_TIP_ANGLE)
+  const points = o.standing
+    ? [
+        { x: o.cx, y: o.faceY + embed, z: o.c },
+        { x: o.cx, y: o.faceY - straight, z: o.c },
+        { x: o.cx, y: o.faceY - straight - PEG_TIP * cos, z: o.c + PEG_TIP * sin },
+      ]
+    : [
+        { x: o.faceX - embed, y: o.shankY, z: o.zc },
+        { x: o.faceX + straight, y: o.shankY, z: o.zc },
+        { x: o.faceX + straight + PEG_TIP * cos, y: o.shankY - PEG_TIP * sin, z: o.zc },
+      ]
+  return [{ name, color, outline: { kind: 'tube', radius: d / 2, points }, depth: d }]
+}
+
+/** A bin's footprint with rounded front corners and sharp back corners
+ * (the back sits against the board): the slicer's layer seam then has a
+ * sharp edge to hide in. `boxY` is the outline's top on the canvas, the
+ * back; the front is toward larger y. */
+export function binOutline(width: number, depth: number, corner: number, boxY: number): Point2[] {
+  const r = Math.max(0, Math.min(corner, width / 2 - 0.1, depth / 2 - 0.1))
+  const pts: Point2[] = [
+    { x: 0, y: boxY },
+    { x: width, y: boxY },
+  ]
+  const arc = (cx: number, cy: number, from: number, to: number) => {
+    const n = 8
+    for (let i = 0; i <= n; i++) {
+      const a = from + ((to - from) * i) / n
+      pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) })
+    }
+  }
+  if (r > 0) {
+    arc(width - r, boxY + depth - r, 0, Math.PI / 2)
+    arc(r, boxY + depth - r, Math.PI / 2, Math.PI)
+  } else pts.push({ x: width, y: boxY + depth }, { x: 0, y: boxY + depth })
+  return pts
+}
+
+/**
  * A round hook as one swept tube, for a round-hole board: a shank
  * through the sheet, a gentle bend (HOOK_BEND on HOOK_RADIUS pegs) and
  * a straight lip of `rise` looking up behind the sheet. Standing (a

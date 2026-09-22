@@ -37,7 +37,7 @@ export function canBuildShellDirectly(solid: ShapeLayer, cavity: ShapeLayer): bo
  * as the bodies, so a "through the wall" relief lines up exactly, and
  * the profile / twist bend the whole shell at once.
  */
-export function buildShellGeometry(solid: ShapeLayer, cavity: ShapeLayer, scale: number, options: { minStep?: number } = {}): THREE.BufferGeometry {
+export function buildShellGeometry(solid: ShapeLayer, cavity: ShapeLayer, scale: number, options: { minStep?: number; outerStep?: number } = {}): THREE.BufferGeometry {
   const depth = Math.max(0.2, solid.extrusionDepth)
   const outerRaw = orient(dedupe(effectiveContour(solid)!))
   const innerRaw = orient(dedupe(holeFootprintsInLocalFrame(solid, cavity)[0]))
@@ -60,7 +60,9 @@ export function buildShellGeometry(solid: ShapeLayer, cavity: ShapeLayer, scale:
   const cavityTextured = cavity.texture && cavity.texture.depth > 0 ? cavity.texture : undefined
   // Rings pre-subdivided at their wall's step, so the walls, the rim and
   // the floor share vertices (see buildBeveledGeometry).
-  const outerStep = stepFor(solidTexture)
+  // `outerStep` splits the outer walls into columns no wider than that
+  // (the exporter paints a seam strip on them).
+  const outerStep = Math.min(stepFor(solidTexture), options.outerStep ?? PLAIN)
   const innerStep = stepFor(cavityTextured)
   const outer = outerStep < PLAIN ? subdivideRing(outerRaw, outerStep) : outerRaw
   const inner = innerStep < PLAIN ? subdivideRing(innerRaw, innerStep) : innerRaw

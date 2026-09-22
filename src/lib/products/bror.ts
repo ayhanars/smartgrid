@@ -1,6 +1,6 @@
 import { bool, num, str, type PartRecipe, type ProductSpec, type ProductTemplate, type SpecField } from './types'
 import { dividerParts } from './dividers'
-import { jHook, roundHookParts, roundHookReach, type MountDims } from './mount'
+import { binOutline, jHook, straightPegParts, straightPegReach, type MountDims } from './mount'
 import { BROR_BOARD, type PegPattern } from './boards'
 
 /**
@@ -27,21 +27,20 @@ function mountFrom(spec: ProductSpec): { dims: MountDims; pitch: number; pattern
   const pitch = num(spec, 'pitch', 30)
   const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
   const gap = sheet + 0.6
-  const lipRise = Math.max(1.5, Math.round(hole * 0.35 * 10) / 10)
-  const hook = roundHookReach(peg, lipRise)
+  const hook = straightPegReach(peg)
   return {
-    // lipThickness here is how far behind the sheet the hook reaches.
-    dims: { tabThickness: peg, tabWidth: peg, lipThickness: hook.back, gap, lipDrop: 0, lipRise, round: Math.round((peg / 2 - 0.1) * 10) / 10 },
+    // lipThickness here is how far behind the sheet the peg reaches.
+    dims: { tabThickness: peg, tabWidth: peg, lipThickness: hook.back, gap, lipDrop: 0, lipRise: hook.up - peg / 2, round: Math.round((peg / 2 - 0.1) * 10) / 10 },
     pitch,
     pattern: { kind: 'round', pitchX: pitch, pitchY: pitch, stagger: false, diameter: hole },
     reach: gap + hook.back,
   }
 }
 
-/** Height of the hooks' shank centre: the lip's tip sits 2 mm under
- * the bin's top edge. */
+/** Height of the pegs' centre: the turned-up tip sits 2 mm under the
+ * bin's top edge. */
 function shankCenter(height: number, dims: MountDims): number {
-  return height - 2 - roundHookReach(dims.tabThickness, dims.lipRise ?? 0).up
+  return height - 2 - straightPegReach(dims.tabThickness).up
 }
 
 /** Rows of straight studs under the hook row: as many as fit and the
@@ -104,7 +103,7 @@ export const brorBin: ProductTemplate = {
     ...MOUNT_FIELDS,
   ],
   defaults: { width: 90, depth: 60, height: 80, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', dividers: 0, drain: false, ...MOUNT_DEFAULTS },
-  notes: 'Prints standing up. Rounded hooks near the top go through the holes and bend gently up behind the sheet (hang the bin by tilting it in); straight studs below sit in the holes so it cannot tilt. Short horizontal pegs print without support. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
+  notes: 'Prints standing up. Straight pegs go through the holes (the tip turns up a touch, like a printed BROR holder); straight studs below sit in the holes so it cannot tilt. Short horizontal pegs print without support. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
   preview: (spec: ProductSpec) => {
     const width = num(spec, 'width', 90)
     const height = num(spec, 'height', 80)
@@ -132,7 +131,7 @@ export const brorBin: ProductTemplate = {
     const boxY = reach
     const center = shankCenter(height, dims)
     const parts: PartRecipe[] = [
-      { name: 'Bin', color: COLOR, outline: { kind: 'rect', x: 0, y: boxY, width, height: depth }, depth: height, cornerRadius: corner, hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' }, seam: 'back-left' },
+      { name: 'Bin', color: COLOR, outline: { kind: 'path', points: binOutline(width, depth, corner, boxY) }, depth: height, hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' }, seam: 'back-left' },
     ]
     if (drain) {
       const d = Math.min(8, Math.max(3, Math.min(width, depth) / 4))
@@ -141,7 +140,7 @@ export const brorBin: ProductTemplate = {
     parts.push(...dividerParts({ count: num(spec, 'dividers', 0), width, depth, height, wall, boxY, color: COLOR }))
     const span = (hooks - 1) * pitch
     for (let i = 0; i < hooks; i++) {
-      parts.push(...roundHookParts({ standing: true, d: dims.tabThickness, gap: dims.gap, rise: dims.lipRise ?? 8, embed, color: COLOR, name: hooks === 1 ? 'Hook' : `Hook ${i + 1}`, cx: width / 2 - span / 2 + i * pitch, faceY: boxY, c: center }))
+      parts.push(...straightPegParts({ standing: true, d: dims.tabThickness, gap: dims.gap, embed, color: COLOR, name: hooks === 1 ? 'Peg' : `Peg ${i + 1}`, cx: width / 2 - span / 2 + i * pitch, faceY: boxY, c: center }))
     }
     // Straight studs: a cylinder from inside the wall through the sheet
     // and one peg further (tilted 90° about x, a circle's extrusion runs
@@ -197,7 +196,6 @@ export const brorHook: ProductTemplate = {
     const width = num(spec, 'width', 12)
     const plateH = num(spec, 'plate', 30)
     const d = dims.tabThickness
-    const rise = dims.lipRise ?? 8
     // The plate and arm from the shared J-hook (its own tab replaced by
     // a round peg): a wide-hook build gives the plate as the first part.
     const base = jHook({ mount: { ...dims, tabWidth: 0 }, reach: num(spec, 'reach', 40), width, arm: num(spec, 'arm', 5), tip: num(spec, 'tip', 10), plateH, color: COLOR })
@@ -206,10 +204,10 @@ export const brorHook: ProductTemplate = {
     const offset = plateT + num(spec, 'reach', 40)
     // Shank centre: at the plate's top less a peg radius; the lip rises
     // above the plate by `rise` (base.height already includes it).
-    const shankY = rise + d / 2
+    const shankY = straightPegReach(d).up
     // The peg is centred across the plate's width, resting on the bed
     // when the plate is thinner than it.
-    const peg = roundHookParts({ standing: false, d, gap: dims.gap, rise, embed: plateT - 0.5, color: COLOR, name: 'Peg', faceX: offset, shankY, zc: Math.max(d / 2, width / 2) })
+    const peg = straightPegParts({ standing: false, d, gap: dims.gap, embed: plateT - 0.5, color: COLOR, name: 'Peg', faceX: offset, shankY, zc: Math.max(d / 2, width / 2) })
     return { width: base.width, height: base.height, parts: [plate, ...peg], fuse: true }
   },
 }
