@@ -1,4 +1,4 @@
-import type { Perforation, Point2, SurfaceTexture } from '../../types/document'
+import type { Perforation, Point2, SeamHint, SurfaceTexture } from '../../types/document'
 import type { ShellOptions } from '../geometry/shell'
 
 /** A value the user can set on a product: a number in mm (or a count),
@@ -37,6 +37,8 @@ export interface PartRecipe {
   hollow?: ShellOptions
   texture?: SurfaceTexture
   perforation?: Perforation
+  /** Steer the slicer's layer seam to this back corner (see SeamHint). */
+  seam?: SeamHint
   isHole?: boolean
   /** Which piece of a product split for the bed this part belongs to
    * (0 = the first). Each tile lands on its own plate. */

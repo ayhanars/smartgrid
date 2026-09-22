@@ -17,7 +17,7 @@ function normalizeColor(hex: string): string {
  * sees every unshared edge as an open edge, so a box whose faces each
  * carry their own vertices (kept apart for shading) looks like a pile of
  * loose plates and gets "repaired". Works on flat and indexed input. */
-function indexTriangles(positions: Float32Array, indices?: Uint32Array): { vertices: Float32Array; triangles: Uint32Array } {
+function indexTriangles(positions: Float32Array, indices?: Uint32Array): { vertices: Float32Array; triangles: Uint32Array; kept: Uint32Array } {
   const inCount = positions.length / 3
   const remap = new Uint32Array(inCount)
   const vertices = new Float32Array(positions.length)
@@ -57,17 +57,21 @@ function indexTriangles(positions: Float32Array, indices?: Uint32Array): { verti
   // shared vertex; a triangle with two corners on one vertex is dropped.
   const triCount = (indices ? indices.length : inCount) / 3
   const triangles = new Uint32Array(triCount * 3)
+  // Which source triangle each written one came from (for per-triangle
+  // attributes such as a painted seam).
+  const kept = new Uint32Array(triCount)
   let out = 0
   for (let t = 0; t < triCount; t++) {
     const a = remap[indices ? indices[t * 3] : t * 3]
     const b = remap[indices ? indices[t * 3 + 1] : t * 3 + 1]
     const c = remap[indices ? indices[t * 3 + 2] : t * 3 + 2]
     if (a === b || b === c || a === c) continue
+    kept[out / 3] = t
     triangles[out++] = a
     triangles[out++] = b
     triangles[out++] = c
   }
-  return { vertices: vertices.subarray(0, outCount * 3), triangles: triangles.subarray(0, out) }
+  return { vertices: vertices.subarray(0, outCount * 3), triangles: triangles.subarray(0, out), kept: kept.subarray(0, out / 3) }
 }
 
 /**
@@ -116,14 +120,17 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
   const meshObject = (mesh: ExportMesh): { id: number; colorIndex: number } => {
     const objectId = nextId++
     const colorIndex = colors.indexOf(normalizeColor(mesh.color))
-    const { vertices, triangles } = indexTriangles(mesh.positions, mesh.indices)
+    const { vertices, triangles, kept } = indexTriangles(mesh.positions, mesh.indices)
     const vertexXml: string[] = []
     for (let v = 0; v < vertices.length; v += 3) {
       vertexXml.push(`          <vertex x="${vertices[v].toFixed(4)}" y="${vertices[v + 1].toFixed(4)}" z="${vertices[v + 2].toFixed(4)}" />`)
     }
     const triXml: string[] = []
     for (let t = 0; t < triangles.length; t += 3) {
-      triXml.push(`          <triangle v1="${triangles[t]}" v2="${triangles[t + 1]}" v3="${triangles[t + 2]}" />`)
+      // paint_seam="4": Bambu Studio's per-triangle seam enforcer (one
+      // unsplit triangle in state 1), as its own painting tool writes it.
+      const seam = mesh.seam && mesh.seam[kept[t / 3]] ? ' paint_seam="4"' : ''
+      triXml.push(`          <triangle v1="${triangles[t]}" v2="${triangles[t + 1]}" v3="${triangles[t + 2]}"${seam} />`)
     }
     objects.push(
       `    <object id="${objectId}" name="${escapeXml(mesh.name)}" type="model" pid="1" pindex="${colorIndex}">\n` +

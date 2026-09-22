@@ -184,7 +184,7 @@ export const pegboardBin: ProductTemplate = {
     const embed = Math.min(1, wall / 2)
     const boxY = board.reach
     const parts: PartRecipe[] = [
-      { name: 'Bin', color: COLOR, outline: { kind: 'rect', x: 0, y: boxY, width, height: depth }, depth: height, cornerRadius: corner, hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' } },
+      { name: 'Bin', color: COLOR, outline: { kind: 'rect', x: 0, y: boxY, width, height: depth }, depth: height, cornerRadius: corner, hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' }, seam: 'back-left' },
     ]
     if (bool(spec, 'drain', false)) {
       const d = Math.min(8, Math.max(3, Math.min(width, depth) / 4))

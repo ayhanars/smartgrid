@@ -132,7 +132,7 @@ export const brorBin: ProductTemplate = {
     const boxY = reach
     const center = shankCenter(height, dims)
     const parts: PartRecipe[] = [
-      { name: 'Bin', color: COLOR, outline: { kind: 'rect', x: 0, y: boxY, width, height: depth }, depth: height, cornerRadius: corner, hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' } },
+      { name: 'Bin', color: COLOR, outline: { kind: 'rect', x: 0, y: boxY, width, height: depth }, depth: height, cornerRadius: corner, hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' }, seam: 'back-left' },
     ]
     if (drain) {
       const d = Math.min(8, Math.max(3, Math.min(width, depth) / 4))

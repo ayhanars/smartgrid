@@ -160,8 +160,10 @@ open it with its plates and settings instead of as loose geometry — use
 from the named system presets (`different_settings_to_system`), so Bambu
 Studio takes speeds, filament density and the rest from its own profiles
 rather than its bare defaults (which gave 0 g and hours-long
-estimates); seams are aligned into corners and scarf-joined, which is
-what hides the pale seam line on a wall.
+estimates); seams are aligned and scarf-joined, and a bin's back-left corner is
+written as a painted seam enforcer (`paint_seam="4"` on its outward
+wall triangles, from `ShapeLayer.seamHint`), so the seam sits on that
+edge instead of wandering down the back wall.
 Every mesh in a 3MF is written with one
 shared vertex table (vertices welded by position), since slicers judge a
 mesh by index topology and would otherwise see each shading seam as an
