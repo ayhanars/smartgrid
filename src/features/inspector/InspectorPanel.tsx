@@ -1152,9 +1152,9 @@ function PrintSettingsSection() {
           <span className="inspector-field__input-wrap">
             <select
               className="inspector-select"
-              value={settings.seam ?? 'random'}
+              value={settings.seam ?? 'corner'}
               aria-label="Layer seam"
-              title={SEAM_PLACEMENTS.find((s) => s.id === (settings.seam ?? 'random'))?.hint}
+              title={SEAM_PLACEMENTS.find((s) => s.id === (settings.seam ?? 'corner'))?.hint}
               onChange={(e) => setPrintSettings({ seam: e.target.value as SeamPlacement })}
             >
               {SEAM_PLACEMENTS.map((s) => (
@@ -1166,7 +1166,7 @@ function PrintSettingsSection() {
           </span>
         </label>
       </div>
-      <p className="inspector-note">{SEAM_PLACEMENTS.find((s) => s.id === (settings.seam ?? 'random'))?.hint}</p>
+      <p className="inspector-note">{SEAM_PLACEMENTS.find((s) => s.id === (settings.seam ?? 'corner'))?.hint}</p>
       <p className="inspector-note">
         What the print preview simulates — match these to your Bambu Studio profile. Pockets snap to whole layers of this height.
       </p>
