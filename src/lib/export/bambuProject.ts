@@ -81,12 +81,15 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
     bottom_shell_layers: String(settings.bottomLayers ?? 3),
     sparse_infill_density: `${settings.infillDensity ?? 15}%`,
     sparse_infill_pattern: INFILL[settings.infillPattern ?? 'grid'] ?? 'grid',
-    // Seams: aligned into corners, and joined with a scarf (the seam is
-    // ramped over a few mm instead of a butt joint), which is what hides
-    // the pale line a seam leaves on a wall.
+    // Seams: aligned, and every body paints its back corner as a seam
+    // enforcer, so the seam sits in a sharp corner on every layer. No
+    // scarf joint: a scarf ramps the seam over ~10 mm, and on a corner
+    // that ramp wraps onto the neighbouring face, which is exactly the
+    // dashed line it was meant to hide. Marketplace models that print
+    // cleanly are sliced with the same plain corner seam.
     seam_position: 'aligned',
-    seam_slope_type: 'external',
-    seam_slope_conditional: '0',
+    seam_slope_type: 'none',
+    seam_slope_conditional: '1',
     different_settings_to_system: [printKeys.join(';'), ...filaments.map(() => 'filament_colour'), ''],
   }
 }
