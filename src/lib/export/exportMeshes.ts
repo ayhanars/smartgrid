@@ -31,7 +31,7 @@ export interface ExportMesh {
  * as seam enforcers. */
 /** Width of the seam strip on each face of the corner, mm: narrow, so
  * the seam cannot wander across the face inside it. */
-const SEAM_STRIP = 2.6
+const SEAM_STRIP = 1.2
 
 function paintSeam(positions: Float32Array, indices: Uint32Array | undefined, hint: 'back-left' | 'back-right', margin = SEAM_STRIP): Uint8Array {
   const count = indices ? indices.length / 3 : positions.length / 9

@@ -164,9 +164,9 @@ estimates); seams are aligned with no scarf joint (a scarf ramps the seam
 over ~10 mm, and on a corner the ramp wraps onto the next face as a
 dashed line), and a bin's back-left corner is
 written as a painted seam enforcer (`paint_seam="4"` on its outward
-wall triangles): every exported body gets a 2.6 mm strip on each face
+wall triangles): every exported body gets a 1.2 mm strip on each face
 of its back-left vertical edge (`ShapeLayer.seamHint` picks another
-corner), and the exporter builds bodies with 2.6 mm wall columns so
+corner), and the exporter builds bodies with 1.2 mm wall columns so
 the strip has triangles of its own. The seam then sits on that edge
 instead of wandering across a wall.
 Every mesh in a 3MF is written with one
