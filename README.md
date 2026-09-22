@@ -160,11 +160,15 @@ open it with its plates and settings instead of as loose geometry — use
 from the named system presets (`different_settings_to_system`), so Bambu
 Studio takes speeds, filament density and the rest from its own profiles
 rather than its bare defaults (which gave 0 g and hours-long
-estimates); seams are aligned with no scarf joint (a scarf ramps the seam
-over ~10 mm, and on a corner the ramp wraps onto the next face as a
-dashed line), and a bin's back-left corner is
+estimates). The "Layer seam" print setting (`PrintSettings.seam`)
+picks the seam position: scattered (`random`, the default: no line,
+tiny dots everywhere), back face, or back corner. Seams never get a
+scarf joint (a scarf ramps the seam over ~10 mm, and on a corner the
+ramp wraps onto the next face as a dashed line). With the corner
+choice a bin's back-left corner is
 written as a painted seam enforcer (`paint_seam="4"` on its outward
-wall triangles): every exported body gets a 1.2 mm strip on each face
+wall triangles), which overrides the slicer's own seam position, so it
+is only written for that choice: every exported body gets a 1.2 mm strip on each face
 of its back-left vertical edge (`ShapeLayer.seamHint` picks another
 corner), and the exporter builds bodies with 1.2 mm wall columns so
 the strip has triangles of its own. The seam then sits on that edge
