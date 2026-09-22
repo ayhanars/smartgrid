@@ -1,6 +1,6 @@
 import { create, useStore } from 'zustand'
 import { temporal } from 'zundo'
-import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type ShapeKind, type Perforation, type ShapeLayer, type ShapeProfile, type SurfaceTexture } from '../types/document'
+import { DEFAULT_PRINT_SETTINGS, type Bounds, type Point2, type PrintSettings, type SeamHint, type ShapeKind, type Perforation, type ShapeLayer, type ShapeProfile, type SurfaceTexture } from '../types/document'
 import type { DocumentSnapshot } from '../lib/persistence/localProjects'
 import type { ImportedShape } from '../lib/import/svgImport'
 import { createShapeRegions, contourBounds, defaultShapeName } from '../lib/geometry/primitives'
@@ -172,6 +172,7 @@ interface DocumentActions {
   setTexture: (id: string, texture: SurfaceTexture | null) => void
   /** Pattern of real holes on a shape; null removes it. */
   setPerforation: (id: string, perforation: Perforation | null) => void
+  setSeamHint: (id: string, hint: SeamHint | null) => void
   /** The width profile of a solid; its shell cavity follows it. */
   setProfile: (id: string, profile: ShapeProfile | undefined) => void
   /** Twist (degrees bottom to top) of a solid; its shell cavity follows. */
@@ -425,6 +426,7 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
     api.setLayerZ(id, part.z ?? 0)
     if (part.texture) api.setTexture(id, part.texture)
     if (part.perforation) api.setPerforation(id, part.perforation)
+    if (part.seam) api.setSeamHint(id, part.seam)
     if (part.hollow) {
       const made = api.hollowOut(id, part.hollow)
       if (made) {
@@ -1411,6 +1413,13 @@ export const useDocumentStore = create<DocumentStore>()(
           return { layers: { ...state.layers, [id]: { ...layer, texture: clean } } }
         }),
 
+      setSeamHint: (id, hint) =>
+        set((state) => {
+          const layer = state.layers[id]
+          if (!layer) return {}
+          const { seamHint: _dropped, ...rest } = layer
+          return { layers: { ...state.layers, [id]: hint ? { ...rest, seamHint: hint } : rest } }
+        }),
       setPerforation: (id, perforation) =>
         set((state) => {
           const layer = state.layers[id]

@@ -123,6 +123,7 @@ export const skadisContainer: ProductTemplate = {
         depth: height,
         cornerRadius: Math.max(0, corner),
         hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' },
+        seam: 'back-left',
       },
     ]
     if (drain) {

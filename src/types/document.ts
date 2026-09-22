@@ -227,6 +227,9 @@ export interface ProfilePoint {
   scale: number
 }
 
+/** A vertical edge of a body the layer seam is steered to. */
+export type SeamHint = 'back-left' | 'back-right'
+
 export const DEFAULT_PERFORATION: Perforation = { shape: 'round', pattern: 'grid', size: 3, spacing: 5.5, target: 'walls', depth: null }
 
 export interface ShellLink {
@@ -267,6 +270,10 @@ export interface ShapeLayer {
   texture?: SurfaceTexture
   /** Optional pattern of real holes (see Perforation). */
   perforation?: Perforation
+  /** Where the slicer should put the layer seam on this body: a back
+   * corner, painted as a seam enforcer in the 3MF, so the seam does not
+   * wander down a wall. */
+  seamHint?: SeamHint
   /** How wide the shape is along its height (a vase, a cone, a barrel):
    * the footprint scaled per height. Absent = straight walls. */
   profile?: ShapeProfile

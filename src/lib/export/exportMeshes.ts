@@ -21,6 +21,43 @@ export interface ExportMesh {
    * which is far more robust than a mesh boolean; `positions` is then
    * empty. */
   components?: ExportMesh[]
+  /** Per triangle, 1 where the slicer should put its layer seam (a seam
+   * enforcer in the 3MF), in the mesh's triangle order. */
+  seam?: Uint8Array
+}
+
+/** Marks the outward-facing wall triangles on one back corner of the
+ * body (slicer coordinates: +y is the back), a strip `margin` mm wide,
+ * as seam enforcers. */
+function paintSeam(positions: Float32Array, indices: Uint32Array | undefined, hint: 'back-left' | 'back-right', margin = 9): Uint8Array {
+  const count = indices ? indices.length / 3 : positions.length / 9
+  const out = new Uint8Array(count)
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity
+  for (let i = 0; i < positions.length; i += 3) {
+    minX = Math.min(minX, positions[i]); maxX = Math.max(maxX, positions[i])
+    minY = Math.min(minY, positions[i + 1]); maxY = Math.max(maxY, positions[i + 1])
+    minZ = Math.min(minZ, positions[i + 2]); maxZ = Math.max(maxZ, positions[i + 2])
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2
+  const v = (t: number, k: number, c: number) => positions[(indices ? indices[t * 3 + k] : t * 3 + k) * 3 + c]
+  for (let t = 0; t < count; t++) {
+    const ax = v(t, 0, 0), ay = v(t, 0, 1), az = v(t, 0, 2)
+    const bx = v(t, 1, 0), by = v(t, 1, 1), bz = v(t, 1, 2)
+    const qx = v(t, 2, 0), qy = v(t, 2, 1), qz = v(t, 2, 2)
+    const mx = (ax + bx + qx) / 3, my = (ay + by + qy) / 3, mz = (az + bz + qz) / 3
+    const inCorner = my > maxY - margin && (hint === 'back-left' ? mx < minX + margin : mx > maxX - margin)
+    if (!inCorner) continue
+    // Face normal from the winding; walls only, facing out of the body.
+    const ux = bx - ax, uy = by - ay, uz = bz - az
+    const wx = qx - ax, wy = qy - ay, wz = qz - az
+    const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx
+    const len = Math.hypot(nx, ny, nz) || 1
+    if (Math.abs(nz / len) > 0.6) continue
+    if (nx * (mx - cx) + ny * (my - cy) <= 0) continue
+    if (mz < minZ + 0.3 || mz > maxZ - 0.3) continue
+    out[t] = 1
+  }
+  return out
 }
 
 export interface ExportProgress {
@@ -87,6 +124,7 @@ export async function buildExportMeshes(
     const placed = geo.applyMatrix4(Y_UP_TO_Z_UP).translate(0, bedDepth, 0)
     const mesh: ExportMesh = { name, color: layer.color, positions: placed.getAttribute('position').array as Float32Array }
     if (placed.index) mesh.indices = Uint32Array.from(placed.index.array)
+    if (layer.seamHint) mesh.seam = paintSeam(mesh.positions, mesh.indices, layer.seamHint)
     if (multi) {
       const idx = plateIndex(layer)
       const origin = plateOrigin(idx, multi.plates.length, multi.bedWidth, multi.bedDepth)
