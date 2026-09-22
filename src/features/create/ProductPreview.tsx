@@ -3,7 +3,7 @@ import { BoardPreview } from './BoardPreview'
 import { TrayPreview } from './TrayPreview'
 
 /** The right simulator for a product: the pegboard fit, or the tray. */
-export function ProductPreview({ preview }: { preview: ProductPreviewData }) {
-  if (preview.kind === 'tray') return <TrayPreview preview={preview} />
-  return <BoardPreview preview={preview} />
+export function ProductPreview({ preview, large = false }: { preview: ProductPreviewData; large?: boolean }) {
+  if (preview.kind === 'tray') return <TrayPreview preview={preview} large={large} />
+  return <BoardPreview preview={preview} large={large} />
 }

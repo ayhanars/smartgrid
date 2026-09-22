@@ -320,6 +320,20 @@ Moderation tools on top of that:
 
 ### Products in the Create panel
 
+The Create button opens a sheet over the editor: a picker (search,
+categories, one Recent entry per product with the specs it was last
+added with, the products as cards) and, once a product is picked, the
+live simulator on the left and the settings on the right, grouped into
+Size / Inside / Mounting / Walls & look / Printing with a plain line
+under each group and every hint shown under its field. The sheet
+stacks on narrow screens. Every product's parts form bodies
+(`PartRecipe.tile`); `buildProduct` packs the bodies from the plate's
+corner onto the first plate with room, adding plates up to the maximum
+of five, so a set of separate boxes or a stack of divider plates lands
+on as many plates as it needs. Separate boxes are one group each, with
+a one-cell recipe of the same template, so each box moves and resizes
+on its own.
+
 The products are also cards under "Make one now" on the home and
 community pages (`generator_cards`, managed from the admin Generators
 tab: shown or hidden, a picture, the order, a "New" badge that expires).

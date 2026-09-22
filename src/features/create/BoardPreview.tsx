@@ -8,7 +8,8 @@ import { patternNodes } from '../../lib/products/boards'
  * then show whether they land on the pattern too. Redraws as the specs
  * change.
  */
-export function BoardPreview({ preview }: { preview: MountPreview }) {
+export function BoardPreview({ preview, large = false }: { preview: MountPreview; large?: boolean }) {
+  const box = large ? { w: 920, h: 460, cap: 440 } : { w: 460, h: 220, cap: 200 }
   const { pattern, silhouette, anchors } = preview
   const margin = Math.max(pattern.pitchX, pattern.pitchY)
   const win = { x: -margin, y: -margin, width: silhouette.width + 2 * margin, height: silhouette.height + 2 * margin }
@@ -21,13 +22,13 @@ export function BoardPreview({ preview }: { preview: MountPreview }) {
     const cy = a.y + a.height / 2
     return nodes.some((n) => Math.abs(n.x - cx) < 0.5 && Math.abs(n.y - cy) < 0.5)
   }
-  const scale = Math.min(460 / win.width, 220 / win.height)
+  const scale = Math.min(box.w / win.width, box.h / win.height)
   const w = win.width * scale
   const h = win.height * scale
   const px = (v: number) => v * scale
   return (
     <figure className="board-preview">
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: Math.min(200, h) }} role="img" aria-label={preview.caption ?? 'Fit preview'}>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: Math.min(box.cap, h) }} role="img" aria-label={preview.caption ?? 'Fit preview'}>
         <rect x={0} y={0} width={w} height={h} className="board-preview__sheet" />
         {nodes.map((n, i) =>
           pattern.kind === 'round' ? (

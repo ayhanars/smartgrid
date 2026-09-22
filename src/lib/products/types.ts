@@ -53,6 +53,11 @@ export interface ProductBuild {
   fuse?: boolean
   /** Names of the tiles when the product is split for the bed. */
   tiles?: string[]
+  /** Several groups instead of one (separate boxes that move on their
+   * own): each names the parts it owns (indexes) and the spec that
+   * rebuilds just that piece from the same template. Parts not listed
+   * go to the first group. */
+  groups?: { name: string; spec: ProductSpec; parts: number[] }[]
 }
 
 /** What the builder knows about the printer: the bed, so a product too
