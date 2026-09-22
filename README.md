@@ -162,8 +162,10 @@ Studio takes speeds, filament density and the rest from its own profiles
 rather than its bare defaults (which gave 0 g and hours-long
 estimates); seams are aligned and scarf-joined, and a bin's back-left corner is
 written as a painted seam enforcer (`paint_seam="4"` on its outward
-wall triangles, from `ShapeLayer.seamHint`), so the seam sits on that
-edge instead of wandering down the back wall.
+wall triangles, from `ShapeLayer.seamHint`; the exporter builds such a
+body with 6 mm wall columns so the corner strip has triangles of its
+own), so the seam sits on that edge instead of wandering down the back
+wall.
 Every mesh in a 3MF is written with one
 shared vertex table (vertices welded by position), since slicers judge a
 mesh by index topology and would otherwise see each shading seam as an
@@ -363,9 +365,10 @@ way are notched from the top, the others from the bottom, at the same
 spots (optionally with an outer frame); a plate longer than the bed is
 cut with a half-lap. Templates get a `BuildContext` with the bed
 size for this. The panel keeps the last six products added, with their
-specs, under Recent (per browser). Round-hole hooks are short: a 45° bend on a radius of three quarters
-of a peg and a lip half the hole's diameter, so they tilt into the hole
-and still look up behind the sheet.
+specs, under Recent (per browser). Round-hole pegs are straight, measured off a printed BROR holder: the
+peg goes 6 mm past the sheet and its last 2.5 mm turn up 25°, so the
+end is cut at a slant. Bins have sharp back corners (rounded in front)
+so the layer seam has an edge to hide in.
 
 ## Custom domain
 

@@ -79,6 +79,9 @@ export function effectiveContour(layer: ShapeLayer) {
 export interface LayerGeometryOptions {
   /** Subdivide faces at about this step (mm) — see BeveledGeometryOptions. */
   tessellate?: number
+  /** Split the walls into columns no wider than this, caps left planar
+   * (the exporter paints a seam strip on the columns). */
+  outerStep?: number
   /** Shade a bent (profiled / twisted) body with plain averaged normals
    * instead of crease detection: a tenth of the time, for mid-drag previews. */
   fastShading?: boolean
@@ -121,12 +124,13 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
   if (contour) {
     const profileStep = profileTessellation(layer.profile, depth, layer.twist ?? 0)
     const requested = options.tessellate ?? perforationTessellation(layer)
+    const wallOnly = requested === undefined && options.outerStep !== undefined ? options.outerStep : undefined
     let geo = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop, {
       flare: layer.isHole && (layer.bevelMode ?? 'rim') === 'rim',
       texture: layer.texture ?? null,
       textureSign: ((layer.isHole ? 1 : -1) * (layer.texture?.relief === 'raised' ? -1 : 1)) as 1 | -1,
       textureTopCap: !layer.isHole,
-      tessellate: profileStep && requested ? Math.min(profileStep, requested) : (profileStep ?? requested),
+      tessellate: profileStep && requested ? Math.min(profileStep, requested) : (profileStep ?? requested ?? wallOnly),
       deferShading: !!profileStep,
       // Only a perforated body needs subdivided caps (for the CSG); a
       // profiled or twisted one keeps them planar.

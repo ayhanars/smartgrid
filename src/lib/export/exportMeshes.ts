@@ -144,7 +144,9 @@ export async function buildExportMeshes(
     const solidWorld = toWorld(layer)
     const holeLayers = overlapping.map((hid) => layers[hid])
     // Same plan as the viewport (see useCutGeometries).
-    const plan = planCut(layer, holeLayers, 1, toWorld)
+    // A body with a seam hint gets its walls split into columns, so
+    // there are triangles within the corner strip to paint.
+    const plan = planCut(layer, holeLayers, 1, toWorld, layer.seamHint ? { outerStep: 6 } : {})
 
     for (const geo of plan.bodies) {
       let finalGeo: THREE.BufferGeometry = geo
