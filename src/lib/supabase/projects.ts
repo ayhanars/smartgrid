@@ -65,13 +65,24 @@ export async function purgeCloudProject(id: string): Promise<void> {
   if (error) throw error
 }
 
-export async function loadCloudProject(id: string): Promise<{ snapshot: DocumentSnapshot; thumbnail: string | null } | null> {
-  const { data, error } = await supabase.from('projects').select('data, thumbnail, source_item_id').eq('id', id).maybeSingle()
+export async function loadCloudProject(id: string): Promise<{ snapshot: DocumentSnapshot; thumbnail: string | null; thumbnailCustom: boolean } | null> {
+  // `thumbnail_custom` is a later column: a database without it still
+  // answers, just without the flag.
+  let res = await supabase.from('projects').select('data, thumbnail, thumbnail_custom, source_item_id').eq('id', id).maybeSingle()
+  if (res.error) res = await supabase.from('projects').select('data, thumbnail, source_item_id').eq('id', id).maybeSingle()
+  const { data, error } = res
   if (error) throw error
-  const row = data as Pick<ProjectRow, 'data' | 'thumbnail' | 'source_item_id'> | null
+  const row = data as (Pick<ProjectRow, 'data' | 'thumbnail' | 'source_item_id'> & { thumbnail_custom?: boolean }) | null
   const snapshot = row?.data
   if (row?.source_item_id) saveProjectSource(id, row.source_item_id)
-  return snapshot && snapshot.version === 1 ? { snapshot, thumbnail: row?.thumbnail ?? null } : null
+  return snapshot && snapshot.version === 1 ? { snapshot, thumbnail: row?.thumbnail ?? null, thumbnailCustom: !!row?.thumbnail_custom } : null
+}
+
+/** Only the picture: the user's own (`custom`), or back to automatic. */
+export async function updateCloudThumbnail(id: string, thumbnail: string | null, custom: boolean): Promise<void> {
+  let { error } = await supabase.from('projects').update({ thumbnail, thumbnail_custom: custom }).eq('id', id)
+  if (error) ({ error } = await supabase.from('projects').update({ thumbnail }).eq('id', id))
+  if (error) throw error
 }
 
 /** Upserts the document; `thumbnail` is left untouched when undefined. */

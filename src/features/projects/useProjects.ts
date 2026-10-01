@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { listLocalProjects, duplicateLocalProject, renameLocalProject, type LocalProjectMeta } from '../../lib/persistence/localProjects'
 import { deleteProjectEverywhere, isCloudSyncable, uploadProject } from '../../lib/persistence/cloudSync'
-import { listCloudProjects, type CloudProjectMeta } from '../../lib/supabase/projects'
+import { listCloudProjects, updateCloudThumbnail, type CloudProjectMeta } from '../../lib/supabase/projects'
+import { imageFileToThumbnail, isThumbnailCustom, loadLocalThumbnail, saveLocalThumbnail, setThumbnailCustom } from '../../lib/persistence/thumbnails'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import { useAuthStore } from '../auth/useAuthStore'
 import { isNetworkError, useConnectivity } from '../../lib/connectivity'
@@ -40,6 +41,25 @@ export function useProjects() {
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const refresh = () => setProjects(listLocalProjects())
+  // Bumped when a card's picture changes without the project changing.
+  const [pictureVersion, setPictureVersion] = useState(0)
+
+  /** The user's own picture for a project (an image file), kept here and
+   * in the cloud row; the automatic capture then leaves it alone. */
+  const setPicture = async (id: string, file: File) => {
+    const dataUrl = await imageFileToThumbnail(file)
+    saveLocalThumbnail(id, dataUrl)
+    setThumbnailCustom(id, true)
+    setPictureVersion((v) => v + 1)
+    if (useAuthStore.getState().user && isCloudSyncable(id)) await updateCloudThumbnail(id, dataUrl, true).catch((err) => console.warn('Picture not saved to the cloud', err))
+  }
+  /** Back to the automatic picture (the next capture replaces it). */
+  const resetPicture = async (id: string) => {
+    setThumbnailCustom(id, false)
+    setPictureVersion((v) => v + 1)
+    if (useAuthStore.getState().user && isCloudSyncable(id)) await updateCloudThumbnail(id, loadLocalThumbnail(id), false).catch((err) => console.warn('Picture not saved to the cloud', err))
+  }
+  const hasCustomPicture = (id: string) => isThumbnailCustom(id)
 
 
   const refreshCloud = useCallback(() => {
@@ -186,5 +206,9 @@ export function useProjects() {
     remove,
     upload,
     rename,
+    setPicture,
+    resetPicture,
+    hasCustomPicture,
+    pictureVersion,
   }
 }

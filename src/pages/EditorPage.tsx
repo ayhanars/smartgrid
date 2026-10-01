@@ -9,7 +9,7 @@ import { isCloudSyncable, loadProjectAnywhere } from '../lib/persistence/cloudSy
 import { saveCloudProject } from '../lib/supabase/projects'
 import { useAuthStore } from '../features/auth/useAuthStore'
 import { isNetworkError, useConnectivity } from '../lib/connectivity'
-import { captureThumbnail, loadLocalThumbnail, saveLocalThumbnail } from '../lib/persistence/thumbnails'
+import { captureThumbnail, isThumbnailCustom, loadLocalThumbnail, saveLocalThumbnail } from '../lib/persistence/thumbnails'
 
 const AUTOSAVE_DELAY_MS = 400
 /** Cloud writes are slower and metered, so they trail the local autosave. */
@@ -93,7 +93,8 @@ export function EditorPage() {
     let thumbRetries = 0
     let capturing = false
     const refreshThumbnail = () => {
-      if (!stillExists() || capturing) return
+      // The user's own picture is theirs; nothing automatic replaces it.
+      if (!stillExists() || capturing || isThumbnailCustom(id)) return
       capturing = true
       void captureThumbnail().then((dataUrl) => {
         capturing = false

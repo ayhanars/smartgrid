@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Cloud, CloudOff, CloudUpload, Copy, FolderOpen, MoreHorizontal, Pencil, Plus, Trash2, WifiOff } from 'lucide-react'
+import { Cloud, CloudOff, CloudUpload, Copy, FolderOpen, Image, MoreHorizontal, Pencil, Plus, RotateCcw, Trash2, WifiOff } from 'lucide-react'
 import { createLocalProject, loadLocalProject, type DocumentSnapshot } from '../../lib/persistence/localProjects'
 import { loadLocalThumbnail } from '../../lib/persistence/thumbnails'
 import { getBedPreset } from '../../lib/geometry/bedPresets'
@@ -81,9 +81,15 @@ export function ProjectBanners({ projects }: { projects: ReturnType<typeof usePr
 /** The project cards with their menu. `limit` shows only the newest few. */
 export function ProjectGrid({ projects, limit, showNew = true }: { projects: ReturnType<typeof useProjects>; limit?: number; showNew?: boolean }) {
   const navigate = useNavigate()
-  const { entries, cloudStateFor, menu, setMenu, menuEntry, renamingId, setRenamingId, rename, duplicate, remove, upload, user } = projects
+  const { entries, cloudStateFor, menu, setMenu, menuEntry, renamingId, setRenamingId, rename, duplicate, remove, upload, user, setPicture, resetPicture, hasCustomPicture, pictureVersion } = projects
   const shown = limit ? entries.slice(0, limit) : entries
   const open = (id: string) => navigate(`/p/${id}`)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [pictureFor, setPictureFor] = useState<string | null>(null)
+  const pickPicture = (id: string) => {
+    setPictureFor(id)
+    fileRef.current?.click()
+  }
 
   if (entries.length === 0) {
     return (
@@ -99,6 +105,7 @@ export function ProjectGrid({ projects, limit, showNew = true }: { projects: Ret
       <div className="home__grid">
         {shown.map((e) => (
           <ProjectCard
+            pictureVersion={pictureVersion}
             key={e.id}
             entry={e}
             cloudState={cloudStateFor(e)}
@@ -116,6 +123,17 @@ export function ProjectGrid({ projects, limit, showNew = true }: { projects: Ret
           </button>
         )}
       </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (file && pictureFor) void setPicture(pictureFor, file)
+        }}
+      />
       {menu && menuEntry && (
         <ProjectMenu
           x={menu.x}
@@ -125,6 +143,8 @@ export function ProjectGrid({ projects, limit, showNew = true }: { projects: Ret
           onRename={menuEntry.local ? () => setRenamingId(menu.id) : undefined}
           onDuplicate={menuEntry.local ? () => duplicate(menu.id) : undefined}
           onUpload={user && menuEntry.local && !menuEntry.cloud ? () => upload(menu.id) : undefined}
+          onPicture={() => pickPicture(menu.id)}
+          onResetPicture={hasCustomPicture(menu.id) ? () => void resetPicture(menu.id) : undefined}
           onDelete={() => remove(menuEntry)}
         />
       )}
@@ -134,6 +154,7 @@ export function ProjectGrid({ projects, limit, showNew = true }: { projects: Ret
 
 function ProjectCard({
   entry,
+  pictureVersion,
   cloudState,
   renaming,
   onOpen,
@@ -142,6 +163,7 @@ function ProjectCard({
   onCancelRename,
 }: {
   entry: ProjectEntry
+  pictureVersion: number
   cloudState: CardCloudState
   renaming: boolean
   onOpen: () => void
@@ -153,7 +175,8 @@ function ProjectCard({
   const [draft, setDraft] = useState(meta.name)
   useEffect(() => setDraft(meta.name), [meta.name, renaming])
   const snapshot = useMemo(() => (entry.local ? loadLocalProject(meta.id) : null), [entry.local, meta.id, meta.updatedAt])
-  const picture = useMemo(() => loadLocalThumbnail(meta.id) ?? entry.cloud?.thumbnail ?? null, [entry.cloud, meta.id, meta.updatedAt])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const picture = useMemo(() => loadLocalThumbnail(meta.id) ?? entry.cloud?.thumbnail ?? null, [entry.cloud, meta.id, meta.updatedAt, pictureVersion])
 
   return (
     <div
@@ -258,6 +281,8 @@ function ProjectMenu({
   onRename,
   onDuplicate,
   onUpload,
+  onPicture,
+  onResetPicture,
   onDelete,
 }: {
   x: number
@@ -267,6 +292,8 @@ function ProjectMenu({
   onRename?: () => void
   onDuplicate?: () => void
   onUpload?: () => void
+  onPicture: () => void
+  onResetPicture?: () => void
   onDelete: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -308,6 +335,16 @@ function ProjectMenu({
         <button type="button" role="menuitem" onClick={run(onUpload)}>
           <CloudUpload size={13} />
           Upload to cloud
+        </button>
+      )}
+      <button type="button" role="menuitem" onClick={run(onPicture)}>
+        <Image size={13} />
+        Change picture…
+      </button>
+      {onResetPicture && (
+        <button type="button" role="menuitem" onClick={run(onResetPicture)}>
+          <RotateCcw size={13} />
+          Automatic picture
         </button>
       )}
       <div className="layer-context-menu__divider" />

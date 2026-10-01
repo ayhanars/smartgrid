@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ExternalLink, Globe, Trash2, X } from 'lucide-react'
+import { ExternalLink, Globe, Image, RotateCcw, Trash2, X } from 'lucide-react'
 import { artboardSize, serializeDocument, useDocumentStore } from '../../state/documentStore'
 import { buildExportMeshes } from '../../lib/export/exportMeshes'
 import { renderMeshPicture } from '../../lib/export/thumbnail'
 import { useViewStore } from '../../state/viewStore'
 import { saveLocalProject } from '../../lib/persistence/localProjects'
-import { captureThumbnail, loadLocalThumbnail, loadProjectSource, saveLocalThumbnail, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '../../lib/persistence/thumbnails'
+import { captureThumbnail, imageFileToThumbnail, isThumbnailCustom, loadLocalThumbnail, loadProjectSource, saveLocalThumbnail, setThumbnailCustom, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '../../lib/persistence/thumbnails'
+import { updateCloudThumbnail } from '../../lib/supabase/projects'
+import { isCloudSyncable } from '../../lib/persistence/cloudSync'
 import { TagInput } from './TagInput'
 import {
   CATEGORIES,
@@ -109,6 +111,8 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
     const state = useDocumentStore.getState()
     const snapshot = serializeDocument(state)
     saveLocalProject(projectId, snapshot)
+    // The user's own picture wins over anything rendered.
+    if (isThumbnailCustom(projectId)) return { snapshot, thumbnail: loadLocalThumbnail(projectId) }
     let picture: string | null = null
     try {
       const bed = artboardSize(state)
@@ -162,6 +166,21 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
     }
   }
 
+  // The listing's picture: the user's own, or the automatic one.
+  const [picture, setPictureState] = useState<{ url: string | null; custom: boolean }>(() => ({ url: loadLocalThumbnail(projectId), custom: isThumbnailCustom(projectId) }))
+  const choosePicture = async (file: File) => {
+    const dataUrl = await imageFileToThumbnail(file)
+    saveLocalThumbnail(projectId, dataUrl)
+    setThumbnailCustom(projectId, true)
+    setPictureState({ url: dataUrl, custom: true })
+    if (user && isCloudSyncable(projectId)) await updateCloudThumbnail(projectId, dataUrl, true).catch(() => undefined)
+  }
+  const automaticPicture = async () => {
+    setThumbnailCustom(projectId, false)
+    setPictureState({ url: loadLocalThumbnail(projectId), custom: false })
+    if (user && isCloudSyncable(projectId)) await updateCloudThumbnail(projectId, loadLocalThumbnail(projectId), false).catch(() => undefined)
+  }
+
   const remove = async () => {
     if (!existing) return
     if (!window.confirm(`Remove "${existing.title}" from the community? People who already opened a copy keep theirs.`)) return
@@ -198,6 +217,31 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
         {existing?.approval === 'rejected' && existing.reviewNote && <p className="auth-dialog__error">Moderator note: {existing.reviewNote}</p>}
 
         <div className="auth-dialog__form">
+          <span className="publish-dialog__label">Picture</span>
+          <div className="publish-dialog__picture">
+            <div className="publish-dialog__picture-box">{picture.url ? <img src={picture.url} alt="" /> : <span>Rendered from the model when you publish</span>}</div>
+            <div className="publish-dialog__picture-actions">
+              <span className="publish-dialog__muted">{picture.custom ? 'Your own picture. It is the project’s picture too.' : 'Automatic: the model rendered on its own. Replace it with a photo or any image.'}</span>
+              <label className="publish-dialog__file">
+                <Image size={13} /> Choose a picture…
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ''
+                    if (f) void choosePicture(f)
+                  }}
+                />
+              </label>
+              {picture.custom && (
+                <button type="button" className="publish-dialog__file" onClick={() => void automaticPicture()}>
+                  <RotateCcw size={13} /> Back to automatic
+                </button>
+              )}
+            </div>
+          </div>
           <label htmlFor="publish-name">Title</label>
           <input id="publish-name" value={title} maxLength={80} required onChange={(e) => setTitle(e.target.value)} />
           <label htmlFor="publish-desc">Short description</label>
