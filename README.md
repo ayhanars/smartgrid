@@ -374,6 +374,13 @@ cut with a half-lap. Templates get a `BuildContext` with the bed
 size for this. The panel keeps the last six products added, with their
 specs, under Recent (per browser).
 
+Publishing to the community takes the model's picture the same way
+(`renderMeshPicture` in `thumbnail.ts`, the shared renderer behind the
+3MF's plate pictures): the export meshes rendered on their own, product
+photo framing and light, on a plain light background, as a WebP at the
+card size; the 3D view's capture is only the fallback when that cannot
+be made.
+
 A perforated wall keeps its holes clear of everything that would cut
 them or join them: a plain pocket or recess is a keep-out footprint
 (as before); a tilted cutter such as a scoop bin's sloped top is tested
