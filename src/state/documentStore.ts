@@ -319,7 +319,7 @@ function partBounds(part: import('../lib/products').PartRecipe): Bounds {
  * body is packed onto the first plate with room for it, new plates
  * added while there are fewer than MAX_PLATES (after that, the last
  * plate takes what is left). One undo step. */
-function buildProduct(templateId: string, spec: ProductSpec, build: { parts: import('../lib/products').PartRecipe[]; fuse?: boolean; tiles?: string[]; groups?: { name: string; spec: ProductSpec; parts: number[] }[] }, origin: Point2, plateId: string | null, name?: string): string | null {
+function buildProduct(templateId: string, spec: ProductSpec, build: { parts: import('../lib/products').PartRecipe[]; fuse?: boolean; tiles?: string[]; groups?: { name: string; spec: ProductSpec; parts: number[] }[] }, origin: Point2, plateId: string | null, name?: string, keep = false): string | null {
   const api = useDocumentStore.getState()
   const template = productTemplate(templateId)
   if (!template) return null
@@ -363,6 +363,14 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
     const b = boundsOf(k)
     let placed: { plateId: string; shift: Point2 } | null = null
     if (k === 0 && fits(basePlate, b, { x: b.x + origin.x, y: b.y + origin.y })) placed = { plateId: basePlate, shift: origin }
+    else if (k === 0 && keep) {
+      // A rebuilt product stays where the user put it, even if it grew
+      // into a neighbour: moved only as far as the bed's edge demands.
+      const bed = artboardSize(useDocumentStore.getState())
+      const x = Math.max(0, Math.min(origin.x, bed.width - b.width - b.x))
+      const y = Math.max(0, Math.min(origin.y, bed.height - b.height - b.y))
+      placed = { plateId: basePlate, shift: { x, y } }
+    }
     while (!placed) {
       const spot = spotOn(plateCursor, b)
       if (spot) placed = { plateId: plateCursor, shift: { x: spot.x - b.x, y: spot.y - b.y } }
@@ -1723,7 +1731,7 @@ export const useDocumentStore = create<DocumentStore>()(
         const build = template.build(clean, { bed: artboardSize(state) })
         get().beginTransientEdit()
         get().removeShapes(members)
-        const id = buildProduct(template.id, clean, build, { x, y }, plateId, group.name)
+        const id = buildProduct(template.id, clean, build, { x, y }, plateId, group.name, true)
         get().commitTransientEdit()
         return id
       },

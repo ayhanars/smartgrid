@@ -164,8 +164,9 @@ from the named system presets (`different_settings_to_system`), so Bambu
 Studio takes speeds, filament density and the rest from its own profiles
 rather than its bare defaults (which gave 0 g and hours-long
 estimates). The project also turns on Bambu Studio's scarf seam on
-the outer wall (`seam_slope_type: external`, start height 10 %, gap
-2 %, length 8 mm): each layer's start and end are ramped over 8 mm
+the outer wall (`override_filament_scarf_seam_setting: 1`, since Bambu
+Studio otherwise takes scarf settings from the filament profile;
+`seam_slope_type: external`, start height 10 %, gap 2 %, length 8 mm): each layer's start and end are ramped over 8 mm
 instead of butted at one point, which is what removes the seam line
 from a wall. Nothing else steers the seam: no painted enforcer, no
 seam position.

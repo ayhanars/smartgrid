@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ProductSpec, SpecField, SpecValue } from '../../lib/products'
 import { useDocumentStore } from '../../state/documentStore'
+import { FieldIcon } from './FieldIcon'
 
 const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
 
@@ -64,7 +65,10 @@ function renderField(f: SpecField, spec: ProductSpec, onChange: (id: string, val
   if (f.kind === 'select')
     return (
       <label key={f.id} className="inspector-field spec-form__field spec-form__field--wide" title={showHints ? undefined : f.hint}>
-        <span className="inspector-field__label">{f.label}</span>
+        <span className="inspector-field__label">
+          <FieldIcon id={f.id} />
+          {f.label}
+        </span>
         <span className="inspector-field__input-wrap">
           <select value={String(spec[f.id] ?? f.options[0]?.value)} onChange={(e) => onChange(f.id, e.target.value)}>
             {f.options.map((o) => (
@@ -81,6 +85,7 @@ function renderField(f: SpecField, spec: ProductSpec, onChange: (id: string, val
     <label key={f.id} className="inspector-check spec-form__field spec-form__field--wide" title={showHints ? undefined : f.hint}>
       <input type="checkbox" checked={spec[f.id] === true} onChange={(e) => onChange(f.id, e.target.checked)} />
       <span>
+        <FieldIcon id={f.id} />
         {f.label}
         {hint}
       </span>
@@ -106,7 +111,10 @@ function NumberField({ field, value, onChange }: { field: Extract<SpecField, { k
   }
   return (
     <label className="inspector-field spec-form__field" title={field.hint}>
-      <span className="inspector-field__label">{field.label}</span>
+      <span className="inspector-field__label">
+        <FieldIcon id={field.id} />
+        {field.label}
+      </span>
       <span className="inspector-field__input-wrap">
         <input
           type="text"

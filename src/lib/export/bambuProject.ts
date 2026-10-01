@@ -62,7 +62,7 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
   // system presets: then everything else (speeds, filament density…)
   // comes from those presets. Without it a plain box shows 0 g of
   // filament and a nine-hour estimate.
-  const printKeys = ['layer_height', 'initial_layer_print_height', 'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'sparse_infill_density', 'sparse_infill_pattern', 'seam_slope_type', 'seam_slope_start_height', 'seam_slope_gap', 'seam_slope_min_length']
+  const printKeys = ['layer_height', 'initial_layer_print_height', 'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'sparse_infill_density', 'sparse_infill_pattern', 'override_filament_scarf_seam_setting', 'seam_slope_type', 'seam_slope_start_height', 'seam_slope_gap', 'seam_slope_min_length']
   return {
     version: BAMBU_VERSION,
     from: 'project',
@@ -84,7 +84,10 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
     // Scarf seam on the outer wall: instead of stopping the extrusion
     // at one point, the slicer ramps each layer's start and end over
     // 8 mm (starting at 10 % of the layer height, with a 2 % gap), which
-    // is what makes the seam line disappear from a wall.
+    // is what makes the seam line disappear from a wall. Bambu Studio
+    // takes scarf settings from the filament profile unless the process
+    // says to override them, so that switch is on.
+    override_filament_scarf_seam_setting: '1',
     seam_slope_type: 'external',
     seam_slope_start_height: '10%',
     seam_slope_gap: '2%',
