@@ -3,13 +3,14 @@ import { skadisContainer, skadisHook } from './skadis'
 import { brorBin, brorHook } from './bror'
 import { pegboardBin, pegboardHook } from './pegboard'
 import { drawerDivider, drawerTray } from './drawer'
+import { petStand } from './petStand'
 
 export * from './types'
 export { SKADIS } from './skadis'
 export * from './boards'
 
 /** Every product the Create panel offers, in display order. */
-export const PRODUCT_TEMPLATES: ProductTemplate[] = [skadisContainer, skadisHook, brorBin, brorHook, pegboardBin, pegboardHook, drawerTray, drawerDivider]
+export const PRODUCT_TEMPLATES: ProductTemplate[] = [skadisContainer, skadisHook, brorBin, brorHook, pegboardBin, pegboardHook, drawerTray, drawerDivider, petStand]
 
 export function productTemplate(id: string): ProductTemplate | undefined {
   return PRODUCT_TEMPLATES.find((t) => t.id === id)

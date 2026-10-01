@@ -398,6 +398,25 @@ divider on the inside, a hook or stud on the outside) is a keep-out
 with its own height range, so no hole lands where a part joins the
 wall. The viewport and the exporter both pass these neighbours in.
 
+The pet bowl stand (`petStand.ts`, category Pets) is the first product
+with lettering: the pet's name in relief on the front, outlined from a
+bundled font (Nunito ExtraBold, OFL; `src/lib/text/textOutline.ts`
+parses it with opentype.js once, on `template.prepare()`, and
+`textRegions` then gives a string as shape regions with holes, cap
+height in mm; the `text` spec field kind and the `regions` part
+outline carry it). The stand is two parts in two colours that plug
+into each other and are glued: the body, a shell leaning out 8° that
+the bowl hangs in resting on its rim (opening = rim − 12 mm, 3 mm top
+plate, a `profile` scales the footprint per height), modelled rim-down
+as it prints, with the name and a figure (paw, bone, fish, heart)
+standing on the front wall tilted with it, 2.5 mm into the wall and
+1.2 mm proud (or engraved), and a finger slot through each side; and
+the base band with a 6 mm lip that fits inside the body's open bottom
+with 0.3 mm play. Because the body is modelled upside down and turned
+over about its front-back axis to use, the lettering is rotated half a
+turn in its plane. The two parts are separate groups and tiles, so
+they pack onto plates on their own and recolour on their own.
+
 A product travels as a recipe (`recipe.ts`): the template id and its
 settings, which is all the generator needs to rebuild it exactly.
 "Copy prompt" (in the Create sheet and on a product's section in the

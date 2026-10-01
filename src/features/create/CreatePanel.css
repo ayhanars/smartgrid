@@ -619,7 +619,8 @@
   margin: 0;
 }
 
-.spec-row__select select {
+.spec-row__select select,
+.spec-row__select input {
   width: 100%;
 }
 

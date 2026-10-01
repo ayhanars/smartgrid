@@ -23,6 +23,7 @@ function fieldText(f: SpecField, value: unknown): string | null {
     const o = f.options.find((x) => x.value === String(value))
     return `${f.label.toLowerCase()}: ${o?.label ?? String(value)}`
   }
+  if (f.kind === 'text') return String(value).trim() ? `${f.label.toLowerCase()} "${String(value).trim()}"` : null
   return value ? f.label.toLowerCase() : null
 }
 

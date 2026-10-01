@@ -1,4 +1,4 @@
-import type { Perforation, Point2, SurfaceTexture } from '../../types/document'
+import type { Perforation, Point2, ShapeProfile, ShapeRegion, SurfaceTexture } from '../../types/document'
 import type { ShellOptions } from '../geometry/shell'
 
 /** A value the user can set on a product: a number in mm (or a count),
@@ -9,6 +9,7 @@ export type SpecField =
   | { kind: 'number'; id: string; label: string; unit?: 'mm' | ''; min: number; max: number; step?: number; hint?: string }
   | { kind: 'select'; id: string; label: string; options: { value: string; label: string }[]; hint?: string }
   | { kind: 'boolean'; id: string; label: string; hint?: string }
+  | { kind: 'text'; id: string; label: string; maxLength?: number; placeholder?: string; hint?: string }
 
 export type ProductSpec = Record<string, SpecValue>
 
@@ -22,11 +23,16 @@ export interface PartRecipe {
   outline:
     | { kind: 'rect' | 'circle'; x: number; y: number; width: number; height: number }
     | { kind: 'path'; points: Point2[] }
+    /** Several outlines with holes (letters): one shape with many regions. */
+    | { kind: 'regions'; regions: ShapeRegion[] }
     /** A round section swept along a 3D path (product mm, z up). Its
      * height comes from the path; `depth`, `z` and tilts are ignored. */
     | { kind: 'tube'; radius: number; points: { x: number; y: number; z: number }[] }
   /** Extrusion height, mm. */
   depth: number
+  /** Width along the height (a tapered stand): the footprint scaled per
+   * height, see ShapeProfile. */
+  profile?: ShapeProfile
   cornerRadius?: number
   /** Fillet on both ends of the extrusion, mm (a peg rounded to fit a
    * round hole). */
@@ -118,6 +124,9 @@ export interface ProductTemplate {
   category: string
   /** Keywords the search also matches. */
   keywords?: string[]
+  /** Loads what the builder needs first (a font for lettering); the
+   * panel awaits it before building or previewing. */
+  prepare?: () => Promise<void>
   fields: SpecField[]
   defaults: ProductSpec
   /** Lays the product out from a spec. Never throws for a spec within
@@ -163,6 +172,8 @@ export function cleanSpec(template: ProductTemplate, spec: ProductSpec): Product
       }
     } else if (f.kind === 'select') {
       if (typeof v === 'string' && f.options.some((o) => o.value === v)) out[f.id] = v
+    } else if (f.kind === 'text') {
+      if (typeof v === 'string') out[f.id] = v.trim().slice(0, f.maxLength ?? 40)
     } else if (typeof v === 'boolean') out[f.id] = v
   }
   return out

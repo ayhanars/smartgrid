@@ -8,10 +8,11 @@ const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
 /** Where each setting belongs when the form is shown in sections, with
  * a plain-language line for the section. Unknown ids land in "More". */
 const SECTIONS: { id: string; title: string; hint: string; fields: string[] }[] = [
-  { id: 'size', title: 'Size', hint: 'Outer measurements of the finished piece.', fields: ['width', 'depth', 'height', 'front', 'length', 'reach', 'plate', 'count'] },
+  { id: 'size', title: 'Size', hint: 'Outer measurements of the finished piece.', fields: ['width', 'depth', 'height', 'front', 'length', 'reach', 'plate', 'count', 'bowl', 'bowlDepth', 'band'] },
+  { id: 'lettering', title: 'Lettering', hint: 'The name and figure on the front.', fields: ['name', 'figure', 'figurePos', 'emboss'] },
   { id: 'layout', title: 'Inside', hint: 'How the space is divided.', fields: ['columns', 'rows', 'layout', 'build', 'dividers', 'drain', 'edge', 'notches'] },
   { id: 'mount', title: 'Mounting', hint: 'How it hangs on the board.', fields: ['hooks', 'rows', 'board', 'holeKind', 'hole', 'slotHeight', 'pitchX', 'pitchY', 'stagger', 'sheet', 'pitch'] },
-  { id: 'walls', title: 'Walls & look', hint: 'Thicknesses, corners and the pattern on the walls.', fields: ['wall', 'floor', 'corner', 'thickness', 'crossing', 'arm', 'tip', 'pattern', 'patternSize'] },
+  { id: 'walls', title: 'Walls & look', hint: 'Thicknesses, corners and the pattern on the walls.', fields: ['wall', 'floor', 'corner', 'thickness', 'crossing', 'arm', 'tip', 'pattern', 'patternSize', 'shape', 'slots'] },
   { id: 'printing', title: 'Printing', hint: 'What happens when it is bigger than the bed.', fields: ['split', 'clips', 'outer', 'feet'] },
 ]
 
@@ -65,6 +66,18 @@ function renderField(f: SpecField, spec: ProductSpec, onChange: (id: string, val
         </div>
       )
     }
+    if (f.kind === 'text')
+      return (
+        <label key={f.id} className="spec-row spec-row--select" title={f.hint}>
+          <span className="spec-row__label">
+            <FieldIcon id={f.id} />
+            <span>{f.label}</span>
+          </span>
+          <span className="inspector-field__input-wrap spec-row__select">
+            <input type="text" value={String(spec[f.id] ?? '')} maxLength={f.maxLength ?? 40} placeholder={f.placeholder} onChange={(e) => onChange(f.id, e.target.value)} />
+          </span>
+        </label>
+      )
     if (f.kind === 'select')
       return (
         <label key={f.id} className="spec-row spec-row--select" title={f.hint}>
@@ -94,6 +107,16 @@ function renderField(f: SpecField, spec: ProductSpec, onChange: (id: string, val
     )
   }
   const hint = showHints && f.hint ? <small className="spec-form__hint">{f.hint}</small> : null
+  if (f.kind === 'text')
+    return (
+      <label key={f.id} className="inspector-field spec-form__field spec-form__field--wide" title={showHints ? undefined : f.hint}>
+        <span className="inspector-field__label">{f.label}</span>
+        <span className="inspector-field__input-wrap">
+          <input type="text" value={String(spec[f.id] ?? '')} maxLength={f.maxLength ?? 40} placeholder={f.placeholder} onChange={(e) => onChange(f.id, e.target.value)} />
+        </span>
+        {hint}
+      </label>
+    )
   if (f.kind === 'number') {
     const value = typeof spec[f.id] === 'number' ? (spec[f.id] as number) : f.min
     return <NumberField key={f.id} field={f} value={value} onChange={(v) => onChange(f.id, v)} />
