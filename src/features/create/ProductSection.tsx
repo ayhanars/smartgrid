@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { RefreshCcw } from 'lucide-react'
+import { Copy, RefreshCcw } from 'lucide-react'
 import { cleanSpec, productTemplate, type ProductSpec, type SpecValue } from '../../lib/products'
 import { artboardSize, useDocumentStore } from '../../state/documentStore'
 import { SpecForm } from './SpecForm'
 import { ProductPreview } from './ProductPreview'
+import { buildPrompt } from '../../lib/products/recipe'
+import { useViewStore } from '../../state/viewStore'
 
 /**
  * Shown above the tabs when the selection is (part of) a product the
@@ -57,6 +59,22 @@ export function ProductSection({ selection }: { selection: string[] }) {
         <RefreshCcw size={13} /> Update product
       </button>
       <p className="inspector-note">Rebuilds every part from these specs; changes made to the parts by hand are replaced. The parts themselves stay editable in the tabs below.</p>
+      <button
+        type="button"
+        className="inspector-product__copy"
+        title="Copy a description of this part with its recipe, for an image or chat tool. The recipe pastes back into Create as the exact part."
+        onClick={async () => {
+          const text = buildPrompt(template, spec)
+          try {
+            await navigator.clipboard.writeText(text)
+            useViewStore.getState().setNotice('Prompt copied. Paste it into your image or chat tool; the recipe in it rebuilds the part here.')
+          } catch {
+            console.log(text)
+          }
+        }}
+      >
+        <Copy size={13} /> Copy prompt
+      </button>
     </div>
   )
 }

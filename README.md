@@ -164,9 +164,11 @@ from the named system presets (`different_settings_to_system`), so Bambu
 Studio takes speeds, filament density and the rest from its own profiles
 rather than its bare defaults (which gave 0 g and hours-long
 estimates). The project also turns on Bambu Studio's scarf seam on
-the outer wall (`override_filament_scarf_seam_setting: 1`, since Bambu
-Studio otherwise takes scarf settings from the filament profile;
-`seam_slope_type: external`, start height 10 %, gap 2 %, length 8 mm): each layer's start and end are ramped over 8 mm
+the outer wall (`seam_slope_type: external`, start height 10 %, gap 2 %,
+length 8 mm, with `override_filament_scarf_seam_setting: 1`, and the
+same four values as the filament's own `filament_scarf_*` keys, since
+Bambu Studio reads scarf settings from the filament profile unless the
+process overrides them): each layer's start and end are ramped over 8 mm
 instead of butted at one point, which is what removes the seam line
 from a wall. Nothing else steers the seam: no painted enforcer, no
 seam position.
@@ -371,6 +373,22 @@ spots (optionally with an outer frame); a plate longer than the bed is
 cut with a half-lap. Templates get a `BuildContext` with the bed
 size for this. The panel keeps the last six products added, with their
 specs, under Recent (per browser).
+
+A product travels as a recipe (`recipe.ts`): the template id and its
+settings, which is all the generator needs to rebuild it exactly.
+"Copy prompt" (in the Create sheet and on a product's section in the
+inspector) puts a plain-language description of the piece on the
+clipboard, for an image or chat tool, with the JSON recipe and a link
+under it; "Copy link" gives just the link (`/new?create=<template>&
+spec=<base64url JSON>`), which opens a new project with the Create
+sheet on that product and those settings. "Paste recipe" in the
+picker reads any of these back (the JSON, a prompt or chat answer
+containing it, or the link) and opens the product with the settings;
+nothing is added until "Add to plate". In the Create sheet every
+setting is one row: a glyph showing what it changes (`FieldIcon.tsx`:
+the piece in outline, the measured part in the accent colour), the
+name, a slider and the value, with the explanation as the row's
+tooltip.
 
 The BROR bin (and the "any pegboard" bin on a round-hole board) is a
 printed BROR bin copied 1:1 from its STL (`scoopBin.ts`, mounts in

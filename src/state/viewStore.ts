@@ -36,6 +36,9 @@ interface ViewState {
   /** A product the panel should open on (a generator card was clicked). */
   createTemplate: string | null
   setCreateTemplate: (id: string | null) => void
+  /** Settings to open that product with (a shared link's recipe). */
+  createSpec: Record<string, number | string | boolean> | null
+  setCreateSpec: (spec: Record<string, number | string | boolean> | null) => void
   /** Which panes the editor shows; mirrored from the shell so panels can
    * follow it (the inspector jumps to its 3D tab in 3D-only mode). */
   viewMode: '2d' | 'split' | '3d'
@@ -65,6 +68,8 @@ export const useViewStore = create<ViewState>()((set) => ({
   setCreateOpen: (on) => set({ createOpen: on }),
   createTemplate: null,
   setCreateTemplate: (id) => set({ createTemplate: id }),
+  createSpec: null,
+  setCreateSpec: (spec) => set({ createSpec: spec }),
   viewMode: 'split',
   setViewMode: (mode) => set({ viewMode: mode }),
 }))

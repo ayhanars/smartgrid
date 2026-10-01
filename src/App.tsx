@@ -25,10 +25,12 @@ function NewProjectRedirect() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const create = params.get('create')
+  const spec = params.get('spec')
   useEffect(() => {
     const meta = createLocalProject(emptyDocument())
-    navigate(`/p/${meta.id}${create ? `?create=${encodeURIComponent(create)}` : ''}`, { replace: true })
-  }, [navigate, create])
+    const query = create ? `?create=${encodeURIComponent(create)}${spec ? `&spec=${encodeURIComponent(spec)}` : ''}` : ''
+    navigate(`/p/${meta.id}${query}`, { replace: true })
+  }, [navigate, create, spec])
   return null
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Anchor, Clock, Grid2x2, Package, Plus, Rows3, Search, X } from 'lucide-react'
+import { ArrowLeft, Anchor, ClipboardPaste, Clock, Copy, Grid2x2, Link, Package, Plus, Rows3, Search, X } from 'lucide-react'
 import { PRODUCT_TEMPLATES, cleanSpec, productTemplate, searchTemplates, type ProductSpec, type ProductTemplate, type SpecValue } from '../../lib/products'
 import { artboardSize, useDocumentStore } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
@@ -7,6 +7,7 @@ import { SpecForm } from './SpecForm'
 import { ProductPreview } from './ProductPreview'
 import { GeneratorArt } from './GeneratorArt'
 import { describeSpec, listRecentProducts, rememberRecentProduct, type RecentProduct } from './recents'
+import { buildPrompt, encodeSpecParam, parseRecipe } from '../../lib/products/recipe'
 import './CreatePanel.css'
 
 const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'skadis-hook': Anchor, 'bror-bin': Package, 'bror-hook': Anchor, 'pegboard-bin': Package, 'pegboard-hook': Anchor, 'drawer-tray': Grid2x2, 'drawer-divider': Rows3 }
@@ -25,6 +26,8 @@ export function CreatePanel() {
   const setOpen = useViewStore((s) => s.setCreateOpen)
   const requested = useViewStore((s) => s.createTemplate)
   const setRequested = useViewStore((s) => s.setCreateTemplate)
+  const requestedSpec = useViewStore((s) => s.createSpec)
+  const setRequestedSpec = useViewStore((s) => s.setCreateSpec)
   const generateProduct = useDocumentStore((s) => s.generateProduct)
   const setNotice = useViewStore((s) => s.setNotice)
   const [query, setQuery] = useState('')
@@ -32,6 +35,9 @@ export function CreatePanel() {
   const [pickedId, setPickedId] = useState<string | null>(null)
   const [spec, setSpec] = useState<ProductSpec>({})
   const [recents, setRecents] = useState<RecentProduct[]>(() => listRecentProducts())
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
+  const [pasteError, setPasteError] = useState<string | null>(null)
   const bedPresetId = useDocumentStore((s) => s.bedPresetId)
   const customBedWidth = useDocumentStore((s) => s.customBedWidth)
   const customBedHeight = useDocumentStore((s) => s.customBedHeight)
@@ -48,11 +54,12 @@ export function CreatePanel() {
     if (!open || !requested) return
     const t = productTemplate(requested)
     setRequested(null)
+    setRequestedSpec(null)
     if (t) {
       setPickedId(t.id)
-      setSpec({ ...t.defaults })
+      setSpec({ ...t.defaults, ...(requestedSpec ? cleanSpec(t, requestedSpec) : {}) })
     }
-  }, [open, requested, setRequested])
+  }, [open, requested, requestedSpec, setRequested, setRequestedSpec])
 
   useEffect(() => {
     if (!open) return
@@ -86,6 +93,29 @@ export function CreatePanel() {
     }
   }
   const cleanPicked = picked ? cleanSpec(picked, spec) : null
+  const copyText = async (text: string, what: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setNotice(`${what} copied. Paste it into your image or chat tool; the recipe in it rebuilds the part here.`)
+    } catch {
+      setNotice(`Could not reach the clipboard; ${what.toLowerCase()} is in the browser console.`)
+      console.log(text)
+    }
+  }
+  const copyPrompt = () => picked && copyText(buildPrompt(picked, spec), 'Prompt')
+  const copyLink = () => picked && copyText(`${window.location.origin}${window.location.pathname}#/new?create=${encodeURIComponent(picked.id)}&spec=${encodeSpecParam(cleanSpec(picked, spec))}`, 'Link')
+  const openPasted = () => {
+    const recipe = parseRecipe(pasteText)
+    const t = recipe ? productTemplate(recipe.template) : undefined
+    if (!recipe || !t) {
+      setPasteError('No smartgrid recipe found in that text. It needs the JSON with "template" and "spec", or a smartgrid link.')
+      return
+    }
+    setPasteOpen(false)
+    setPasteText('')
+    setPasteError(null)
+    pick(t, recipe.spec)
+  }
 
   return (
     <div
@@ -106,6 +136,12 @@ export function CreatePanel() {
                 <strong>{picked.name}</strong>
                 <span>{picked.tagline}</span>
               </div>
+              <button type="button" className="create-panel__text-btn" title="Copy a description of this part with its recipe, for an image or chat tool. The recipe pastes back here as the exact part." onClick={copyPrompt}>
+                <Copy size={14} /> Copy prompt
+              </button>
+              <button type="button" className="create-panel__text-btn" title="Copy a link that opens this part with these settings." onClick={copyLink}>
+                <Link size={14} /> Copy link
+              </button>
               <button type="button" className="create-panel__icon-btn" aria-label="Close" onClick={() => setOpen(false)}>
                 <X size={16} />
               </button>
@@ -140,6 +176,9 @@ export function CreatePanel() {
                 <Search size={16} />
                 <input ref={searchRef} type="search" placeholder="Search products" value={query} onChange={(e) => setQuery(e.target.value)} />
               </label>
+              <button type="button" className={`create-panel__text-btn ${pasteOpen ? 'create-panel__text-btn--active' : ''}`} title="Open a part from a recipe or link you were given." onClick={() => setPasteOpen((v) => !v)}>
+                <ClipboardPaste size={14} /> Paste recipe
+              </button>
               <button type="button" className="create-panel__icon-btn" aria-label="Close" onClick={() => setOpen(false)}>
                 <X size={16} />
               </button>
@@ -154,6 +193,24 @@ export function CreatePanel() {
                 </button>
               ))}
             </div>
+            {pasteOpen && (
+              <div className="create-panel__paste">
+                <textarea
+                  value={pasteText}
+                  placeholder={'Paste a recipe here: the JSON with "template" and "spec" (from Copy prompt, or an AI tool\'s answer), or a smartgrid link.'}
+                  onChange={(e) => {
+                    setPasteText(e.target.value)
+                    setPasteError(null)
+                  }}
+                />
+                <div className="create-panel__paste-row">
+                  {pasteError ? <span className="create-panel__paste-error">{pasteError}</span> : <span className="create-panel__paste-hint">Opens the product with those settings; nothing is added until you press Add to plate.</span>}
+                  <button type="button" className="create-panel__primary create-panel__primary--small" disabled={!pasteText.trim()} onClick={openPasted}>
+                    Open
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="create-panel__list">
               {!query && category === null && recents.length > 0 && (
                 <>
