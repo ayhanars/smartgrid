@@ -37,13 +37,16 @@ export async function renderThumbnails(meshes: ExportMesh[], plateCount: number)
           return
         }
         if (m.positions.length === 0) return
+        // The export's own arrays are what the file is written from, so
+        // they are only read here: copies for the geometry, and the
+        // Z-up → Y-up turn on the object, not the vertices.
         const geometry = new THREE.BufferGeometry()
-        geometry.setAttribute('position', new THREE.BufferAttribute(m.positions, 3))
-        if (m.indices) geometry.setIndex(new THREE.BufferAttribute(m.indices, 1))
-        // Slicer coordinates are Z-up; three.js draws Y-up.
-        geometry.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2))
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(m.positions), 3))
+        if (m.indices) geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(m.indices), 1))
         geometry.computeVertexNormals()
         const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: new THREE.Color(m.color || '#4d8dff'), roughness: 0.55, metalness: 0.05 }))
+        mesh.rotation.x = -Math.PI / 2
+        mesh.updateMatrixWorld()
         scene.add(mesh)
         box.expandByObject(mesh)
         any = true
