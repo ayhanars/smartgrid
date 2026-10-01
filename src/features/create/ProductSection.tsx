@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Copy, RefreshCcw } from 'lucide-react'
+import { ImagePlay, RefreshCcw } from 'lucide-react'
 import { cleanSpec, productTemplate, type ProductSpec, type SpecValue } from '../../lib/products'
 import { artboardSize, useDocumentStore } from '../../state/documentStore'
 import { SpecForm } from './SpecForm'
 import { ProductPreview } from './ProductPreview'
-import { buildPrompt } from '../../lib/products/recipe'
-import { useViewStore } from '../../state/viewStore'
+import { MockupDialog } from './MockupDialog'
 
 /**
  * Shown above the tabs when the selection is (part of) a product the
@@ -30,6 +29,7 @@ export function ProductSection({ selection }: { selection: string[] }) {
   const template = recipe ? productTemplate(recipe.template) : undefined
 
   const [spec, setSpec] = useState<ProductSpec>({})
+  const [mockup, setMockup] = useState(false)
   useEffect(() => {
     setSpec(recipe ? { ...recipe.spec } : {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,22 +59,10 @@ export function ProductSection({ selection }: { selection: string[] }) {
         <RefreshCcw size={13} /> Update product
       </button>
       <p className="inspector-note">Rebuilds every part from these specs; changes made to the parts by hand are replaced. The parts themselves stay editable in the tabs below.</p>
-      <button
-        type="button"
-        className="inspector-product__copy"
-        title="Copy a description of this part with its recipe, for an image or chat tool. The recipe pastes back into Create as the exact part."
-        onClick={async () => {
-          const text = buildPrompt(template, spec)
-          try {
-            await navigator.clipboard.writeText(text)
-            useViewStore.getState().setNotice('Prompt copied. Paste it into your image or chat tool; the recipe in it rebuilds the part here.')
-          } catch {
-            console.log(text)
-          }
-        }}
-      >
-        <Copy size={13} /> Copy prompt
+      <button type="button" className="inspector-product__copy" title="A render of this part, the prompt and the recipe, for making a mockup in an image tool." onClick={() => setMockup(true)}>
+        <ImagePlay size={13} /> Mockup kit
       </button>
+      {mockup && <MockupDialog template={template} spec={recipe.spec} layerIds={order.filter((id) => layers[id]?.groupId === groupId)} onClose={() => setMockup(false)} />}
     </div>
   )
 }

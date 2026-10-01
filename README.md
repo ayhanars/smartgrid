@@ -400,7 +400,13 @@ clipboard, for an image or chat tool, with the JSON recipe and a link
 under it (one 16:9 mockup of the whole part, every hook and
 compartment visible, no close-ups, with a scene and a filament colour
 picked at random each time so two people do not get the same picture);
-"Copy link" gives just the link (`/new?create=<template>&
+a product on the plate also has a "Mockup kit" (`MockupDialog.tsx`)
+in its inspector section: two renders of the exact part, front and
+back with the mounts (the shared renderer, 1280 × 720 on a light
+background, to download or copy), the prompt, which then tells the
+tool to match the attached pictures and also describes what was done
+to the parts afterwards (holes drilled into a wall, a surface pattern,
+from `describeExtras`), and the recipe on its own; "Copy link" gives just the link (`/new?create=<template>&
 spec=<base64url JSON>`), which opens a new project with the Create
 sheet on that product and those settings. "Paste recipe" in the
 picker reads any of these back (the JSON, a prompt or chat answer
