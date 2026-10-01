@@ -192,22 +192,36 @@ export function holeFootprintsInLocalFrame(solid: ShapeLayer, hole: ShapeLayer):
 /** The shape's own perforation cutter (real holes through its walls/top),
  * in the same frame and orientation as `buildLayerGeometries` — subtract
  * it like any hole. Null when the shape has no perforation. */
-export function buildLayerCutters(layer: ShapeLayer, scale: number, holes: ShapeLayer[] = []): THREE.BufferGeometry[] {
+export function buildLayerCutters(layer: ShapeLayer, scale: number, holes: ShapeLayer[] = [], neighbours: ShapeLayer[] = []): THREE.BufferGeometry[] {
   if (!layer.perforation || layer.isHole) return []
   const contour = effectiveContour(layer)
   if (!contour) return []
   const depth = Math.max(0.2, layer.extrusionDepth)
   // Hollowed cavities are where "through the wall" holes stop; every other
-  // cutter (a carved pocket, a magnet recess) is something to keep out of.
+  // cutter (a carved pocket, a magnet recess) is something to keep out of,
+  // and so is any other solid touching this one (a divider on the inside,
+  // a hook on the outside): holes stay clear of where they join.
   const innerContours = holes.filter((h) => h.shellOf).flatMap((hole) => holeFootprintsInLocalFrame(layer, hole))
-  const obstacles = holes
-    .filter((h) => !h.shellOf)
-    .map((hole) => ({
-      rings: holeFootprintsInLocalFrame(layer, hole),
-      zFrom: hole.transform.z - layer.transform.z,
-      zTo: hole.transform.z - layer.transform.z + hole.extrusionDepth,
-    }))
-  const cutters = buildPerforationCutter(contour, depth, layer.perforation, { innerContours, obstacles, ...builtBevels(contour, depth, layer) })
+  const tilted = (h: ShapeLayer) => !!(h.transform.rotationX || h.transform.rotationY)
+  const obstacles = [
+    ...holes
+      .filter((h) => !h.shellOf && !tilted(h))
+      .map((hole) => ({
+        rings: holeFootprintsInLocalFrame(layer, hole),
+        zFrom: hole.transform.z - layer.transform.z,
+        zTo: hole.transform.z - layer.transform.z + hole.extrusionDepth,
+      })),
+    ...neighbours
+      .filter((other) => other.id !== layer.id && !other.isHole)
+      .map((other) => {
+        const range = layerZRange(other)
+        return { rings: holeFootprintsInLocalFrame(layer, other), zFrom: range.bottomZ - layer.transform.z, zTo: range.topZ - layer.transform.z }
+      }),
+  ]
+  // A tilted cutter (a sloped top) has no plan footprint worth the name:
+  // its volume is tested directly, in this shape's own frame.
+  const isCut = tiltedKeepOut(layer, holes.filter((h) => !h.shellOf && tilted(h)))
+  const cutters = buildPerforationCutter(contour, depth, layer.perforation, { innerContours, obstacles, isCut, ...builtBevels(contour, depth, layer) })
   if (cutters.length === 0) return []
   // Same bake as the body: derive it from the body's own (unscaled) mesh.
   const body = buildBeveledGeometry(contour, depth, layer.bevelBottom, layer.bevelTop)
@@ -227,6 +241,40 @@ export function buildLayerCutters(layer: ShapeLayer, scale: number, holes: Shape
     cutter.scale(scale, scale, scale)
     return bake ? cutter.applyMatrix4(bake) : cutter
   })
+}
+
+/** A point-in-volume test over the given cutters, taking points in
+ * `solid`'s unrotated local frame (mm, Y up, before rotation baking). */
+function tiltedKeepOut(solid: ShapeLayer, cutters: ShapeLayer[]): ((points: THREE.Vector3[]) => boolean) | undefined {
+  if (cutters.length === 0) return undefined
+  const all = solid.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
+  const bounds = contourBounds(all)
+  const cx = bounds.x + bounds.width / 2
+  const cy = bounds.y + bounds.height / 2
+  const spin = (-solid.transform.rotation * Math.PI) / 180
+  const meshes = cutters.flatMap((hole) =>
+    buildLayerGeometries(hole, 1).map((geo) => {
+      // Into world (scene frame: x, height, doc y), then into the solid's
+      // local frame: its origin, and its spin undone about its centre.
+      geo.translate(hole.transform.x - solid.transform.x, hole.transform.z - solid.transform.z, hole.transform.y - solid.transform.y)
+      if (spin) {
+        geo.translate(-cx, 0, -cy)
+        geo.applyMatrix4(new THREE.Matrix4().makeRotationY(-spin))
+        geo.translate(cx, 0, cy)
+      }
+      geo.computeBoundingBox()
+      return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }))
+    }),
+  )
+  const ray = new THREE.Raycaster()
+  const dir = new THREE.Vector3(0.3127, 0.1911, 0.9306).normalize()
+  const inside = (p: THREE.Vector3) =>
+    meshes.some((m) => {
+      if (!m.geometry.boundingBox!.containsPoint(p)) return false
+      ray.set(p, dir)
+      return ray.intersectObject(m, false).length % 2 === 1
+    })
+  return (points) => points.some(inside)
 }
 
 /** Real geometric Z range (mm, print frame) of the built shape — derived

@@ -26,7 +26,7 @@ export function planCut(
   holeLayers: ShapeLayer[],
   scale: number,
   toWorld: (layer: ShapeLayer) => { worldX: number; worldY: number; worldZ: number },
-  options: { fastShading?: boolean; minStep?: number } = {},
+  options: { fastShading?: boolean; minStep?: number; neighbours?: ShapeLayer[] } = {},
 ): CutPlan {
   // The common hollow vase / cup: built as a shell outright, no boolean.
   if (holeLayers.length === 1 && canBuildShellDirectly(solid, holeLayers[0])) {
@@ -48,7 +48,7 @@ export function planCut(
           const w = toWorld(hole)
           return buildLayerGeometries(hole, scale, { tessellate }).map((geometry) => ({ geometry, ...w }))
         }),
-        ...buildLayerCutters(solid, scale, holeLayers).map((geometry) => ({ geometry, ...solidWorld })),
+        ...buildLayerCutters(solid, scale, holeLayers, options.neighbours).map((geometry) => ({ geometry, ...solidWorld })),
       ]
     }
     return built
