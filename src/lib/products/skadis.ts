@@ -122,7 +122,6 @@ export const skadisContainer: ProductTemplate = {
         outline: { kind: 'path', points: binOutline(width, depth, Math.max(0, corner), boxY) },
         depth: height,
         hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' },
-        seam: 'back-left',
       },
     ]
     if (drain) {
