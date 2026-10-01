@@ -402,6 +402,9 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
     }
     if (part.outline.kind === 'path') {
       id = api.addPenShape(part.outline.points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y })))
+      // A drawn cutter (a slope cut off a bin): the cut has the drawn
+      // shape exactly, as carveWith makes one.
+      if (part.isHole) useDocumentStore.setState((s) => ({ layers: { ...s.layers, [id]: { ...s.layers[id], kind: 'hole', isHole: true, bevelMode: 'shape' } } }))
     } else {
       const kind = part.isHole ? 'hole' : part.outline.kind
       id = api.addShape(kind, { x: part.outline.x + shift.x, y: part.outline.y + shift.y, width: part.outline.width, height: part.outline.height })

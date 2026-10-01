@@ -1,6 +1,6 @@
-import { bool, num, str, type PartRecipe, type ProductSpec, type ProductTemplate, type SpecField } from './types'
-import { dividerParts } from './dividers'
-import { binOutline, jHook, ROD_LIFT, rodParts, rodReach, type MountDims } from './mount'
+import { num, type ProductSpec, type ProductTemplate, type SpecField } from './types'
+import { brorHookParts, HOOK_CLEAR, HOOK_PLAY, hookReach, jHook, type MountDims } from './mount'
+import { scoopAnchors, scoopBinParts, scoopBinSpec } from './scoopBin'
 import { BROR_BOARD, type PegPattern } from './boards'
 
 /**
@@ -17,48 +17,22 @@ const MOUNT_FIELDS: SpecField[] = [
 ]
 const MOUNT_DEFAULTS: ProductSpec = { hole: BROR_BOARD.pattern.kind === 'round' ? BROR_BOARD.pattern.diameter : 6, pitch: BROR_BOARD.pattern.pitchX, sheet: BROR_BOARD.thickness }
 
-/** A round rod that fills a round hole: the hole less 0.4 mm of play.
- * It is the rod of a printed BROR holder, copied 1:1: it sits on top of
- * the back wall and goes straight through the hole (see rodParts). */
+/** The mounts, sized from the hole: a hook 1.2 mm thinner than the
+ * hole and a stud 0.5 mm thinner (see brorHookParts). */
 function mountFrom(spec: ProductSpec): { dims: MountDims; pitch: number; pattern: PegPattern; reach: number } {
   const hole = num(spec, 'hole', 6)
   const sheet = num(spec, 'sheet', 1.5)
   const pitch = num(spec, 'pitch', 30)
-  const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
-  const gap = sheet + 0.6
-  const hook = rodReach(peg)
+  const d = Math.max(2, Math.round((hole - HOOK_PLAY) * 10) / 10)
+  const gap = sheet + HOOK_CLEAR
+  const hook = hookReach(d)
   return {
-    // lipThickness here is how far behind the sheet the peg reaches.
-    dims: { tabThickness: peg, tabWidth: peg, lipThickness: hook.back, gap, lipDrop: 0, lipRise: hook.up, round: Math.round((peg / 2 - 0.1) * 10) / 10 },
+    // lipThickness here is how far behind the sheet the hook reaches.
+    dims: { tabThickness: d, tabWidth: d, lipThickness: hook.back, gap, lipDrop: 0, lipRise: hook.up - d / 2, round: Math.round((d / 2 - 0.1) * 10) / 10 },
     pitch,
     pattern: { kind: 'round', pitchX: pitch, pitchY: pitch, stagger: false, diameter: hole },
     reach: gap + hook.back,
   }
-}
-
-/** Height of the rods' centre: the rod rests on the bin's top edge, its
- * underside ROD_LIFT above it. */
-function shankCenter(height: number, dims: MountDims): number {
-  return height + ROD_LIFT + dims.tabThickness / 2
-}
-
-/** Rows of straight studs under the hook row: as many as fit and the
- * size asks for — one on any bin taller than a pitch and a half, two on
- * a big one (deep, or tall and wide, or over about half a litre). */
-function studRows(spec: ProductSpec, height: number, pitch: number, dims: MountDims): number {
-  const most = Math.max(0, Math.floor((shankCenter(height, dims) - dims.tabThickness / 2 - 3) / pitch))
-  const choice = str(spec, 'rows', 'auto')
-  if (choice !== 'auto') return Math.min(most, Math.max(0, parseInt(choice, 10) || 0))
-  const width = num(spec, 'width', 90)
-  const depth = num(spec, 'depth', 60)
-  const big = depth >= 80 || (height >= 100 && width >= 120) || width * depth * height >= 480000
-  return Math.min(most, big ? 2 : 1)
-}
-
-function hookCount(width: number, choice: string, pitch: number, peg: number): number {
-  const most = Math.max(1, Math.floor((width - peg) / pitch) + 1)
-  if (choice !== 'auto') return Math.min(most, Math.max(1, parseInt(choice, 10) || 1))
-  return Math.min(most, Math.max(1, Math.round((width - 10) / pitch)))
 }
 
 export const brorBin: ProductTemplate = {
@@ -70,15 +44,17 @@ export const brorBin: ProductTemplate = {
   fields: [
     { kind: 'number', id: 'width', label: 'Width', unit: 'mm', min: 30, max: 240, step: 1 },
     { kind: 'number', id: 'depth', label: 'Depth', unit: 'mm', min: 20, max: 150, step: 1 },
-    { kind: 'number', id: 'height', label: 'Height', unit: 'mm', min: 20, max: 200, step: 1 },
-    { kind: 'number', id: 'wall', label: 'Wall', unit: 'mm', min: 1.2, max: 4, step: 0.2 },
-    { kind: 'number', id: 'corner', label: 'Corner radius', unit: 'mm', min: 0, max: 30, step: 1 },
+    { kind: 'number', id: 'height', label: 'Height', unit: 'mm', min: 20, max: 200, step: 1, hint: 'At the back, where it hangs.' },
+    { kind: 'number', id: 'front', label: 'Front height', unit: 'mm', min: 10, max: 200, step: 1, hint: 'Lower than the height makes a scoop: the sides slope down to it at 33°.' },
+    { kind: 'number', id: 'wall', label: 'Wall', unit: 'mm', min: 1.2, max: 4, step: 0.1 },
+    { kind: 'number', id: 'floor', label: 'Floor', unit: 'mm', min: 1.2, max: 10, step: 0.5 },
+    { kind: 'number', id: 'corner', label: 'Corner radius', unit: 'mm', min: 0, max: 30, step: 0.5 },
     {
       kind: 'select',
       id: 'hooks',
-      label: 'Pegs across',
+      label: 'Hooks across',
       options: [
-        { value: 'auto', label: 'Auto (one per 30 mm)' },
+        { value: 'auto', label: 'Auto (30 mm in from each side)' },
         { value: '1', label: '1' },
         { value: '2', label: '2' },
         { value: '3', label: '3' },
@@ -90,7 +66,7 @@ export const brorBin: ProductTemplate = {
       id: 'rows',
       label: 'Stud rows below',
       options: [
-        { value: 'auto', label: 'Auto (by size)' },
+        { value: 'auto', label: 'Auto (one)' },
         { value: '0', label: 'None' },
         { value: '1', label: '1' },
         { value: '2', label: '2' },
@@ -101,68 +77,19 @@ export const brorBin: ProductTemplate = {
     { kind: 'boolean', id: 'drain', label: 'Drain hole in the floor' },
     ...MOUNT_FIELDS,
   ],
-  defaults: { width: 90, depth: 60, height: 80, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', dividers: 0, drain: false, ...MOUNT_DEFAULTS },
-  notes: 'Prints standing up. The rods are a printed BROR holder\'s, copied 1:1: they rest on the back wall\'s top edge and go straight through the holes; straight studs below sit in the holes so it cannot tilt. The gusset under each rod prints it without support. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
+  defaults: { width: 120, depth: 80, height: 70, front: 38, wall: 2.5, floor: 5, corner: 2.5, hooks: 'auto', rows: 'auto', dividers: 0, drain: false, ...MOUNT_DEFAULTS },
+  notes: 'A printed BROR bin, copied 1:1. Prints standing up, no support. Each hook goes through its hole and bends 50° up behind the sheet, with a domed end; the stud one hole below sits straight in its hole so the bin cannot tilt. The parts export as one body. Check hole diameter and sheet thickness on your board first.',
   preview: (spec: ProductSpec) => {
-    const width = num(spec, 'width', 90)
-    const height = num(spec, 'height', 80)
-    const { dims, pitch, pattern } = mountFrom(spec)
-    const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pitch, dims.tabWidth)
-    const studs = studRows(spec, height, pitch, dims)
-    const span = (hooks - 1) * pitch
-    const top = height - shankCenter(height, dims) - dims.tabThickness / 2
-    const anchors = []
-    for (let r = 0; r <= studs; r++) for (let i = 0; i < hooks; i++) anchors.push({ x: width / 2 - span / 2 + i * pitch - dims.tabWidth / 2, y: top + r * pitch, width: dims.tabWidth, height: dims.tabThickness })
-    const studNote = studs > 0 ? ` + ${hooks * studs} stud${hooks * studs === 1 ? '' : 's'}` : ''
-    return { pattern, silhouette: { width, height }, anchors, caption: `Back view · ${hooks} hook${hooks === 1 ? '' : 's'}${studNote} on the ${pitch} mm grid` }
+    const { pitch, pattern } = mountFrom(spec)
+    const s = scoopBinSpec(spec, { hole: num(spec, 'hole', 6), sheet: num(spec, 'sheet', 1.5), pitch })
+    const studs = s.columns.length * s.studRows
+    return { pattern, silhouette: { width: s.width, height: s.height }, anchors: scoopAnchors(s), caption: `Back view · ${s.columns.length} hook${s.columns.length === 1 ? '' : 's'}${studs ? ` + ${studs} stud${studs === 1 ? '' : 's'}` : ''} on the ${pitch} mm grid` }
   },
   build: (spec: ProductSpec) => {
-    const width = num(spec, 'width', 90)
-    const depth = num(spec, 'depth', 60)
-    const height = num(spec, 'height', 80)
-    const wall = num(spec, 'wall', 2)
-    const corner = Math.max(0, Math.min(num(spec, 'corner', 6), Math.min(width, depth) / 2 - wall))
-    const drain = bool(spec, 'drain', false)
-    const { dims, pitch, reach } = mountFrom(spec)
-    const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pitch, dims.tabWidth)
-    const studs = studRows(spec, height, pitch, dims)
-    const embed = Math.min(1, wall / 2)
-    const boxY = reach
-    const center = shankCenter(height, dims)
-    const parts: PartRecipe[] = [
-      { name: 'Bin', color: COLOR, outline: { kind: 'path', points: binOutline(width, depth, corner, boxY) }, depth: height, hollow: { wall, floor: Math.max(wall, 1.6), openFrom: 'top' } },
-    ]
-    if (drain) {
-      const d = Math.min(8, Math.max(3, Math.min(width, depth) / 4))
-      parts.push({ name: 'Drain', outline: { kind: 'circle', x: width / 2 - d / 2, y: boxY + depth / 2 - d / 2, width: d, height: d }, depth: Math.max(wall, 1.6) + 2, z: -1, isHole: true })
-    }
-    parts.push(...dividerParts({ count: num(spec, 'dividers', 0), width, depth, height, wall, boxY, color: COLOR }))
-    const span = (hooks - 1) * pitch
-    for (let i = 0; i < hooks; i++) {
-      parts.push(...rodParts({ standing: true, d: dims.tabThickness, gap: dims.gap, wall, color: COLOR, name: hooks === 1 ? 'Rod' : `Rod ${i + 1}`, cx: width / 2 - span / 2 + i * pitch, faceY: boxY, top: height }))
-    }
-    // Straight studs: a cylinder from inside the wall through the sheet
-    // and one peg further (tilted 90° about x, a circle's extrusion runs
-    // along depth).
-    const studLength = embed + dims.gap + dims.tabThickness
-    const d = dims.tabThickness
-    let n = 0
-    for (let r = 1; r <= studs; r++) {
-      for (let i = 0; i < hooks; i++) {
-        n++
-        const cx = width / 2 - span / 2 + i * pitch
-        const centerB = (dims.gap + dims.tabThickness - embed) / 2
-        parts.push({
-          name: hooks * studs === 1 ? 'Stud' : `Stud ${n}`,
-          color: COLOR,
-          outline: { kind: 'circle', x: cx - d / 2, y: boxY - centerB - d / 2, width: d, height: d },
-          depth: studLength,
-          rotation: { x: 90 },
-          z: center - r * pitch - d / 2,
-        })
-      }
-    }
-    return { width, height: boxY + depth, parts, fuse: true }
+    const { pitch } = mountFrom(spec)
+    const s = scoopBinSpec(spec, { hole: num(spec, 'hole', 6), sheet: num(spec, 'sheet', 1.5), pitch })
+    const { parts, boxY } = scoopBinParts(s, COLOR)
+    return { width: s.width, height: boxY + s.depth, parts, fuse: true }
   },
 }
 
@@ -201,10 +128,10 @@ export const brorHook: ProductTemplate = {
     const plate = base.parts[0]
     const plateT = 4
     const offset = plateT + num(spec, 'reach', 40)
-    // The rod sits above the plate's top edge (canvas y = lipRise, which
-    // base.height already includes), centred across the plate's width
-    // and resting on the bed when the plate is thinner than it.
-    const peg = rodParts({ standing: false, d, gap: dims.gap, wall: plateT, color: COLOR, name: 'Rod', faceX: offset, topY: dims.lipRise ?? 0, zc: Math.max(d / 2, width / 2) })
+    // Shank centre: the hook's tip rises `lipRise` above the plate's top
+    // (base.height already includes it). The hook is centred across the
+    // plate's width, resting on the bed when the plate is thinner than it.
+    const peg = brorHookParts({ standing: false, d, gap: dims.gap, embed: plateT - 0.5, color: COLOR, name: 'Hook', faceX: offset, shankY: hookReach(d).up, zc: Math.max(d / 2, width / 2) })
     return { width: base.width, height: base.height, parts: [plate, ...peg], fuse: true }
   },
 }

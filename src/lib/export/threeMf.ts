@@ -1,6 +1,7 @@
 import { zipSync, strToU8 } from 'fflate'
 import type { ExportMesh } from './exportMeshes'
 import type { PrintSettings } from '../../types/document'
+import type { PlateThumbnail } from './thumbnail'
 import { BAMBU_GENERATOR, bambuProjectConfig, isBambuPrinter } from './bambuProject'
 
 function escapeXml(s: string): string {
@@ -94,6 +95,9 @@ export interface ThreeMfOptions {
    * the file then opens with its plates, print settings and filaments
    * instead of as loose geometry. */
   bambu?: { bedPresetId: string; printSettings?: Partial<PrintSettings> }
+  /** Plate pictures (see renderThumbnails): Metadata/plate_N.png, the
+   * first also the package thumbnail Bambu Studio shows for the project. */
+  thumbnails?: PlateThumbnail[]
 }
 
 export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadata | ThreeMfOptions = {}): Uint8Array<ArrayBuffer> {
@@ -101,6 +105,7 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
   const metadata = options.metadata ?? {}
   const plateNames = options.plates && options.plates.length > 1 ? options.plates : null
   const bambu = options.bambu && isBambuPrinter(options.bambu.bedPresetId) ? options.bambu : null
+  const thumbnails = options.thumbnails ?? []
   const colors = [...new Set(meshes.flatMap((m) => (m.components ?? [m]).map((c) => normalizeColor(c.color))))]
 
   const baseMaterials = colors
@@ -187,12 +192,14 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
     `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n` +
     `  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />\n` +
     `  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />\n` +
-    `  <Default Extension="config" ContentType="text/xml" />\n</Types>\n`
+    `  <Default Extension="config" ContentType="text/xml" />\n` +
+    `  <Default Extension="png" ContentType="image/png" />\n</Types>\n`
 
   const rels =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n` +
     `  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" />\n` +
+    (thumbnails[0] ? `  <Relationship Target="/Metadata/plate_${thumbnails[0].plate}.png" Id="rel1" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail" />\n` : '') +
     `</Relationships>\n`
 
   const plateBlocks = plateNames
@@ -219,8 +226,14 @@ export function write3mf(meshes: ExportMesh[], metadataOrOptions: ThreeMfMetadat
     2,
   )
 
+  const pictures: Record<string, Uint8Array> = {}
+  for (const t of thumbnails) {
+    pictures[`Metadata/plate_${t.plate}.png`] = t.png
+    pictures[`Metadata/plate_${t.plate}_small.png`] = t.small
+  }
   const zipped = zipSync(
     {
+      ...pictures,
       '[Content_Types].xml': strToU8(contentTypes),
       '_rels/.rels': strToU8(rels),
       '3D/3dmodel.model': strToU8(model),

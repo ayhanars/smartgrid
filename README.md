@@ -154,7 +154,10 @@ the layers list, print preview and warnings show the active plate only,
 and "All plates" draws the others beside it in 3D with their beds faded.
 Exports are named after the project; a 3MF is written as a Bambu Studio
 project (generator tag, printer / print / filament preset names in
-`Metadata/project_settings.config`), which is what makes Bambu Studio
+`Metadata/project_settings.config`, and a picture of each plate rendered
+off the export meshes, `Metadata/plate_N.png` with a `_small` copy, the
+first also the package thumbnail so file browsers and Bambu Studio's
+recent projects show the model), which is what makes Bambu Studio
 open it with its plates and settings instead of as loose geometry — use
 "Open project", not "Import". The project config lists which keys differ
 from the named system presets (`different_settings_to_system`), so Bambu
@@ -234,8 +237,9 @@ Bodies are built closed: a subdivided wall is built on a pre-subdivided
 ring so caps and bevel rings meet it vertex for vertex, and a tube is
 capped with matching winding. The second
 family is IKEA BROR, the 840 × 450 mm round-hole pegboard on a 30 mm
-grid (a bin with square pegs sized to the hole, and a J-hook); hole
-diameter and sheet thickness are fields with starting values, to be
+grid (a scoop bin and a J-hook, both with the mounts of a printed BROR
+bin, see below); hole diameter and sheet thickness are fields with
+starting values, to be
 verified on a board. Both boards are described in `boards.ts` and the
 tab-through-an-opening profile both families share lives in
 `mount.ts`; a hook wider than its opening gets the tab as a narrower
@@ -365,13 +369,22 @@ way are notched from the top, the others from the bottom, at the same
 spots (optionally with an outer frame); a plate longer than the bed is
 cut with a half-lap. Templates get a `BuildContext` with the bed
 size for this. The panel keeps the last six products added, with their
-specs, under Recent (per browser). Round-hole rods are a printed BROR
-holder's, copied 1:1 from its STL (`rodParts` in `mount.ts`): a rod of
-the hole's diameter less 0.4 mm that rests on top of the back wall (its
-underside 2.1 mm above the wall's top), reaches 5.6 mm past the sheet
-with a flat vertical end, has a 45° gusset under its root, and dips
-into the wall's top on the inside. Bins have sharp back corners
-(rounded in front), against the board.
+specs, under Recent (per browser).
+
+The BROR bin (and the "any pegboard" bin on a round-hole board) is a
+printed BROR bin copied 1:1 from its STL (`scoopBin.ts`, mounts in
+`brorHookParts` / `brorStudParts` in `mount.ts`): 120 × 80 × 70 by
+default with 2.5 mm walls, a 5 mm floor and 2.5 mm rounded corners; the
+front wall is 38 mm and the side walls slope down to it at 33° (a
+drawn triangle stood up across the width, marked as a cutter, which
+also trims the dividers). On the back, 7 mm under the rim and 30 mm
+in from each side (snapped to the pitch), a hook per column: a round
+rod 1.2 mm thinner than the hole, straight through the sheet plus 1.6
+mm, then bent 50° up on a 4 mm centreline radius, 2.9 mm straight and
+a domed end (a disc filleted to its radius, i.e. a sphere); one pitch
+under each hook a straight stud 0.5 mm thinner than the hole, sheet +
+2.75 mm long with the same domed end, which sits in its hole so the bin
+cannot tilt. It prints standing up, no support.
 
 ## Custom domain
 
