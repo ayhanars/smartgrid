@@ -1804,3 +1804,7 @@ insert into public.generator_cards (template, sort, new_until) values
   ('bror-bin', 70, null),
   ('bror-hook', 80, null)
 on conflict (template) do nothing;
+
+-- The user set the project's picture themselves (an upload): the
+-- automatic capture leaves it alone (see thumbnails.ts).
+alter table public.projects add column if not exists thumbnail_custom boolean not null default false;

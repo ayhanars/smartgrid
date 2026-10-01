@@ -374,12 +374,18 @@ cut with a half-lap. Templates get a `BuildContext` with the bed
 size for this. The panel keeps the last six products added, with their
 specs, under Recent (per browser).
 
-Publishing to the community takes the model's picture the same way
-(`renderMeshPicture` in `thumbnail.ts`, the shared renderer behind the
-3MF's plate pictures): the export meshes rendered on their own, product
-photo framing and light, on a plain light background, as a WebP at the
-card size; the 3D view's capture is only the fallback when that cannot
-be made.
+A project's picture (the card on the home page, the community
+listing) is automatic by default: the 3D view's capture on save, and on
+publishing the model rendered on its own (`renderMeshPicture`). The
+user can replace it with their own image: "Change picture…" in a
+project card's menu, or "Choose a picture…" in the Publish dialog
+(`imageFileToThumbnail` scales and crops it to the card size as WebP).
+A picture set this way is flagged (`smartgrid:thumb-custom:<id>` in
+this browser, `projects.thumbnail_custom` in the cloud, read back on
+load), and the automatic capture and the publish render leave it alone
+until "Automatic picture" / "Back to automatic" clears the flag. The
+cloud column is a later addition: a database without it still works,
+with the flag kept in the browser only.
 
 A perforated wall keeps its holes clear of everything that would cut
 them or join them: a plain pocket or recess is a keep-out footprint

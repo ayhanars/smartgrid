@@ -29,9 +29,51 @@ export function saveLocalThumbnail(id: string, dataUrl: string): void {
 export function deleteLocalThumbnail(id: string): void {
   try {
     localStorage.removeItem(thumbKey(id))
+    localStorage.removeItem(customKey(id))
   } catch {
     /* nothing to clean up */
   }
+}
+
+// --- A picture of the user's own -------------------------------------------
+// When the user sets the picture themselves (an upload), the automatic
+// capture keeps its hands off it, here and in the cloud row.
+
+const customKey = (id: string) => `smartgrid:thumb-custom:${id}`
+
+export function isThumbnailCustom(id: string): boolean {
+  try {
+    return localStorage.getItem(customKey(id)) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function setThumbnailCustom(id: string, on: boolean): void {
+  try {
+    if (on) localStorage.setItem(customKey(id), '1')
+    else localStorage.removeItem(customKey(id))
+  } catch {
+    /* fine */
+  }
+}
+
+/** An image file as a thumbnail: scaled and cropped to fill the card
+ * size, as a WebP data URL. */
+export async function imageFileToThumbnail(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file)
+  const canvas = document.createElement('canvas')
+  canvas.width = THUMBNAIL_WIDTH
+  canvas.height = THUMBNAIL_HEIGHT
+  const ctx = canvas.getContext('2d')!
+  const scale = Math.max(THUMBNAIL_WIDTH / bitmap.width, THUMBNAIL_HEIGHT / bitmap.height)
+  const w = bitmap.width * scale
+  const h = bitmap.height * scale
+  ctx.fillStyle = '#eef0f3'
+  ctx.fillRect(0, 0, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT)
+  ctx.drawImage(bitmap, (THUMBNAIL_WIDTH - w) / 2, (THUMBNAIL_HEIGHT - h) / 2, w, h)
+  bitmap.close()
+  return encodeCanvas(canvas, 0.86)
 }
 
 // --- Capture registry --------------------------------------------------------

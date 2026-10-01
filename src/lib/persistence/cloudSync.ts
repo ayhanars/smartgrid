@@ -1,7 +1,7 @@
 import { useAuthStore } from '../../features/auth/useAuthStore'
 import { deleteCloudProject, loadCloudProject, purgeCloudProject, restoreCloudProject, saveCloudProject } from '../supabase/projects'
 import { deleteLocalProject, loadLocalProject, purgeLocalProject, restoreLocalProject, saveLocalProject, type DocumentSnapshot } from './localProjects'
-import { deleteLocalThumbnail, loadLocalThumbnail, saveLocalThumbnail } from './thumbnails'
+import { deleteLocalThumbnail, loadLocalThumbnail, saveLocalThumbnail, setThumbnailCustom } from './thumbnails'
 
 /** Cloud rows are keyed by uuid; ids from the pre-uuid fallback in
  * `localProjects.newId` stay local-only. */
@@ -21,6 +21,7 @@ export async function loadProjectAnywhere(id: string): Promise<DocumentSnapshot 
   if (!remote) return null
   saveLocalProject(id, remote.snapshot)
   if (remote.thumbnail) saveLocalThumbnail(id, remote.thumbnail)
+  setThumbnailCustom(id, remote.thumbnailCustom)
   return remote.snapshot
 }
 
