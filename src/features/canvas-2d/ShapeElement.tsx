@@ -1,5 +1,6 @@
 import type { Bounds, ShapeLayer } from '../../types/document'
-import { contourBounds, regionsToSvgPath } from '../../lib/geometry/primitives'
+import { contourBounds, pointsToSvgPath, regionsToSvgPath } from '../../lib/geometry/primitives'
+import { projectedLocalRegions } from '../../lib/geometry/layerBounds'
 
 interface ShapeElementProps {
   layer: ShapeLayer
@@ -17,7 +18,11 @@ interface ShapeElementProps {
 export function ShapeElement({ layer, isSelected, previewOffset, previewResize, onPointerDown }: ShapeElementProps) {
   if (!layer.visible) return null
 
-  const path = regionsToSvgPath(layer.regions)
+  const tilted = !!(layer.transform.rotationX || layer.transform.rotationY)
+  // A tilted shape (lettering standing on a wall, a sloped cutter) is
+  // drawn as the strip it occupies seen from above, not as its flat
+  // outline, which would lie somewhere else entirely.
+  const path = tilted ? projectedLocalRegions({ ...layer, transform: { ...layer.transform, rotation: 0 } }).map(pointsToSvgPath).join(' ') : regionsToSvgPath(layer.regions)
   const allPoints = layer.regions.flatMap((r) => [...r.outer.points, ...r.holes.flatMap((h) => h.points)])
   const local = contourBounds(allPoints)
   // Z-spin shown in 2D about the footprint center; tilts only exist in 3D.
