@@ -1,5 +1,6 @@
 import { PRODUCT_TEMPLATES, cleanSpec, productTemplate } from './index'
 import type { ProductSpec, ProductTemplate, SpecField } from './types'
+import type { ShapeLayer } from '../../types/document'
 
 /**
  * A product as a portable recipe: the template and its settings, which
@@ -51,11 +52,35 @@ const SCENES = [
 const COLOURS = ['matte blue', 'matte white', 'matte black', 'matte light grey', 'matte orange', 'matte sage green', 'matte dark teal']
 const pickOne = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]
 
-/** The prompt: what it is, what it looks like, how to get it back. */
-export function buildPrompt(t: ProductTemplate, spec: ProductSpec): string {
+/** What was done to the parts after they were generated (holes drilled
+ * into a wall, a surface pattern): not in the recipe, but in the
+ * picture, so the prompt says it. */
+export function describeExtras(layers: ShapeLayer[]): string {
+  const bits: string[] = []
+  for (const l of layers) {
+    if (l.isHole) continue
+    const p = l.perforation
+    if (p && p.size > 0) {
+      const where = p.target === 'both' ? 'walls and top' : p.target === 'top' ? 'top face' : p.sides && p.sides.length ? `${p.sides.join(' and ')} wall${p.sides.length > 1 ? 's' : ''}` : 'walls'
+      bits.push(`the ${l.name.toLowerCase()} has ${p.shape} holes of ${p.size} mm on a ${p.spacing} mm ${p.pattern === 'staggered' ? 'staggered' : 'square'} grid through its ${where}`)
+    }
+    const tx = l.texture
+    if (tx && tx.depth > 0) bits.push(`the ${l.name.toLowerCase()} has a ${tx.pattern} relief pattern (${tx.size} mm repeat) on its ${tx.target === 'both' ? 'walls and top' : tx.target === 'top' ? 'top' : 'walls'}`)
+  }
+  return bits.length ? bits.join('; ') + '.' : ''
+}
+
+/** The prompt: what it is, what it looks like, how to get it back.
+ * With `withPicture`, it tells the tool a reference render is attached
+ * and must be matched. */
+export function buildPrompt(t: ProductTemplate, spec: ProductSpec, options: { layers?: ShapeLayer[]; withPicture?: boolean } = {}): string {
+  const extras = options.layers ? describeExtras(options.layers) : ''
   return [
-    `Make one realistic product mockup, 16:9, of this 3D-printed part: ${describeProduct(t, spec)}`,
-    `Show the whole part once, every hook, stud and compartment visible, as one object; no close-ups, no detail views, no exploded or multi-angle layout. ${pickOne(COLOURS)} PLA plastic with faint layer lines, ${pickOne(SCENES)}. Keep every proportion as the settings say; the settings are in mm.`,
+    `Make one realistic product mockup, 16:9, of this 3D-printed part: ${describeProduct(t, spec)}${extras ? ` Also: ${extras}` : ''}`,
+    options.withPicture
+      ? `The attached pictures are renders of the exact part, from the front and from the back: match their geometry exactly, the hooks and studs on the back, the holes, the slope and every proportion; change only the material, the scene and the lighting.`
+      : `Keep every proportion as the settings say; the settings are in mm.`,
+    `Show the whole part once, every hook, stud and compartment visible, as one object; no close-ups, no detail views, no exploded or multi-angle layout. ${pickOne(COLOURS)} PLA plastic with faint layer lines, ${pickOne(SCENES)}.`,
     ``,
     `Recipe (keep it unchanged; pasting it into smartgrid → Create → Paste recipe rebuilds the exact part):`,
     '```json',

@@ -87,7 +87,7 @@ export function CreatePanel() {
     if (groupId) {
       rememberRecentProduct(picked.id, clean)
       setRecents(listRecentProducts())
-      setNotice(`${picked.name} added to the plate. Select it to change its specs in the right panel.`)
+      setNotice(`${picked.name} added to the plate. Select it to change its specs or open the Mockup kit in the right panel.`)
       setOpen(false)
       setPickedId(null)
     }
@@ -136,7 +136,7 @@ export function CreatePanel() {
                 <strong>{picked.name}</strong>
                 <span>{picked.tagline}</span>
               </div>
-              <button type="button" className="create-panel__text-btn" title="Copy a description of this part with its recipe, for an image or chat tool. The recipe pastes back here as the exact part." onClick={copyPrompt}>
+              <button type="button" className="create-panel__text-btn" title="Copy a description of this part with its recipe, for an image or chat tool. For a reference picture too, add it to the plate and open the Mockup kit in the right panel." onClick={copyPrompt}>
                 <Copy size={14} /> Copy prompt
               </button>
               <button type="button" className="create-panel__text-btn" title="Copy a link that opens this part with these settings." onClick={copyLink}>

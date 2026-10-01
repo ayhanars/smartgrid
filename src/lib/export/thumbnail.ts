@@ -16,7 +16,7 @@ const SMALL = 128
  * above, lit like a product photo. `background` null keeps the canvas
  * transparent (the 3MF's plate pictures); a colour fills it (a
  * community card). Null where WebGL is not available. */
-export async function renderMeshPicture(meshes: ExportMesh[], width: number, height: number, format: 'png' | 'webp' = 'png', background: string | null = null, quality = 0.9): Promise<Blob | null> {
+export async function renderMeshPicture(meshes: ExportMesh[], width: number, height: number, format: 'png' | 'webp' = 'png', background: string | null = null, quality = 0.9, view: 'front' | 'back' = 'front'): Promise<Blob | null> {
   if (typeof document === 'undefined') return null
   const canvas = document.createElement('canvas')
   let renderer: THREE.WebGLRenderer
@@ -31,7 +31,7 @@ export async function renderMeshPicture(meshes: ExportMesh[], width: number, hei
     else renderer.setClearColor(new THREE.Color(background), 1)
     const scene = buildScene(meshes)
     if (!scene) return null
-    const camera = frameCamera(scene.box, width / height)
+    const camera = frameCamera(scene.box, width / height, view)
     renderer.setSize(width, height, false)
     renderer.render(scene.scene, camera)
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, format === 'webp' ? 'image/webp' : 'image/png', quality))
@@ -87,11 +87,12 @@ function buildScene(meshes: ExportMesh[]): { scene: THREE.Scene; box: THREE.Box3
   return { scene, box, dispose }
 }
 
-function frameCamera(box: THREE.Box3, aspect: number): THREE.PerspectiveCamera {
+function frameCamera(box: THREE.Box3, aspect: number, view: 'front' | 'back' = 'front'): THREE.PerspectiveCamera {
   const center = box.getCenter(new THREE.Vector3())
   const radius = Math.max(1, box.getSize(new THREE.Vector3()).length() / 2)
   const camera = new THREE.PerspectiveCamera(28, aspect, 1, radius * 20)
-  const dir = new THREE.Vector3(-0.75, 0.8, 1).normalize()
+  // From the front-left above, or the back-right above (the mounts).
+  const dir = (view === 'back' ? new THREE.Vector3(0.75, 0.8, -1) : new THREE.Vector3(-0.75, 0.8, 1)).normalize()
   // Fit the bounding sphere into the narrower of the two view angles.
   const vFov = (camera.fov * Math.PI) / 360
   const hFov = Math.atan(Math.tan(vFov) * aspect)
