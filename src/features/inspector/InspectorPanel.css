@@ -1032,3 +1032,21 @@
   opacity: 0.6;
   cursor: default;
 }
+
+.inspector-product__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.inspector-product__copy:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}

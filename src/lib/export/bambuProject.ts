@@ -52,6 +52,8 @@ export const isBambuPrinter = (bedPresetId: string) => bedPresetId in PRINTERS
 
 /** The Metadata/project_settings.config contents for this printer, print
  * settings and filament colours (one filament per colour). */
+const FILAMENT_KEYS = ['filament_colour', 'filament_scarf_seam_type', 'filament_scarf_height', 'filament_scarf_gap', 'filament_scarf_length']
+
 export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintSettings>, colors: string[]): Record<string, unknown> {
   const printer = PRINTERS[bedPresetId] ?? PRINTERS.a1
   const layer = settings.layerHeight ?? 0.2
@@ -92,6 +94,12 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
     seam_slope_start_height: '10%',
     seam_slope_gap: '2%',
     seam_slope_min_length: '8',
-    different_settings_to_system: [printKeys.join(';'), ...filaments.map(() => 'filament_colour'), ''],
+    // The same four values on every filament, so the scarf is on
+    // whichever of the two Bambu Studio reads.
+    filament_scarf_seam_type: filaments.map(() => 'external'),
+    filament_scarf_height: filaments.map(() => '10%'),
+    filament_scarf_gap: filaments.map(() => '2%'),
+    filament_scarf_length: filaments.map(() => '8'),
+    different_settings_to_system: [printKeys.join(';'), ...filaments.map(() => FILAMENT_KEYS.join(';')), ''],
   }
 }

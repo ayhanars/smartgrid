@@ -20,7 +20,7 @@ const SECTIONS: { id: string; title: string; hint: string; fields: string[] }[] 
  * With `sections` the fields are grouped with a line explaining each
  * group, and every hint is shown under its field. */
 export function SpecForm({ fields, spec, onChange, sliders = false, sections = false }: { fields: SpecField[]; spec: ProductSpec; onChange: (id: string, value: SpecValue) => void; sliders?: boolean; sections?: boolean }) {
-  if (!sections) return <div className="spec-form">{fields.map((f) => renderField(f, spec, onChange, sliders, false))}</div>
+  if (!sections) return <div className={`spec-form ${sliders ? 'spec-form--rows' : ''}`}>{fields.map((f) => renderField(f, spec, onChange, sliders, false))}</div>
   const placed = new Set<string>()
   const groups = SECTIONS.map((s) => {
     // A field that fits two sections (rows: layout or mounting) goes to
@@ -41,7 +41,7 @@ export function SpecForm({ fields, spec, onChange, sliders = false, sections = f
             <strong>{g.title}</strong>
             {g.hint && <span>{g.hint}</span>}
           </header>
-          <div className="spec-form">{g.items.map((f) => renderField(f, spec, onChange, sliders, true))}</div>
+          <div className={`spec-form ${sliders ? 'spec-form--rows' : ''}`}>{g.items.map((f) => renderField(f, spec, onChange, sliders, true))}</div>
         </section>
       ))}
     </div>
@@ -49,18 +49,54 @@ export function SpecForm({ fields, spec, onChange, sliders = false, sections = f
 }
 
 function renderField(f: SpecField, spec: ProductSpec, onChange: (id: string, value: SpecValue) => void, sliders: boolean, showHints: boolean) {
+  // One line per setting: glyph + name, the slider, the value. The hint
+  // is the row's tooltip, so the form stays quiet.
+  if (sliders) {
+    if (f.kind === 'number') {
+      const value = typeof spec[f.id] === 'number' ? (spec[f.id] as number) : f.min
+      return (
+        <div key={f.id} className="spec-row" title={f.hint}>
+          <span className="spec-row__label">
+            <FieldIcon id={f.id} />
+            <span>{f.label}</span>
+          </span>
+          <input type="range" min={f.min} max={f.max} step={f.step ?? 0.1} value={value} aria-label={f.label} onChange={(e) => onChange(f.id, Number(e.target.value))} />
+          <NumberField field={f} value={value} onChange={(v) => onChange(f.id, v)} bare />
+        </div>
+      )
+    }
+    if (f.kind === 'select')
+      return (
+        <label key={f.id} className="spec-row spec-row--select" title={f.hint}>
+          <span className="spec-row__label">
+            <FieldIcon id={f.id} />
+            <span>{f.label}</span>
+          </span>
+          <span className="inspector-field__input-wrap spec-row__select">
+            <select value={String(spec[f.id] ?? f.options[0]?.value)} onChange={(e) => onChange(f.id, e.target.value)}>
+              {f.options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </span>
+        </label>
+      )
+    return (
+      <label key={f.id} className="spec-row spec-row--check" title={f.hint}>
+        <span className="spec-row__label">
+          <FieldIcon id={f.id} />
+          <span>{f.label}</span>
+        </span>
+        <input type="checkbox" checked={spec[f.id] === true} onChange={(e) => onChange(f.id, e.target.checked)} />
+      </label>
+    )
+  }
   const hint = showHints && f.hint ? <small className="spec-form__hint">{f.hint}</small> : null
   if (f.kind === 'number') {
     const value = typeof spec[f.id] === 'number' ? (spec[f.id] as number) : f.min
-    const field = <NumberField key={f.id} field={f} value={value} onChange={(v) => onChange(f.id, v)} />
-    if (!sliders) return field
-    return (
-      <div key={f.id} className="spec-form__slider" title={showHints ? undefined : f.hint}>
-        <input type="range" min={f.min} max={f.max} step={f.step ?? 0.1} value={value} aria-label={f.label} onChange={(e) => onChange(f.id, Number(e.target.value))} />
-        {field}
-        {hint}
-      </div>
-    )
+    return <NumberField key={f.id} field={f} value={value} onChange={(v) => onChange(f.id, v)} />
   }
   if (f.kind === 'select')
     return (
@@ -93,7 +129,7 @@ function renderField(f: SpecField, spec: ProductSpec, onChange: (id: string, val
   )
 }
 
-function NumberField({ field, value, onChange }: { field: Extract<SpecField, { kind: 'number' }>; value: number; onChange: (v: number) => void }) {
+function NumberField({ field, value, onChange, bare = false }: { field: Extract<SpecField, { kind: 'number' }>; value: number; onChange: (v: number) => void; bare?: boolean }) {
   const displayUnit = useDocumentStore((s) => s.displayUnit)
   const isLength = field.unit === 'mm'
   const factor = isLength ? UNIT_FACTORS[displayUnit] : 1
@@ -109,13 +145,8 @@ function NumberField({ field, value, onChange }: { field: Extract<SpecField, { k
     if (Number.isNaN(parsed)) setText(shown(value))
     else onChange(Math.min(field.max, Math.max(field.min, parsed * factor)))
   }
-  return (
-    <label className="inspector-field spec-form__field" title={field.hint}>
-      <span className="inspector-field__label">
-        <FieldIcon id={field.id} />
-        {field.label}
-      </span>
-      <span className="inspector-field__input-wrap">
+  const input = (
+    <span className="inspector-field__input-wrap">
         <input
           type="text"
           inputMode="decimal"
@@ -127,7 +158,16 @@ function NumberField({ field, value, onChange }: { field: Extract<SpecField, { k
           }}
         />
         {field.unit === 'mm' && <span className="inspector-field__suffix">{displayUnit}</span>}
+    </span>
+  )
+  if (bare) return input
+  return (
+    <label className="inspector-field spec-form__field" title={field.hint}>
+      <span className="inspector-field__label">
+        <FieldIcon id={field.id} />
+        {field.label}
       </span>
+      {input}
     </label>
   )
 }
