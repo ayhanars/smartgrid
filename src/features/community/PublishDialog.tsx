@@ -107,18 +107,21 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
    * model rendered on its own, as the 3MF's plate pictures are (the
    * same product-photo framing and light, on a plain background), and
    * the 3D view's capture only if that cannot be made. */
-  const currentModel = async () => {
+  /** The automatic picture: the model rendered on its own, else the 3D
+   * view's capture. Saved as the project's picture when it exists. */
+  const renderAutomaticPicture = async (): Promise<string | null> => {
     const state = useDocumentStore.getState()
-    const snapshot = serializeDocument(state)
-    saveLocalProject(projectId, snapshot)
-    // The user's own picture wins over anything rendered.
-    if (isThumbnailCustom(projectId)) return { snapshot, thumbnail: loadLocalThumbnail(projectId) }
     let picture: string | null = null
     try {
       const bed = artboardSize(state)
       const meshes = await buildExportMeshes(state.layers, state.order, { plates: state.plates, bedWidth: bed.width, bedDepth: bed.height }, undefined, state.groups)
       const blob = await renderMeshPicture(meshes, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, 'webp', '#eef0f3', 0.86)
-      if (blob) picture = await new Promise<string>((resolve) => { const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.readAsDataURL(blob) })
+      if (blob)
+        picture = await new Promise<string>((resolve) => {
+          const r = new FileReader()
+          r.onload = () => resolve(String(r.result))
+          r.readAsDataURL(blob)
+        })
     } catch (err) {
       console.warn('Model picture failed, using the view capture', err)
     }
@@ -127,6 +130,16 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
       picture = fresh && fresh !== 'busy' ? fresh : null
     }
     if (picture) saveLocalThumbnail(projectId, picture)
+    return picture
+  }
+
+  const currentModel = async () => {
+    const state = useDocumentStore.getState()
+    const snapshot = serializeDocument(state)
+    saveLocalProject(projectId, snapshot)
+    // The user's own picture wins over anything rendered.
+    if (isThumbnailCustom(projectId)) return { snapshot, thumbnail: loadLocalThumbnail(projectId) }
+    const picture = await renderAutomaticPicture()
     return { snapshot, thumbnail: picture ?? loadLocalThumbnail(projectId) }
   }
 
@@ -167,7 +180,7 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
   }
 
   // The listing's picture: the user's own, or the automatic one.
-  const [picture, setPictureState] = useState<{ url: string | null; custom: boolean }>(() => ({ url: loadLocalThumbnail(projectId), custom: isThumbnailCustom(projectId) }))
+  const [picture, setPictureState] = useState<{ url: string | null; custom: boolean; rendering?: boolean }>(() => ({ url: loadLocalThumbnail(projectId), custom: isThumbnailCustom(projectId) }))
   const choosePicture = async (file: File) => {
     const dataUrl = await imageFileToThumbnail(file)
     saveLocalThumbnail(projectId, dataUrl)
@@ -177,8 +190,10 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
   }
   const automaticPicture = async () => {
     setThumbnailCustom(projectId, false)
-    setPictureState({ url: loadLocalThumbnail(projectId), custom: false })
-    if (user && isCloudSyncable(projectId)) await updateCloudThumbnail(projectId, loadLocalThumbnail(projectId), false).catch(() => undefined)
+    setPictureState({ url: null, custom: false, rendering: true })
+    const fresh = await renderAutomaticPicture()
+    setPictureState({ url: fresh ?? loadLocalThumbnail(projectId), custom: false })
+    if (user && isCloudSyncable(projectId)) await updateCloudThumbnail(projectId, fresh ?? loadLocalThumbnail(projectId), false).catch(() => undefined)
   }
 
   const remove = async () => {
@@ -219,7 +234,7 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
         <div className="auth-dialog__form">
           <span className="publish-dialog__label">Picture</span>
           <div className="publish-dialog__picture">
-            <div className="publish-dialog__picture-box">{picture.url ? <img src={picture.url} alt="" /> : <span>Rendered from the model when you publish</span>}</div>
+            <div className="publish-dialog__picture-box">{picture.url ? <img src={picture.url} alt="" /> : <span>{picture.rendering ? 'Rendering…' : 'Rendered from the model when you publish'}</span>}</div>
             <div className="publish-dialog__picture-actions">
               <span className="publish-dialog__muted">{picture.custom ? 'Your own picture. It is the project’s picture too.' : 'Automatic: the model rendered on its own. Replace it with a photo or any image.'}</span>
               <label className="publish-dialog__file">
