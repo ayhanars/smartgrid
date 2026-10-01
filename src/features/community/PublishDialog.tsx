@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ExternalLink, Globe, Trash2, X } from 'lucide-react'
-import { serializeDocument, useDocumentStore } from '../../state/documentStore'
+import { artboardSize, serializeDocument, useDocumentStore } from '../../state/documentStore'
+import { buildExportMeshes } from '../../lib/export/exportMeshes'
+import { renderMeshPicture } from '../../lib/export/thumbnail'
 import { useViewStore } from '../../state/viewStore'
 import { saveLocalProject } from '../../lib/persistence/localProjects'
-import { captureThumbnail, loadLocalThumbnail, loadProjectSource, saveLocalThumbnail } from '../../lib/persistence/thumbnails'
+import { captureThumbnail, loadLocalThumbnail, loadProjectSource, saveLocalThumbnail, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '../../lib/persistence/thumbnails'
 import { TagInput } from './TagInput'
 import {
   CATEGORIES,
@@ -99,13 +101,29 @@ export function PublishDialog({ projectId, onClose }: PublishDialogProps) {
     return () => window.removeEventListener('keydown', key)
   }, [onClose])
 
-  /** The document as it is right now, saved, with a fresh picture. */
+  /** The document as it is right now, saved, with a fresh picture: the
+   * model rendered on its own, as the 3MF's plate pictures are (the
+   * same product-photo framing and light, on a plain background), and
+   * the 3D view's capture only if that cannot be made. */
   const currentModel = async () => {
-    const snapshot = serializeDocument(useDocumentStore.getState())
+    const state = useDocumentStore.getState()
+    const snapshot = serializeDocument(state)
     saveLocalProject(projectId, snapshot)
-    const fresh = await captureThumbnail()
-    if (fresh && fresh !== 'busy') saveLocalThumbnail(projectId, fresh)
-    return { snapshot, thumbnail: fresh && fresh !== 'busy' ? fresh : loadLocalThumbnail(projectId) }
+    let picture: string | null = null
+    try {
+      const bed = artboardSize(state)
+      const meshes = await buildExportMeshes(state.layers, state.order, { plates: state.plates, bedWidth: bed.width, bedDepth: bed.height }, undefined, state.groups)
+      const blob = await renderMeshPicture(meshes, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, 'webp', '#eef0f3', 0.86)
+      if (blob) picture = await new Promise<string>((resolve) => { const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.readAsDataURL(blob) })
+    } catch (err) {
+      console.warn('Model picture failed, using the view capture', err)
+    }
+    if (!picture) {
+      const fresh = await captureThumbnail()
+      picture = fresh && fresh !== 'busy' ? fresh : null
+    }
+    if (picture) saveLocalThumbnail(projectId, picture)
+    return { snapshot, thumbnail: picture ?? loadLocalThumbnail(projectId) }
   }
 
   const submit = async (e: FormEvent) => {
