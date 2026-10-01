@@ -109,7 +109,10 @@ export function useCutGeometries(
       const overlappingHoles = holeIds.filter((hid) => hid !== id && (!layers[hid].shellOf || layers[hid].shellOf.solidId === id) && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
       if (overlappingHoles.length === 0 && !layer.perforation) continue
 
-      const key = JSON.stringify([geometryKey(layer), overlappingHoles.map((hid) => geometryKey(layers[hid])), artboardWidth, artboardHeight, tileVersion, editing])
+      // A perforated wall keeps its holes clear of the parts that join
+      // it, so those parts are part of its build.
+      const neighbourIds = layer.perforation ? order.filter((oid) => oid !== id && layers[oid] && !layers[oid].isHole && layers[oid].visible && rectsOverlap(solidBounds, shapeWorldBounds(layers[oid]))) : []
+      const key = JSON.stringify([geometryKey(layer), overlappingHoles.map((hid) => geometryKey(layers[hid])), neighbourIds.map((nid) => geometryKey(layers[nid])), artboardWidth, artboardHeight, tileVersion, editing])
       let job = builtCache.current.get(key)
       if (!job) {
         const world = toWorld(layer)
@@ -117,7 +120,7 @@ export function useCutGeometries(
         // Straight through-holes are cut in 2D right here; the rest (and
         // the perforation) is what the worker gets. When nothing is left
         // for it, the job is complete as built.
-        const plan = planCut(layer, holeLayers, SCENE_SCALE, toWorld, { fastShading: editing, minStep: editing ? PREVIEW_STEP : undefined })
+        const plan = planCut(layer, holeLayers, SCENE_SCALE, toWorld, { fastShading: editing, minStep: editing ? PREVIEW_STEP : undefined, neighbours: neighbourIds.map((nid) => layers[nid]) })
         job = { key, bodies: plan.bodies, needsCsg: plan.needsCsg, holes: plan.holes, world }
       }
       used.set(key, job)

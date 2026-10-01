@@ -37,11 +37,25 @@ export function recipeJson(t: ProductTemplate, spec: ProductSpec): string {
   return JSON.stringify({ smartgrid: 1, template: t.id, spec: cleanSpec(t, spec) }, null, 2)
 }
 
+/** Scenes and finishes the prompt picks from, so two people asking for
+ * the same part do not get the same picture. */
+const SCENES = [
+  'hanging on a pegboard in a tidy home workshop, soft daylight from a window',
+  'on a white studio background with a soft shadow, catalogue style',
+  'on a pegboard above a wooden workbench, warm evening light',
+  'in a bright kitchen, mounted on the wall beside the counter',
+  'in a garage with tools around, cool neutral light',
+  'in a craft room, pastel wall, morning light',
+  'on a slatwall in a studio, dramatic side light',
+]
+const COLOURS = ['matte blue', 'matte white', 'matte black', 'matte light grey', 'matte orange', 'matte sage green', 'matte dark teal']
+const pickOne = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]
+
 /** The prompt: what it is, what it looks like, how to get it back. */
 export function buildPrompt(t: ProductTemplate, spec: ProductSpec): string {
   return [
-    `Make a realistic product mockup of this 3D-printed part: ${describeProduct(t, spec)}`,
-    `Show it in use, matte PLA plastic, studio light. Keep every proportion as the settings say; the settings are in mm.`,
+    `Make one realistic product mockup, 16:9, of this 3D-printed part: ${describeProduct(t, spec)}`,
+    `Show the whole part once, every hook, stud and compartment visible, as one object; no close-ups, no detail views, no exploded or multi-angle layout. ${pickOne(COLOURS)} PLA plastic with faint layer lines, ${pickOne(SCENES)}. Keep every proportion as the settings say; the settings are in mm.`,
     ``,
     `Recipe (keep it unchanged; pasting it into smartgrid → Create → Paste recipe rebuilds the exact part):`,
     '```json',

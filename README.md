@@ -374,12 +374,26 @@ cut with a half-lap. Templates get a `BuildContext` with the bed
 size for this. The panel keeps the last six products added, with their
 specs, under Recent (per browser).
 
+A perforated wall keeps its holes clear of everything that would cut
+them or join them: a plain pocket or recess is a keep-out footprint
+(as before); a tilted cutter such as a scoop bin's sloped top is tested
+in 3D (`tiltedKeepOut` in `layerGeometry.ts`: the hole's rim, padded
+by the wall margin, sampled at three depths against the cutter's
+volume), so holes stop a margin short of the sloped edge instead of
+being cut through; and every other solid overlapping the shape (a
+divider on the inside, a hook or stud on the outside) is a keep-out
+with its own height range, so no hole lands where a part joins the
+wall. The viewport and the exporter both pass these neighbours in.
+
 A product travels as a recipe (`recipe.ts`): the template id and its
 settings, which is all the generator needs to rebuild it exactly.
 "Copy prompt" (in the Create sheet and on a product's section in the
 inspector) puts a plain-language description of the piece on the
 clipboard, for an image or chat tool, with the JSON recipe and a link
-under it; "Copy link" gives just the link (`/new?create=<template>&
+under it (one 16:9 mockup of the whole part, every hook and
+compartment visible, no close-ups, with a scene and a filament colour
+picked at random each time so two people do not get the same picture);
+"Copy link" gives just the link (`/new?create=<template>&
 spec=<base64url JSON>`), which opens a new project with the Create
 sheet on that product and those settings. "Paste recipe" in the
 picker reads any of these back (the JSON, a prompt or chat answer

@@ -235,6 +235,26 @@ export interface PerforationContext {
    * the wall band sits on the flat wall between them. */
   bevelBottom?: number
   bevelTop?: number
+  /** True when any of these local points (mm, Y up) lies in a cutter
+   * that is not a plain pocket: a tilted cut such as a sloped top. A
+   * hole whose padded rim touches one is left out, so holes stop a
+   * margin short of a sloped edge instead of being cut through. */
+  isCut?: (points: THREE.Vector3[]) => boolean
+}
+
+/** Points on a hole's padded rim at a few depths along its travel: what
+ * must all be solid for the hole to be clean. */
+function rimSamples(center: THREE.Vector3, U: THREE.Vector3, V: THREE.Vector3, axis: THREE.Vector3, ext: { u: number; v: number }, pad: number, depths: number[]): THREE.Vector3[] {
+  const out: THREE.Vector3[] = []
+  const ru = ext.u / 2 + pad
+  const rv = ext.v / 2 + pad
+  for (const d of depths) {
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2
+      out.push(center.clone().addScaledVector(U, Math.cos(a) * ru).addScaledVector(V, Math.sin(a) * rv).addScaledVector(axis, d))
+    }
+  }
+  return out
 }
 
 /**
@@ -299,6 +319,8 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
     const rowSpacing = Math.max(spacing, ext.v + MIN_GAP_MM)
     const colSpacing = Math.max(spacing, ext.u + MIN_GAP_MM)
     const rows = centersAlong(to - from, ext.v, rowSpacing, false).map((v) => from + v)
+    // How much solid wall a hole keeps between itself and a cut edge.
+    const edgePad = Math.max(1.2, perforation.wallTopMargin ?? defaultWallMargin(flat))
     // How sharply the outline turns at each vertex (0 along a curve, π/2
     // at a box corner), only where it turns the convex way — tunnels from
     // the two walls of a concave corner diverge and never meet.
@@ -416,6 +438,7 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
             if (blocked(tunnel, z - ext.v / 2 - POCKET_CLEARANCE_MM, z + ext.v / 2 + POCKET_CLEARANCE_MM)) continue
           }
           const center = new THREE.Vector3(px, z, py)
+          if (context.isCut && context.isCut(rimSamples(center, U, up, axis, ext, edgePad, [0, reach / 2, reach]))) continue
           // Tunnels through one wall into the cavity never meet each other
           // (they stop at the cavity), so a whole wall — a curved one with
           // a different direction per hole included — is one cutter and
@@ -454,6 +477,7 @@ export function buildPerforationCutter(contour: Point2[], depth: number, perfora
           if (blocked(footprint, depth - reach - POCKET_CLEARANCE_MM, depth + OVERSHOOT_MM)) continue
         }
         const center = new THREE.Vector3(x, depth, y)
+        if (context.isCut && context.isCut(rimSamples(center, U, V, down, ext, Math.max(1.2, perforation.topInset ?? 0), [0, reach / 2, reach]))) continue
         addPart(down, prism(outline, center, U, V, down, -OVERSHOOT_MM, reach))
       }
     })

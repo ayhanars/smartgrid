@@ -106,7 +106,8 @@ export async function buildExportMeshes(
     const solidWorld = toWorld(layer)
     const holeLayers = overlapping.map((hid) => layers[hid])
     // Same plan as the viewport (see useCutGeometries).
-    const plan = planCut(layer, holeLayers, 1, toWorld)
+    const neighbours = layer.perforation ? solidIds.filter((oid) => oid !== id && plateIndex(layers[oid]) === plateIndex(layer) && rectsOverlap(solidBounds, shapeWorldBounds(layers[oid]))).map((oid) => layers[oid]) : []
+    const plan = planCut(layer, holeLayers, 1, toWorld, { neighbours })
 
     for (const geo of plan.bodies) {
       let finalGeo: THREE.BufferGeometry = geo
