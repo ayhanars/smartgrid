@@ -160,19 +160,12 @@ open it with its plates and settings instead of as loose geometry — use
 from the named system presets (`different_settings_to_system`), so Bambu
 Studio takes speeds, filament density and the rest from its own profiles
 rather than its bare defaults (which gave 0 g and hours-long
-estimates). The "Layer seam" print setting (`PrintSettings.seam`)
-picks the seam position: back corner (the default), back face, or
-scattered (`random`: no line, tiny dots everywhere). Seams never get a
-scarf joint (a scarf ramps the seam over ~10 mm, and on a corner the
-ramp wraps onto the next face as a dashed line). With the corner
-choice a bin's back-left corner is
-written as a painted seam enforcer (`paint_seam="4"` on its outward
-wall triangles), which overrides the slicer's own seam position, so it
-is only written for that choice: every exported body gets a 1.2 mm strip on each face
-of its back-left vertical edge (`ShapeLayer.seamHint` picks another
-corner), and the exporter builds bodies with 1.2 mm wall columns so
-the strip has triangles of its own. The seam then sits on that edge
-instead of wandering across a wall.
+estimates). The project also turns on Bambu Studio's scarf seam on
+the outer wall (`seam_slope_type: external`, start height 10 %, gap
+2 %, length 8 mm): each layer's start and end are ramped over 8 mm
+instead of butted at one point, which is what removes the seam line
+from a wall. Nothing else steers the seam: no painted enforcer, no
+seam position.
 Every mesh in a 3MF is written with one
 shared vertex table (vertices welded by position), since slicers judge a
 mesh by index topology and would otherwise see each shading seam as an
@@ -378,7 +371,7 @@ the hole's diameter less 0.4 mm that rests on top of the back wall (its
 underside 2.1 mm above the wall's top), reaches 5.6 mm past the sheet
 with a flat vertical end, has a 45° gusset under its root, and dips
 into the wall's top on the inside. Bins have sharp back corners
-(rounded in front) so the layer seam has an edge to hide in.
+(rounded in front), against the board.
 
 ## Custom domain
 

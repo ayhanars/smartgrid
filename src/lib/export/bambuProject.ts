@@ -1,4 +1,4 @@
-import type { PrintSettings, SeamPlacement } from '../../types/document'
+import type { PrintSettings } from '../../types/document'
 
 /**
  * What makes Bambu Studio open a 3MF as one of its own projects — plates,
@@ -52,8 +52,6 @@ export const isBambuPrinter = (bedPresetId: string) => bedPresetId in PRINTERS
 
 /** The Metadata/project_settings.config contents for this printer, print
  * settings and filament colours (one filament per colour). */
-const SEAM_POSITION: Record<SeamPlacement, string> = { random: 'random', corner: 'aligned', back: 'back' }
-
 export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintSettings>, colors: string[]): Record<string, unknown> {
   const printer = PRINTERS[bedPresetId] ?? PRINTERS.a1
   const layer = settings.layerHeight ?? 0.2
@@ -64,7 +62,7 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
   // system presets: then everything else (speeds, filament density…)
   // comes from those presets. Without it a plain box shows 0 g of
   // filament and a nine-hour estimate.
-  const printKeys = ['layer_height', 'initial_layer_print_height', 'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'sparse_infill_density', 'sparse_infill_pattern', 'seam_position', 'seam_slope_type', 'seam_slope_conditional']
+  const printKeys = ['layer_height', 'initial_layer_print_height', 'wall_loops', 'top_shell_layers', 'bottom_shell_layers', 'sparse_infill_density', 'sparse_infill_pattern', 'seam_slope_type', 'seam_slope_start_height', 'seam_slope_gap', 'seam_slope_min_length']
   return {
     version: BAMBU_VERSION,
     from: 'project',
@@ -83,15 +81,14 @@ export function bambuProjectConfig(bedPresetId: string, settings: Partial<PrintS
     bottom_shell_layers: String(settings.bottomLayers ?? 3),
     sparse_infill_density: `${settings.infillDensity ?? 15}%`,
     sparse_infill_pattern: INFILL[settings.infillPattern ?? 'grid'] ?? 'grid',
-    // Seams: in the back corner unless the project says otherwise. With
-    // `corner`, every body paints its back corner as a seam enforcer and
-    // the aligned seam sits in that sharp corner on every layer. No
-    // scarf joint: a scarf ramps the seam over ~10 mm, and on a corner
-    // that ramp wraps onto the neighbouring face, which is exactly the
-    // dashed line it was meant to hide.
-    seam_position: SEAM_POSITION[settings.seam ?? 'corner'],
-    seam_slope_type: 'none',
-    seam_slope_conditional: '1',
+    // Scarf seam on the outer wall: instead of stopping the extrusion
+    // at one point, the slicer ramps each layer's start and end over
+    // 8 mm (starting at 10 % of the layer height, with a 2 % gap), which
+    // is what makes the seam line disappear from a wall.
+    seam_slope_type: 'external',
+    seam_slope_start_height: '10%',
+    seam_slope_gap: '2%',
+    seam_slope_min_length: '8',
     different_settings_to_system: [printKeys.join(';'), ...filaments.map(() => 'filament_colour'), ''],
   }
 }
