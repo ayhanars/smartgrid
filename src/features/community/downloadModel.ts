@@ -5,6 +5,7 @@ import { layerZRange } from '../../lib/geometry/layerGeometry'
 import { buildExportMeshes, downloadBlob } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
+import { renderThumbnails } from '../../lib/export/thumbnail'
 import { defaultPlates, layerPlateId } from '../../state/documentStore'
 
 /** Footprint and height of the model, mm. With several plates it is the
@@ -65,9 +66,11 @@ export async function downloadSnapshot(snapshot: DocumentSnapshot, title: string
     return true
   }
   const ps = snapshot.printSettings as unknown as Record<string, unknown>
+  const thumbnails = await renderThumbnails(meshes, layout?.plates.length ?? 1)
   downloadBlob(
     write3mf(meshes, {
       plates: plates?.map((p) => p.name),
+      thumbnails,
       bambu: { bedPresetId: printer, printSettings: snapshot.printSettings },
       metadata: {
         Title: title,

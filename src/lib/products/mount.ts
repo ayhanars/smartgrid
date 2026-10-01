@@ -86,78 +86,75 @@ export function standingPath(points: { h: number; b: number }[], centerX: number
   return points.map((p) => ({ x: centerX + height / 2 - p.h, y: faceY - p.b }))
 }
 
-/** The bend of a round hook: a short sweep of `HOOK_BEND` degrees on a
- * radius of `HOOK_RADIUS` pegs, then a short lip. Short enough to tilt
- * into the hole, and it still looks up behind the sheet. */
-export const HOOK_BEND = (40 * Math.PI) / 180
-export const HOOK_RADIUS = 0.6
-
-/** How far a round hook of peg diameter `d` reaches behind the sheet
- * face (past the gap), and how high its tip rises above the shank. */
-export function roundHookReach(d: number, rise: number): { back: number; up: number } {
-  const R = HOOK_RADIUS * d
-  return { back: R * Math.sin(HOOK_BEND) + rise * Math.cos(HOOK_BEND) + d / 2, up: R * (1 - Math.cos(HOOK_BEND)) + rise * Math.sin(HOOK_BEND) + d / 2 }
-}
-
 /**
- * The rod of a round-hole board, copied 1:1 off a printed BROR holder
- * (the reference STL: a Ø5.5 rod). It rests on top of the back wall
- * rather than through it: its underside is `ROD_LIFT` above the wall's
- * top, it reaches `ROD_BEYOND` past the sheet with a flat, vertical end
- * (no upturn at all), a 45° gusset fills the corner under its root, and
- * over the wall it dips into the wall's top so it merges with the body
- * instead of ending in a stub. Everything scales with the rod diameter
- * except the two small lengths, which are what the reference has.
+ * The mounts of a round-hole board, copied 1:1 off a printed BROR bin
+ * (the reference STL). Two kinds, one hole pitch apart:
+ * - the hook, a round rod 1.2 mm thinner than the hole: straight through
+ *   the sheet (`gap` behind the face), then a bend of `HOOK_BEND` upward
+ *   on a `HOOK_RADIUS` centreline radius, `HOOK_TIP` of straight rod and
+ *   a domed end (a sphere of the rod's radius);
+ * - the stud below it, a round rod 0.5 mm thinner than the hole, straight
+ *   with the same domed end, which sits in its hole and stops the bin
+ *   tilting or swinging.
  */
-export const ROD_LIFT = 2.1
-export const ROD_GUSSET = 2.3
-export const ROD_BEYOND = 5.6
+export const HOOK_BEND = (50 * Math.PI) / 180
+export const HOOK_RADIUS = 4
+export const HOOK_TIP = 2.9
+export const HOOK_PLAY = 1.2
+export const STUD_PLAY = 0.5
+/** The hook's straight run behind the face, past the sheet. */
+export const HOOK_CLEAR = 1.64
+/** The stud's straight run behind the face, past the sheet, before the dome. */
+export const STUD_CLEAR = 2.75
 
-/** How far the rod reaches behind the sheet face (past the gap), and
- * how far it rises above the wall it sits on. */
-export function rodReach(d: number): { back: number; up: number } {
-  return { back: ROD_BEYOND, up: ROD_LIFT + d }
+/** How far the hook reaches behind the face past its straight run (the
+ * dome included), and how high its tip rises above the shank's centre. */
+export function hookReach(d: number): { back: number; up: number } {
+  const r = d / 2
+  return { back: HOOK_RADIUS * Math.sin(HOOK_BEND) + HOOK_TIP * Math.cos(HOOK_BEND) + r, up: HOOK_RADIUS * (1 - Math.cos(HOOK_BEND)) + HOOK_TIP * Math.sin(HOOK_BEND) + r }
 }
 
-/** The rod (a swept tube) with its gusset, standing (a bin's back wall,
- * `top` = the wall's top height, `wall` its thickness, the face at
- * `faceY` with the bin toward larger y) or lying flat (a hook's plate:
- * the back face at `faceX`, the plate's top edge at canvas `topY`, the
- * rod's centre `zc` above the bed). */
-export function rodParts(o: { d: number; gap: number; wall: number; color: string; name: string } & ({ standing: true; cx: number; faceY: number; top: number } | { standing: false; faceX: number; topY: number; zc: number })): PartRecipe[] {
-  const { d, gap, wall, color, name } = o
-  const reach = gap + ROD_BEYOND
-  const axis = ROD_LIFT + d / 2
-  // Where the centreline meets the inner face, above the wall's top.
-  const dip = 0.25 * d
-  const bend = ROD_GUSSET + 0.2
-  // (b, h): b behind the face, h above the wall's top.
-  const gusset = [
-    { b: 0, h: 0 },
-    { b: ROD_GUSSET, h: ROD_LIFT },
-    { b: ROD_GUSSET, h: axis },
-    { b: -wall, h: dip },
-    { b: -wall, h: 0 },
-  ]
-  if (o.standing) {
-    const points = [
-      { x: o.cx, y: o.faceY - reach, z: o.top + axis },
-      { x: o.cx, y: o.faceY - bend, z: o.top + axis },
-      { x: o.cx, y: o.faceY + wall, z: o.top + dip },
-    ]
-    return [
-      { name, color, outline: { kind: 'tube', radius: d / 2, points }, depth: d },
-      { name: `${name} gusset`, color, outline: { kind: 'path', points: standingPath(gusset, o.cx, axis, o.faceY) }, depth: d, rotation: { y: 90 }, z: o.top },
-    ]
+/** A sphere: a disc as long as it is wide with both edges filleted to
+ * its radius. */
+function sphere(name: string, color: string, c: { x: number; y: number; z: number }, d: number): PartRecipe {
+  const r = d / 2
+  return { name, color, outline: { kind: 'circle', x: c.x - r, y: c.y - r, width: d, height: d }, depth: d, bevel: r, z: c.z - r }
+}
+
+type Standing = { standing: true; cx: number; faceY: number; c: number }
+type Lying = { standing: false; faceX: number; shankY: number; zc: number }
+
+/** The hook as a swept tube plus its domed end. Standing: on a bin's
+ * back face at `faceY` (the bin toward larger y), centred `c` above the
+ * bed. Lying flat (a hook's plate): the face at `faceX` with the board
+ * toward larger x, the shank at canvas `shankY` (up is smaller y),
+ * centred `zc` above the bed. */
+export function brorHookParts(o: { d: number; gap: number; embed: number; color: string; name: string } & (Standing | Lying)): PartRecipe[] {
+  const { d, gap, embed, color, name } = o
+  const steps = 6
+  // (b, h): b behind the face, h above the shank's centre.
+  const line: { b: number; h: number }[] = [{ b: -embed, h: 0 }, { b: gap, h: 0 }]
+  for (let i = 1; i <= steps; i++) {
+    const t = (HOOK_BEND * i) / steps
+    line.push({ b: gap + HOOK_RADIUS * Math.sin(t), h: HOOK_RADIUS * (1 - Math.cos(t)) })
   }
-  const points = [
-    { x: o.faceX + reach, y: o.topY - axis, z: o.zc },
-    { x: o.faceX + bend, y: o.topY - axis, z: o.zc },
-    { x: o.faceX - wall, y: o.topY - dip, z: o.zc },
-  ]
+  const last = line[line.length - 1]
+  const end = { b: last.b + HOOK_TIP * Math.cos(HOOK_BEND), h: last.h + HOOK_TIP * Math.sin(HOOK_BEND) }
+  line.push(end)
+  const to = o.standing ? (p: { b: number; h: number }) => ({ x: o.cx, y: o.faceY - p.b, z: o.c + p.h }) : (p: { b: number; h: number }) => ({ x: o.faceX + p.b, y: o.shankY - p.h, z: o.zc })
   return [
-    { name, color, outline: { kind: 'tube', radius: d / 2, points }, depth: d },
-    { name: `${name} gusset`, color, outline: { kind: 'path', points: gusset.map((p) => ({ x: o.faceX + p.b, y: o.topY - p.h })) }, depth: d, z: o.zc - d / 2 },
+    { name, color, outline: { kind: 'tube', radius: d / 2, points: line.map(to) }, depth: d },
+    sphere(`${name} tip`, color, to(end), d),
+  ]
+}
+
+/** The straight stud with its domed end, `straight` behind the face. */
+export function brorStudParts(o: { d: number; straight: number; embed: number; color: string; name: string } & (Standing | Lying)): PartRecipe[] {
+  const { d, straight, embed, color, name } = o
+  const to = o.standing ? (b: number) => ({ x: o.cx, y: o.faceY - b, z: o.c }) : (b: number) => ({ x: o.faceX + b, y: o.shankY, z: o.zc })
+  return [
+    { name, color, outline: { kind: 'tube', radius: d / 2, points: [to(-embed), to(straight)] }, depth: d },
+    sphere(`${name} tip`, color, to(straight), d),
   ]
 }
 

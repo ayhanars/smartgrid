@@ -4,6 +4,7 @@ import { artboardSize, layerPlateId, orderOnPlate, useDocumentStore } from '../.
 import { buildExportMeshes, downloadBlob, type ExportProgress } from '../../lib/export/exportMeshes'
 import { writeBinaryStl } from '../../lib/export/stl'
 import { write3mf } from '../../lib/export/threeMf'
+import { renderThumbnails } from '../../lib/export/thumbnail'
 import { isSupabaseConfigured } from '../../lib/supabase/client'
 import { requireAccount } from '../auth/authGate'
 import { PublishDialog } from '../community/PublishDialog'
@@ -59,7 +60,9 @@ export function InspectorFooter() {
         // A 3MF carries every plate: Bambu Studio opens it with the same plates.
         const meshes = await buildExportMeshes(layers, order, { plates, bedWidth: bed.width, bedDepth: bed.height }, setProgress, state.groups)
         if (meshes.length === 0) return
-        downloadBlob(write3mf(meshes, { plates: plates.map((p) => p.name), bambu: { bedPresetId: state.bedPresetId, printSettings: state.printSettings } }), `${fileBase}.3mf`, 'model/3mf')
+        setProgress({ done: meshes.length, total: meshes.length, stage: 'Picture' })
+        const thumbnails = await renderThumbnails(meshes, plates.length)
+        downloadBlob(write3mf(meshes, { plates: plates.map((p) => p.name), bambu: { bedPresetId: state.bedPresetId, printSettings: state.printSettings }, thumbnails }), `${fileBase}.3mf`, 'model/3mf')
       } else {
         // STL has no plates, so it holds the plate you are looking at.
         const meshes = await buildExportMeshes(layers, orderOnPlate(state, activePlateId), { plates: [activePlate], bedWidth: bed.width, bedDepth: bed.height }, setProgress, state.groups)

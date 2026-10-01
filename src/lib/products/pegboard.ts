@@ -1,6 +1,7 @@
 import { bool, num, str, type MountPreview, type PartRecipe, type ProductBuild, type ProductSpec, type ProductTemplate, type SpecField } from './types'
 import { dividerParts } from './dividers'
-import { binOutline, jHook, mountProfile, ROD_LIFT, rodParts, rodReach, standingPath, type MountDims } from './mount'
+import { binOutline, brorHookParts, HOOK_CLEAR, HOOK_PLAY, hookReach, jHook, mountProfile, standingPath, type MountDims } from './mount'
+import { scoopAnchors, scoopBinParts, scoopBinSpec } from './scoopBin'
 import { BROR_BOARD, SKADIS_BOARD, type PegPattern } from './boards'
 
 /**
@@ -62,11 +63,11 @@ function slotMount(slotWidth: number, slotHeight: number, sheet: number): MountD
   return { tabThickness, lipThickness: tabWidth, gap: sheet + 0.6, lipDrop: Math.max(8, slotHeight - 3), tabWidth }
 }
 
-/** The BROR-style rod for a round hole of this size (see rodParts). */
+/** The BROR-style hook for a round hole of this size (see brorHookParts). */
 function roundMount(hole: number, sheet: number): MountDims {
-  const peg = Math.max(2, Math.round((hole - 0.4) * 10) / 10)
-  const reach = rodReach(peg)
-  return { tabThickness: peg, tabWidth: peg, lipThickness: reach.back, gap: sheet + 0.6, lipDrop: 0, lipRise: reach.up, round: Math.round((peg / 2 - 0.1) * 10) / 10 }
+  const peg = Math.max(2, Math.round((hole - HOOK_PLAY) * 10) / 10)
+  const reach = hookReach(peg)
+  return { tabThickness: peg, tabWidth: peg, lipThickness: reach.back, gap: sheet + HOOK_CLEAR, lipDrop: 0, lipRise: reach.up - peg / 2, round: Math.round((peg / 2 - 0.1) * 10) / 10 }
 }
 
 export function boardFrom(spec: ProductSpec): Board {
@@ -104,7 +105,7 @@ const hookCount = (width: number, choice: string, pitch: number, tabWidth: numbe
 /** Extra rows of mounts under the top row: none on a small bin, one on
  * anything taller than a pitch and a half, two on a big one. */
 function extraRows(spec: ProductSpec, height: number, pitchY: number, board: Board): number {
-  const top = board.round ? height + ROD_LIFT + board.dims.tabThickness / 2 : height - board.dims.tabThickness
+  const top = height - board.dims.tabThickness
   const most = Math.max(0, Math.floor((top - board.dims.tabThickness / 2 - (board.round ? 3 : board.dims.lipDrop)) / pitchY))
   const choice = str(spec, 'rows', 'auto')
   if (choice !== 'auto') return Math.min(most, Math.max(0, parseInt(choice, 10) || 0))
@@ -117,15 +118,17 @@ function extraRows(spec: ProductSpec, height: number, pitchY: number, board: Boa
 const BIN_FIELDS: SpecField[] = [
   { kind: 'number', id: 'width', label: 'Width', unit: 'mm', min: 30, max: 240, step: 1 },
   { kind: 'number', id: 'depth', label: 'Depth', unit: 'mm', min: 20, max: 150, step: 1 },
-  { kind: 'number', id: 'height', label: 'Height', unit: 'mm', min: 20, max: 200, step: 1 },
-  { kind: 'number', id: 'wall', label: 'Wall', unit: 'mm', min: 1.2, max: 4, step: 0.2 },
+  { kind: 'number', id: 'height', label: 'Height', unit: 'mm', min: 20, max: 200, step: 1, hint: 'At the back, where it hangs.' },
+  { kind: 'number', id: 'front', label: 'Front height', unit: 'mm', min: 10, max: 200, step: 1, hint: 'On a round-hole board, lower than the height makes a scoop: the sides slope down to it at 33°.' },
+  { kind: 'number', id: 'wall', label: 'Wall', unit: 'mm', min: 1.2, max: 4, step: 0.1 },
+  { kind: 'number', id: 'floor', label: 'Floor', unit: 'mm', min: 1.2, max: 10, step: 0.5 },
   { kind: 'number', id: 'corner', label: 'Corner radius', unit: 'mm', min: 0, max: 30, step: 1 },
   {
     kind: 'select',
     id: 'hooks',
     label: 'Mounts across',
     options: [
-      { value: 'auto', label: 'Auto (one per pitch)' },
+      { value: 'auto', label: 'Auto' },
       { value: '1', label: '1' },
       { value: '2', label: '2' },
       { value: '3', label: '3' },
@@ -155,8 +158,8 @@ export const pegboardBin: ProductTemplate = {
   category: 'Any pegboard',
   keywords: ['box', 'basket', 'bin', 'container', 'pegboard', 'custom', 'hole', 'slot', 'wall'],
   fields: [...BIN_FIELDS, ...BOARD_FIELDS],
-  defaults: { width: 90, depth: 60, height: 80, wall: 2, corner: 6, hooks: 'auto', rows: 'auto', dividers: 0, drain: false, ...BOARD_DEFAULTS },
-  notes: 'Prints standing up; the parts export as one body. On a slot board the tabs drop a lip behind the sheet (45° undersides, no support). On a round-hole board straight pegs go through the holes (tips turned up a touch) and straight studs below keep the bin from tilting. Measure a hole, the pitch and the sheet on your board first.',
+  defaults: { width: 90, depth: 60, height: 80, front: 80, wall: 2, floor: 2, corner: 6, hooks: 'auto', rows: 'auto', dividers: 0, drain: false, ...BOARD_DEFAULTS },
+  notes: 'Prints standing up; the parts export as one body. On a slot board the tabs drop a lip behind the sheet (45° undersides, no support). On a round-hole board it is the BROR bin: hooks that bend 50° up behind the sheet, with domed ends, and straight studs one hole below. Measure a hole, the pitch and the sheet on your board first.',
   preview: (spec: ProductSpec): MountPreview => {
     const width = num(spec, 'width', 90)
     const height = num(spec, 'height', 80)
@@ -165,19 +168,29 @@ export const pegboardBin: ProductTemplate = {
     const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pattern.pitchX, dims.tabWidth)
     const rows = extraRows(spec, height, pattern.pitchY, board)
     const span = (hooks - 1) * pattern.pitchX
-    const top = board.round ? -(ROD_LIFT + dims.tabThickness) : 0
+    if (pattern.kind === 'round') {
+      const s = scoopBinSpec(spec, { hole: pattern.diameter, sheet: num(spec, 'sheet', 1.5), pitch: pattern.pitchX })
+      const studs = s.columns.length * s.studRows
+      return { kind: 'mount', pattern, silhouette: { width: s.width, height: s.height }, anchors: scoopAnchors(s), caption: `Back view · ${s.columns.length} hook${s.columns.length === 1 ? '' : 's'}${studs ? ` + ${studs} stud${studs === 1 ? '' : 's'}` : ''} on the ${pattern.pitchX} mm grid` }
+    }
+    const top = 0
     const anchors = []
     for (let r = 0; r <= rows; r++) for (let i = 0; i < hooks; i++) anchors.push({ x: width / 2 - span / 2 + i * pattern.pitchX - dims.tabWidth / 2, y: top + r * pattern.pitchY, width: dims.tabWidth, height: dims.tabThickness })
     const below = rows > 0 ? ` + ${hooks * rows} ${board.round ? 'stud' : 'hook'}${hooks * rows === 1 ? '' : 's'} below` : ''
     return { kind: 'mount', pattern, silhouette: { width, height }, anchors, caption: `Back view · ${hooks} ${board.round ? 'peg' : 'hook'}${hooks === 1 ? '' : 's'}${below} on the ${pattern.pitchX} mm grid` }
   },
   build: (spec: ProductSpec): ProductBuild => {
+    const board = boardFrom(spec)
+    if (board.pattern.kind === 'round') {
+      const s = scoopBinSpec(spec, { hole: board.pattern.diameter, sheet: num(spec, 'sheet', 1.5), pitch: board.pattern.pitchX })
+      const { parts, boxY } = scoopBinParts(s, COLOR)
+      return { width: s.width, height: boxY + s.depth, parts, fuse: true }
+    }
     const width = num(spec, 'width', 90)
     const depth = num(spec, 'depth', 60)
     const height = num(spec, 'height', 80)
     const wall = num(spec, 'wall', 2)
     const corner = Math.max(0, Math.min(num(spec, 'corner', 6), Math.min(width, depth) / 2 - wall))
-    const board = boardFrom(spec)
     const { dims, pattern } = board
     const hooks = hookCount(width, str(spec, 'hooks', 'auto'), pattern.pitchX, dims.tabWidth)
     const rows = extraRows(spec, height, pattern.pitchY, board)
@@ -193,27 +206,12 @@ export const pegboardBin: ProductTemplate = {
     parts.push(...dividerParts({ count: num(spec, 'dividers', 0), width, depth, height, wall, boxY, color: COLOR }))
     const span = (hooks - 1) * pattern.pitchX
     const cxOf = (i: number) => width / 2 - span / 2 + i * pattern.pitchX
-    if (board.round) {
-      const center = height + ROD_LIFT + dims.tabThickness / 2
-      for (let i = 0; i < hooks; i++) parts.push(...rodParts({ standing: true, d: dims.tabThickness, gap: dims.gap, wall, color: COLOR, name: hooks === 1 ? 'Rod' : `Rod ${i + 1}`, cx: cxOf(i), faceY: boxY, top: height }))
-      const d = dims.tabThickness
-      const studLength = embed + dims.gap + d
-      const centerB = (dims.gap + d - embed) / 2
-      let n = 0
-      for (let r = 1; r <= rows; r++) {
-        for (let i = 0; i < hooks; i++) {
-          n++
-          parts.push({ name: hooks * rows === 1 ? 'Stud' : `Stud ${n}`, color: COLOR, outline: { kind: 'circle', x: cxOf(i) - d / 2, y: boxY - centerB - d / 2, width: d, height: d }, depth: studLength, rotation: { x: 90 }, z: center - r * pattern.pitchY - d / 2 })
-        }
-      }
-    } else {
-      const { points: profile, height: hookHeight } = mountProfile(dims, embed)
-      let n = 0
-      for (let r = 0; r <= rows; r++) {
-        for (let i = 0; i < hooks; i++) {
-          n++
-          parts.push({ name: hooks * (rows + 1) === 1 ? 'Hook' : `Hook ${n}`, color: COLOR, outline: { kind: 'path', points: standingPath(profile, cxOf(i), hookHeight, boxY) }, depth: dims.tabWidth, rotation: { y: 90 }, z: height - hookHeight - r * pattern.pitchY })
-        }
+    const { points: profile, height: hookHeight } = mountProfile(dims, embed)
+    let n = 0
+    for (let r = 0; r <= rows; r++) {
+      for (let i = 0; i < hooks; i++) {
+        n++
+        parts.push({ name: hooks * (rows + 1) === 1 ? 'Hook' : `Hook ${n}`, color: COLOR, outline: { kind: 'path', points: standingPath(profile, cxOf(i), hookHeight, boxY) }, depth: dims.tabWidth, rotation: { y: 90 }, z: height - hookHeight - r * pattern.pitchY })
       }
     }
     return { width, height: boxY + depth, parts, fuse: true }
@@ -255,7 +253,7 @@ export const pegboardHook: ProductTemplate = {
     const d = dims.tabThickness
     const base = jHook({ mount: { ...dims, tabWidth: 0 }, reach, width, arm, tip, plateH, color: COLOR })
     const plateT = 4
-    const peg = rodParts({ standing: false, d, gap: dims.gap, wall: plateT, color: COLOR, name: 'Rod', faceX: plateT + reach, topY: dims.lipRise ?? 0, zc: Math.max(d / 2, width / 2) })
+    const peg = brorHookParts({ standing: false, d, gap: dims.gap, embed: plateT - 0.5, color: COLOR, name: 'Hook', faceX: plateT + reach, shankY: hookReach(d).up, zc: Math.max(d / 2, width / 2) })
     return { width: base.width, height: base.height, parts: [base.parts[0], ...peg], fuse: true }
   },
 }

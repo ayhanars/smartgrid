@@ -7,7 +7,7 @@ const UNIT_FACTORS = { mm: 1, cm: 10, in: 25.4 } as const
 /** Where each setting belongs when the form is shown in sections, with
  * a plain-language line for the section. Unknown ids land in "More". */
 const SECTIONS: { id: string; title: string; hint: string; fields: string[] }[] = [
-  { id: 'size', title: 'Size', hint: 'Outer measurements of the finished piece.', fields: ['width', 'depth', 'height', 'length', 'reach', 'plate', 'count'] },
+  { id: 'size', title: 'Size', hint: 'Outer measurements of the finished piece.', fields: ['width', 'depth', 'height', 'front', 'length', 'reach', 'plate', 'count'] },
   { id: 'layout', title: 'Inside', hint: 'How the space is divided.', fields: ['columns', 'rows', 'layout', 'build', 'dividers', 'drain', 'edge', 'notches'] },
   { id: 'mount', title: 'Mounting', hint: 'How it hangs on the board.', fields: ['hooks', 'rows', 'board', 'holeKind', 'hole', 'slotHeight', 'pitchX', 'pitchY', 'stagger', 'sheet', 'pitch'] },
   { id: 'walls', title: 'Walls & look', hint: 'Thicknesses, corners and the pattern on the walls.', fields: ['wall', 'floor', 'corner', 'thickness', 'crossing', 'arm', 'tip', 'pattern', 'patternSize'] },
