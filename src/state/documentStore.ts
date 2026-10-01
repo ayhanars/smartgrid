@@ -303,9 +303,9 @@ function freeSpotOrNull(state: DocumentState, width: number, height: number, pla
 /** Footprint of a part's outline, in product mm. */
 function partBounds(part: import('../lib/products').PartRecipe): Bounds {
   const o = part.outline
-  if (o.kind !== 'path' && o.kind !== 'tube') return { x: o.x, y: o.y, width: o.width, height: o.height }
+  if ('width' in o) return { x: o.x, y: o.y, width: o.width, height: o.height }
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
-  const points: { x: number; y: number }[] = o.points
+  const points: { x: number; y: number }[] = 'regions' in o ? o.regions.flatMap((r) => r.outer.points) : o.points
   for (const p of points) {
     x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y)
   }
@@ -408,7 +408,11 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
       byPlate.set(place.plateId, [...(byPlate.get(place.plateId) ?? []), id])
       return
     }
-    if (part.outline.kind === 'path') {
+    if (part.outline.kind === 'regions') {
+      // Letters: one shape with every outline and its holes.
+      id = api.addImportedShapes([{ name: part.name, color: part.color ?? '#4d8dff', regions: part.outline.regions.map((r) => ({ outer: { points: r.outer.points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y })) }, holes: r.holes.map((h) => ({ points: h.points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y })) })) })) }], { x: 0, y: 0 })[0]
+      if (part.isHole) useDocumentStore.setState((s) => ({ layers: { ...s.layers, [id]: { ...s.layers[id], kind: 'hole', isHole: true, bevelMode: 'shape' } } }))
+    } else if (part.outline.kind === 'path') {
       id = api.addPenShape(part.outline.points.map((p) => ({ x: p.x + shift.x, y: p.y + shift.y })))
       // A drawn cutter (a slope cut off a bin): the cut has the drawn
       // shape exactly, as carveWith makes one.
@@ -431,6 +435,7 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
       api.setBevelTop(id, part.bevel)
     }
     if (part.rotation) api.setRotation(id, part.rotation)
+    if (part.profile) api.setProfile(id, part.profile)
     // Always explicit: a new shape otherwise climbs onto whatever is
     // under its footprint (a hook onto its box).
     api.setLayerZ(id, part.z ?? 0)

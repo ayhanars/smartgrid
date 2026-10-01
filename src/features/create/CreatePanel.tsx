@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Anchor, ClipboardPaste, Clock, Copy, Grid2x2, Link, Package, Plus, Rows3, Search, X } from 'lucide-react'
+import { ArrowLeft, Anchor, ClipboardPaste, Clock, Copy, Grid2x2, Link, Package, PawPrint, Plus, Rows3, Search, X } from 'lucide-react'
 import { PRODUCT_TEMPLATES, cleanSpec, productTemplate, searchTemplates, type ProductSpec, type ProductTemplate, type SpecValue } from '../../lib/products'
 import { artboardSize, useDocumentStore } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
@@ -10,7 +10,7 @@ import { describeSpec, listRecentProducts, rememberRecentProduct, type RecentPro
 import { buildPrompt, encodeSpecParam, parseRecipe } from '../../lib/products/recipe'
 import './CreatePanel.css'
 
-const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'skadis-hook': Anchor, 'bror-bin': Package, 'bror-hook': Anchor, 'pegboard-bin': Package, 'pegboard-hook': Anchor, 'drawer-tray': Grid2x2, 'drawer-divider': Rows3 }
+const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'skadis-hook': Anchor, 'bror-bin': Package, 'bror-hook': Anchor, 'pegboard-bin': Package, 'pegboard-hook': Anchor, 'drawer-tray': Grid2x2, 'drawer-divider': Rows3, 'pet-stand': PawPrint }
 
 /**
  * The product workshop: a sheet over the editor with the picker (search,
@@ -56,8 +56,10 @@ export function CreatePanel() {
     setRequested(null)
     setRequestedSpec(null)
     if (t) {
-      setPickedId(t.id)
-      setSpec({ ...t.defaults, ...(requestedSpec ? cleanSpec(t, requestedSpec) : {}) })
+      void (t.prepare?.() ?? Promise.resolve()).catch(() => undefined).then(() => {
+        setPickedId(t.id)
+        setSpec({ ...t.defaults, ...(requestedSpec ? cleanSpec(t, requestedSpec) : {}) })
+      })
     }
   }, [open, requested, requestedSpec, setRequested, setRequestedSpec])
 
@@ -77,8 +79,12 @@ export function CreatePanel() {
   if (!open) return null
 
   const pick = (t: ProductTemplate, withSpec?: ProductSpec) => {
-    setPickedId(t.id)
-    setSpec({ ...t.defaults, ...(withSpec ? cleanSpec(t, withSpec) : {}) })
+    // A template that needs something loaded first (a font) gets it
+    // before its form opens, so the first build already has it.
+    void (t.prepare?.() ?? Promise.resolve()).catch(() => undefined).then(() => {
+      setPickedId(t.id)
+      setSpec({ ...t.defaults, ...(withSpec ? cleanSpec(t, withSpec) : {}) })
+    })
   }
   const add = () => {
     if (!picked) return

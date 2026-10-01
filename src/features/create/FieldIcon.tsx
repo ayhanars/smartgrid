@@ -219,8 +219,10 @@ const GLYPHS: Record<string, () => React.ReactNode> = {
   ),
 }
 
+const ALIASES: Record<string, string> = { bowl: 'hole', bowlDepth: 'height', band: 'floor', name: 'pattern' }
+
 export function FieldIcon({ id }: { id: string }) {
-  const glyph = GLYPHS[id]
+  const glyph = GLYPHS[ALIASES[id] ?? id]
   if (!glyph) return null
   return (
     <Box>

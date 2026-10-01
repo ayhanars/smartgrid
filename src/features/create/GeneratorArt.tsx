@@ -3,6 +3,7 @@
  * one: a small scene per product family, in the accent colours.
  */
 export function GeneratorArt({ template }: { template: string }) {
+  if (template === 'pet-stand') return <PetStandArt />
   const kind = template.startsWith('drawer-tray') ? 'tray' : template.startsWith('drawer-divider') ? 'divider' : template.endsWith('hook') ? 'hook' : 'bin'
   return (
     <svg viewBox="0 0 160 120" className={`generator-art generator-art--${kind}`} aria-hidden="true">
@@ -48,6 +49,27 @@ export function GeneratorArt({ template }: { template: string }) {
           <path d="M30 88 h100" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" opacity="0.5" />
         </g>
       )}
+    </svg>
+  )
+}
+
+/** The pet bowl stand: a tapered body with a bowl in its top, a name
+ * band and a paw, on a darker base band. */
+function PetStandArt() {
+  return (
+    <svg viewBox="0 0 160 120" className="generator-art generator-art--stand" aria-hidden="true">
+      <path d="M44 38 L116 38 L128 100 L32 100 Z" fill="currentColor" fillOpacity="0.28" stroke="currentColor" strokeOpacity="0.6" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M36 82 L124 82 L128 100 L32 100 Z" fill="currentColor" fillOpacity="0.55" />
+      <ellipse cx="80" cy="38" rx="36" ry="9" fill="currentColor" fillOpacity="0.5" stroke="currentColor" strokeOpacity="0.7" strokeWidth="2" />
+      <ellipse cx="80" cy="38" rx="27" ry="6" fill="currentColor" fillOpacity="0.9" />
+      <text x="80" y="70" textAnchor="middle" fontSize="15" fontWeight="800" fill="currentColor" fillOpacity="0.9" fontFamily="Nunito, system-ui, sans-serif" letterSpacing="1">THEO</text>
+      <g fill="currentColor" fillOpacity="0.9">
+        <ellipse cx="80" cy="53" rx="3.6" ry="2.8" />
+        <circle cx="75.4" cy="48.6" r="1.4" />
+        <circle cx="78.6" cy="46.6" r="1.5" />
+        <circle cx="81.6" cy="46.6" r="1.5" />
+        <circle cx="84.8" cy="48.6" r="1.4" />
+      </g>
     </svg>
   )
 }

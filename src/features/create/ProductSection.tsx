@@ -38,7 +38,8 @@ export function ProductSection({ selection }: { selection: string[] }) {
   if (!group || !recipe || !template || !groupId) return null
 
   const dirty = Object.keys(spec).some((k) => spec[k] !== recipe.spec[k])
-  const update = () => {
+  const update = async () => {
+    await (template.prepare?.() ?? Promise.resolve()).catch(() => undefined)
     const newId = regenerateProduct(groupId, cleanSpec(template, spec))
     if (newId) {
       const s = useDocumentStore.getState()
@@ -55,7 +56,7 @@ export function ProductSection({ selection }: { selection: string[] }) {
       </div>
       {template.preview && <ProductPreview preview={template.preview(cleanSpec(template, spec), { bed })} />}
       <SpecForm fields={template.fields} spec={spec} sliders onChange={(id: string, value: SpecValue) => setSpec((prev) => ({ ...prev, [id]: value }))} />
-      <button type="button" className={`inspector-product__update ${dirty ? 'inspector-product__update--dirty' : ''}`} disabled={!dirty} onClick={update}>
+      <button type="button" className={`inspector-product__update ${dirty ? 'inspector-product__update--dirty' : ''}`} disabled={!dirty} onClick={() => void update()}>
         <RefreshCcw size={13} /> Update product
       </button>
       <p className="inspector-note">Rebuilds every part from these specs; changes made to the parts by hand are replaced. The parts themselves stay editable in the tabs below.</p>
