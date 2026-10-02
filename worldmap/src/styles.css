@@ -98,6 +98,12 @@ body {
   color: var(--accent-ink);
   border-color: var(--accent);
 }
+.theme-link {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  border-style: dashed;
+}
 .theme-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

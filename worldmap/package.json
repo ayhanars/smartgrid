@@ -9,14 +9,20 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "geo": "node scripts/build-geo.mjs",
-    "build:single": "npm run build && node scripts/inline.mjs"
+    "build:single": "node scripts/inline.mjs",
+    "build:single:jelly": "node scripts/inline.mjs jelly.html"
   },
   "devDependencies": {
+    "@types/matter-js": "^0.20.2",
     "d3-geo": "^3.1.1",
     "topojson-client": "^3.1.0",
     "typescript": "~5.9.2",
     "vite": "^7.1.5",
     "world-atlas": "^2.0.2",
     "world-countries": "^5.1.0"
+  },
+  "dependencies": {
+    "matter-js": "^0.20.0",
+    "poly-decomp": "^0.3.0"
   }
 }
