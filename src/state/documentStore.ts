@@ -358,11 +358,23 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
     for (let y = 6; y + b.height <= bed.height; y += 4) for (let x = 6; x + b.width <= bed.width; x += 4) if (clear(x, y)) return { x, y }
     return null
   }
+  // Plates with nothing on them yet: a product's bodies on such a plate
+  // are packed together and then centred on it as one cluster. On a
+  // plate that already has shapes the first body takes `origin` (the
+  // free spot the caller found) and the rest pack beside it.
+  const emptyAtStart = new Set<string>()
+  const wasEmpty = (pid: string) => {
+    if (emptyAtStart.has(pid)) return true
+    if (orderOnPlate(useDocumentStore.getState(), pid).length === 0 && !taken.has(pid)) emptyAtStart.add(pid)
+    return emptyAtStart.has(pid)
+  }
   let plateCursor = basePlate
   for (let k = 0; k < bodyCount; k++) {
     const b = boundsOf(k)
     let placed: { plateId: string; shift: Point2 } | null = null
-    if (k === 0 && fits(basePlate, b, { x: b.x + origin.x, y: b.y + origin.y })) placed = { plateId: basePlate, shift: origin }
+    if (k === 0 && !keep && wasEmpty(basePlate)) {
+      // Centred later with the rest of the cluster: packed like the others.
+    } else if (k === 0 && fits(basePlate, b, { x: b.x + origin.x, y: b.y + origin.y })) placed = { plateId: basePlate, shift: origin }
     else if (k === 0 && keep) {
       // A rebuilt product stays where the user put it, even if it grew
       // into a neighbour: moved only as far as the bed's edge demands.
@@ -385,8 +397,26 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
         } else plateCursor = next
       }
     }
+    wasEmpty(placed.plateId)
     placements.push(placed)
     taken.set(placed.plateId, [...(taken.get(placed.plateId) ?? []), { x: b.x + placed.shift.x, y: b.y + placed.shift.y, width: b.width, height: b.height }])
+  }
+  if (!keep) {
+    // Centre each cluster on a plate that was empty.
+    const bed = artboardSize(useDocumentStore.getState())
+    for (const pid of emptyAtStart) {
+      const rects = taken.get(pid) ?? []
+      if (rects.length === 0) continue
+      const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y))
+      const x1 = Math.max(...rects.map((r) => r.x + r.width)), y1 = Math.max(...rects.map((r) => r.y + r.height))
+      const dx = Math.round((bed.width - (x1 - x0)) / 2 - x0)
+      const dy = Math.round((bed.height - (y1 - y0)) / 2 - y0)
+      if (!dx && !dy) continue
+      placements.forEach((p) => {
+        if (p.plateId === pid) p.shift = { x: p.shift.x + dx, y: p.shift.y + dy }
+      })
+      taken.set(pid, rects.map((r) => ({ ...r, x: r.x + dx, y: r.y + dy })))
+    }
   }
   const ids: string[] = []
   const idOfPart: string[] = []
