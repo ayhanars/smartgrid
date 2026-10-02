@@ -1,0 +1,456 @@
+/* WorldMap component. Every colour is a token so a host page can retheme it,
+   and it follows the viewer's light/dark setting on its own. */
+.wm {
+  --wm-fg: #16181c;
+  --wm-fg-2: #4e535c;
+  --wm-muted: #868c96;
+  --wm-surface: #fcfcfb;
+  --wm-card: #ffffff;
+  --wm-land: #e6e5e0;
+  --wm-land-stroke: #fcfcfb;
+  --wm-hairline: rgba(22, 24, 28, 0.12);
+  --wm-ring: #16181c;
+  --wm-shadow: 0 6px 24px rgba(20, 24, 40, 0.16);
+  --wm-radius: 12px;
+  --wm-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  color: var(--wm-fg);
+  font-family: var(--wm-font);
+  font-size: 14px;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  container-type: inline-size;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .wm {
+    --wm-fg: #f1f1ee;
+    --wm-fg-2: #b9bbb5;
+    --wm-muted: #868c96;
+    --wm-surface: #1a1a19;
+    --wm-card: #24242a;
+    --wm-land: #30312f;
+    --wm-land-stroke: #1a1a19;
+    --wm-hairline: rgba(255, 255, 255, 0.14);
+    --wm-ring: #ffffff;
+    --wm-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] .wm {
+  --wm-fg: #f1f1ee;
+  --wm-fg-2: #b9bbb5;
+  --wm-muted: #868c96;
+  --wm-surface: #1a1a19;
+  --wm-card: #24242a;
+  --wm-land: #30312f;
+  --wm-land-stroke: #1a1a19;
+  --wm-hairline: rgba(255, 255, 255, 0.14);
+  --wm-ring: #ffffff;
+  --wm-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+.wm *,
+.wm *::before,
+.wm *::after {
+  box-sizing: border-box;
+}
+
+/* header */
+.wm-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wm-title {
+  margin: 0;
+  font-size: clamp(20px, 2.2cqi + 12px, 28px);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.wm-subtitle {
+  margin: 0;
+  color: var(--wm-fg-2);
+  max-width: 62ch;
+}
+
+/* stage */
+.wm-stage {
+  position: relative;
+  background: var(--wm-surface);
+  border-radius: var(--wm-radius);
+  overflow: hidden;
+  min-width: 0;
+}
+.wm-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.wm.is-zoomed .wm-svg {
+  cursor: grab;
+}
+.wm.is-zoomed .wm-svg:active {
+  cursor: grabbing;
+}
+.wm-country {
+  fill: var(--wm-land);
+  stroke: var(--wm-land-stroke);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+  transition: fill 240ms ease, filter 120ms ease;
+  outline: none;
+}
+.wm-country.has-data:hover,
+.wm-country.is-hover {
+  filter: brightness(1.08) saturate(1.1);
+}
+.wm-country.is-hover,
+.wm-country:focus-visible {
+  stroke: var(--wm-ring);
+  stroke-width: 1.4;
+}
+.wm-country.is-selected {
+  stroke: var(--wm-ring);
+  stroke-width: 2;
+}
+.wm-marks {
+  pointer-events: none;
+}
+.wm-dot-circle {
+  stroke: var(--wm-surface);
+  stroke-width: 1;
+}
+.wm-leader {
+  stroke: var(--wm-fg-2);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.75;
+}
+.wm-leader-dot {
+  fill: var(--wm-fg-2);
+}
+.wm-badge-circle {
+  stroke: var(--wm-surface);
+  stroke-width: 1.5;
+}
+.wm-badge-text {
+  font: 700 10.5px/1 var(--wm-font);
+  font-variant-numeric: tabular-nums;
+}
+
+/* zoom bar */
+.wm-zoombar {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wm-zoombtn {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--wm-hairline);
+  border-radius: 8px;
+  background: var(--wm-card);
+  color: var(--wm-fg);
+  font: 500 17px/1 var(--wm-font);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.wm-zoombtn:hover {
+  filter: brightness(0.97);
+}
+.wm-zoombtn:focus-visible,
+.wm-more:focus-visible,
+.wm-tip-close:focus-visible {
+  outline: 2px solid var(--wm-ring);
+  outline-offset: 2px;
+}
+
+/* tooltip */
+.wm-tooltip {
+  position: absolute;
+  box-sizing: border-box;
+  z-index: 2;
+  min-width: 160px;
+  max-width: min(280px, calc(100% - 16px));
+  padding: 10px 12px;
+  background: var(--wm-card);
+  color: var(--wm-fg);
+  border: 1px solid var(--wm-hairline);
+  border-radius: 10px;
+  box-shadow: var(--wm-shadow);
+  pointer-events: none;
+  font-size: 13px;
+}
+.wm-tooltip.is-pinned {
+  pointer-events: auto;
+  padding-right: 34px;
+}
+.wm-tooltip.is-anchored {
+  left: 8px;
+  bottom: 8px;
+  right: 56px;
+  max-width: 320px;
+}
+.wm-tip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+.wm-tip-name {
+  font-size: 14px;
+}
+.wm-tip-rank {
+  color: var(--wm-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.wm-tip-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+}
+.wm-tip-value b {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.wm-tip-value.is-muted {
+  color: var(--wm-muted);
+}
+.wm-tip-unit {
+  color: var(--wm-fg-2);
+  font-size: 12px;
+}
+.wm-tip-note {
+  margin: 6px 0 0;
+  color: var(--wm-fg-2);
+  font-size: 12.5px;
+}
+.wm-tip-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--wm-fg-2);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.wm-tip-close:hover {
+  background: var(--wm-hairline);
+}
+
+/* legend */
+.wm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  font-size: 12.5px;
+  color: var(--wm-fg-2);
+}
+.wm-legend-title {
+  font-weight: 600;
+  color: var(--wm-fg);
+}
+.wm-legend-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.wm-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.wm-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex: none;
+  box-shadow: inset 0 0 0 1px var(--wm-hairline);
+}
+.wm-swatch.is-nodata {
+  background: var(--wm-land);
+}
+.wm-tooltip .wm-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  align-self: center;
+}
+
+/* ranked list / table view */
+.wm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.wm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.wm-table-caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.wm-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--wm-muted);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--wm-hairline);
+}
+.wm-table th:last-child,
+.wm-value {
+  text-align: right;
+}
+.wm-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--wm-hairline);
+  vertical-align: middle;
+}
+.wm-table tbody tr {
+  cursor: pointer;
+}
+.wm-table tbody tr:hover {
+  background: color-mix(in srgb, var(--wm-fg) 5%, transparent);
+}
+.wm-table tbody tr.is-selected {
+  background: color-mix(in srgb, var(--wm-fg) 9%, transparent);
+}
+.wm-rank {
+  width: 56px;
+  color: var(--wm-fg-2);
+  white-space: nowrap;
+}
+.wm-rank .wm-swatch {
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  vertical-align: -1px;
+}
+.wm-name {
+  width: 100%;
+  min-width: 0;
+  font-weight: 500;
+}
+.wm-bar {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background: var(--wm-land);
+  max-width: 100%;
+}
+.wm-value {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.wm-more {
+  align-self: flex-start;
+  border: 1px solid var(--wm-hairline);
+  background: transparent;
+  color: var(--wm-fg);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: 500 13px var(--wm-font);
+  cursor: pointer;
+}
+.wm-more:hover {
+  background: color-mix(in srgb, var(--wm-fg) 6%, transparent);
+}
+
+.wm-source {
+  margin: 0;
+  color: var(--wm-muted);
+  font-size: 12px;
+}
+.wm-source a {
+  color: inherit;
+}
+
+/* compact (phone): tooltip and zoom controls sit in a row under the map */
+.wm-below {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 36px;
+}
+.wm-hint {
+  flex: 1;
+  margin: 0;
+  align-self: center;
+  color: var(--wm-muted);
+  font-size: 13px;
+}
+.wm.is-compact .wm-tooltip {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  box-shadow: none;
+  pointer-events: auto;
+}
+.wm.is-compact .wm-tooltip.is-pinned {
+  padding-right: 34px;
+}
+.wm.is-compact .wm-zoombar {
+  position: static;
+  flex-direction: row;
+  flex: none;
+}
+.wm.is-compact .wm-zoombtn {
+  width: 36px;
+  height: 36px;
+}
+.wm.is-compact .wm-stage {
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wm-country,
+  .wm-zoom {
+    transition: none !important;
+  }
+}
+@media print, (forced-colors: active) {
+  .wm-zoombar,
+  .wm-more {
+    display: none;
+  }
+}

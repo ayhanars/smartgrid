@@ -1,0 +1,22 @@
+{
+  "name": "worldmap-infographics",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Reusable, mobile-first world map for data infographics. One map, many themes.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "geo": "node scripts/build-geo.mjs",
+    "build:single": "npm run build && node scripts/inline.mjs"
+  },
+  "devDependencies": {
+    "d3-geo": "^3.1.1",
+    "topojson-client": "^3.1.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.5",
+    "world-atlas": "^2.0.2",
+    "world-countries": "^5.1.0"
+  }
+}
