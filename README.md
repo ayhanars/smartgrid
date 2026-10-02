@@ -422,6 +422,13 @@ one pivot and settled once for all of them (`buildLayerGeometries`
 merges them for the bake), or each piece would turn about its own
 centre and drop to the bed.
 
+A product added from the Create panel lands centred: on a plate that
+had nothing on it, its bodies are packed together and the cluster is
+centred on the plate (one bin in the middle; nine boxes as a centred
+block); on a plate that already has shapes, the first body takes the
+nearest free spot and the rest pack beside it. A rebuilt product stays
+where it was.
+
 A product travels as a recipe (`recipe.ts`): the template id and its
 settings, which is all the generator needs to rebuild it exactly.
 "Copy prompt" (in the Create sheet and on a product's section in the
