@@ -480,6 +480,13 @@ function buildProduct(templateId: string, spec: ProductSpec, build: { parts: imp
       }
     }
   })
+  // Cutters aimed at one part: linked now that every part has its id.
+  build.parts.forEach((part, index) => {
+    if (part.cuts === undefined || !idOfPart[index] || !idOfPart[part.cuts]) return
+    const hid = idOfPart[index]
+    const target = idOfPart[part.cuts]
+    useDocumentStore.setState((s) => ({ layers: { ...s.layers, [hid]: { ...s.layers[hid], onlyCuts: target } } }))
+  })
   // Shapes are created on the active plate, which adding plates moved:
   // put every part on its body's plate, and the user back where they were.
   for (const [pid, members] of byPlate) api.moveShapesToPlate(members, pid)

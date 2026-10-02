@@ -106,7 +106,7 @@ export function useCutGeometries(
       const solidBounds = shapeWorldBounds(layer)
       // A "Hollow out" cavity is private to its solid: a divider or a
       // hook standing inside the hollow is not carved by it.
-      const overlappingHoles = holeIds.filter((hid) => hid !== id && (!layers[hid].shellOf || layers[hid].shellOf.solidId === id) && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
+      const overlappingHoles = holeIds.filter((hid) => hid !== id && (!layers[hid].shellOf || layers[hid].shellOf.solidId === id) && (!layers[hid].onlyCuts || layers[hid].onlyCuts === id) && rectsOverlap(solidBounds, shapeWorldBounds(layers[hid])))
       if (overlappingHoles.length === 0 && !layer.perforation) continue
 
       // A perforated wall keeps its holes clear of the parts that join

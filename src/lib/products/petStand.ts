@@ -197,7 +197,7 @@ export const petStand: ProductTemplate = {
         hollow: { wall, floor: TOP_PLATE, openFrom: 'top' },
         tile: 0,
       },
-      { name: 'Bowl opening', outline: { kind: 'circle', x: cx - dOpen / 2, y: cy - dOpen / 2, width: dOpen, height: dOpen }, depth: TOP_PLATE + 2, z: -1, isHole: true, tile: 0 },
+      { name: 'Bowl opening', outline: { kind: 'circle', x: cx - dOpen / 2, y: cy - dOpen / 2, width: dOpen, height: dOpen }, depth: TOP_PLATE + 2, z: -1, isHole: true, cuts: 0, tile: 0 },
     ]
     // Lettering: the name, and the figure over or under it, centred on
     // the visible front (between the band and the rim).
@@ -252,6 +252,7 @@ export const petStand: ProductTemplate = {
       }
     }
     const bodyCount = parts.length
+    const bandIndex = bodyCount
 
     // The base band, upright, with the lip the body plugs onto.
     const bx = wBot / 2
@@ -260,9 +261,14 @@ export const petStand: ProductTemplate = {
     const wLip = wMid - 2 * wall - 2 * PLAY
     parts.push(
       { name: 'Base band', color: BAND_COLOR, outline: { kind: 'path', points: footprint(shape, wBot, bx, by) }, depth: band, profile: { points: [{ z: 0, scale: 1 }, { z: band, scale: wMid / wBot }], smooth: false }, tile: 1 },
-      { name: 'Band opening', outline: { kind: 'path', points: footprint(shape, wIn, bx, by) }, depth: band + 2, z: -1, profile: { points: [{ z: 0, scale: 1 }, { z: band + 2, scale: (wMid - 2 * wall) / wIn }], smooth: false }, isHole: true, tile: 1 },
-      { name: 'Lip', color: BAND_COLOR, outline: { kind: 'path', points: footprint(shape, wLip, bx, by) }, depth: LIP_H, z: band, tile: 1 },
-      { name: 'Lip opening', outline: { kind: 'path', points: footprint(shape, wLip - 2 * LIP_T, bx, by) }, depth: LIP_H + 2, z: band - 1, isHole: true, tile: 1 },
+      { name: 'Band opening', outline: { kind: 'path', points: footprint(shape, wIn, bx, by) }, depth: band + 2, z: -1, profile: { points: [{ z: 0, scale: 1 }, { z: band + 2, scale: (wMid - 2 * wall) / wIn }], smooth: false }, isHole: true, cuts: bandIndex, tile: 1 },
+      // The lip is a ring (an outline with a hole, no cutter), and it
+      // stands on a foot: a wider ring sunk into the band's top that
+      // reaches out over the band's wall, so lip, foot and band overlap
+      // and leave as one fused body. The lip itself fits inside the
+      // body's open bottom with `PLAY` each side.
+      { name: 'Lip', color: BAND_COLOR, outline: { kind: 'regions', regions: [{ outer: { points: footprint(shape, wLip, bx, by) }, holes: [{ points: footprint(shape, wLip - 2 * LIP_T, bx, by) }] }] }, depth: LIP_H + 1, z: band - 1, tile: 1 },
+      { name: 'Lip foot', color: BAND_COLOR, outline: { kind: 'regions', regions: [{ outer: { points: footprint(shape, wMid - 1, bx, by) }, holes: [{ points: footprint(shape, wLip - 2 * LIP_T, bx, by) }] }] }, depth: 2.5, z: band - 2.5, tile: 1 },
     )
     const bodyParts = Array.from({ length: bodyCount }, (_, i) => i)
     const bandParts = Array.from({ length: parts.length - bodyCount }, (_, i) => bodyCount + i)

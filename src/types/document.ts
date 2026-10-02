@@ -300,6 +300,9 @@ export interface ShapeLayer {
    * settings it was built with. The cavity is derived — whenever that
    * solid is resized, moved or reshaped, the cavity is rebuilt to match. */
   shellOf?: ShellLink
+  /** A cutter meant for one solid only (a product's opening in one of
+   * its parts): it leaves every other solid it overlaps alone. */
+  onlyCuts?: string
   polygonSides?: number
   starPoints?: number
   starInnerRatio?: number
