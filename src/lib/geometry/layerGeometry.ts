@@ -7,6 +7,7 @@ import { buildBeveledGeometry } from './bevelExtrude'
 import { buildTubeGeometry } from './tube'
 import { computeSafeBevel } from './offset'
 import { buildSimpleRegionGeometry } from './multiRegionExtrude'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { buildPerforationCutter } from './perforation'
 import { applyProfile, applyTwist, footprintCenter, profileTessellation, reshade } from './profile'
 import { difference, type MultiPolygon, type Polygon } from 'polygon-clipping'
@@ -148,6 +149,15 @@ export function buildLayerGeometries(layer: ShapeLayer, scale: number, options: 
     geometries = [geo]
   } else {
     geometries = layer.regions.map((region) => buildSimpleRegionGeometry(region, depth, scale))
+  }
+  if (geometries.length > 1) {
+    // Several regions (the letters of a name, the pieces of a paw) turn
+    // and settle as one shape: one pivot and one resting height for all,
+    // or each piece would spin about its own centre and drop to the bed.
+    const merged = mergeGeometries(geometries.map((g) => g.clone()), false)
+    const bake = merged ? rotationBake(merged, layer) : null
+    merged?.dispose()
+    return geometries.map((geo) => (bake ? geo.applyMatrix4(bake) : geo))
   }
   return geometries.map((geo) => {
     const bake = rotationBake(geo, layer)

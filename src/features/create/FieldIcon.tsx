@@ -210,6 +210,20 @@ const GLYPHS: Record<string, () => React.ReactNode> = {
       <path className="field-icon__mark" d="M8 7 l4 4 l4 -4 l4 4 M8 13 l4 4 l4 -4 l4 4" />
     </>
   ),
+  bowl: () => (
+    <>
+      <path className="field-icon__line" d="M3 9 Q4 20 15 20 Q26 20 27 9" />
+      <ellipse className="field-icon__line" cx="15" cy="9" rx="12" ry="2.5" />
+      <Arrow d="M3 4 H27" />
+    </>
+  ),
+  bowlDepth: () => (
+    <>
+      <path className="field-icon__line" d="M5 7 Q6 20 15 20 Q24 20 25 7" />
+      <ellipse className="field-icon__line" cx="15" cy="7" rx="10" ry="2.2" />
+      <Arrow d="M28 7 V20" />
+    </>
+  ),
   patternSize: () => (
     <>
       <Back />
@@ -219,7 +233,7 @@ const GLYPHS: Record<string, () => React.ReactNode> = {
   ),
 }
 
-const ALIASES: Record<string, string> = { bowl: 'hole', bowlDepth: 'height', band: 'floor', name: 'pattern' }
+const ALIASES: Record<string, string> = { band: 'floor', name: 'pattern' }
 
 export function FieldIcon({ id }: { id: string }) {
   const glyph = GLYPHS[ALIASES[id] ?? id]

@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@expo-google-fonts/nunito": "^0.4.2",
+    "@expo-google-fonts/baloo-2": "^0.4.2",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "@supabase/supabase-js": "^2.116.0",
