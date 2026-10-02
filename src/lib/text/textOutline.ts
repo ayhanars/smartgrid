@@ -1,4 +1,5 @@
 import { parse, type Font, type PathCommand } from 'opentype.js'
+import { difference, union, type MultiPolygon, type Polygon } from 'polygon-clipping'
 import type { Point2, ShapeRegion } from '../../types/document'
 import fontUrl from '@expo-google-fonts/baloo-2/800ExtraBold/Baloo2_800ExtraBold.ttf?url'
 
@@ -87,32 +88,33 @@ function contoursOf(commands: PathCommand[]): Point2[][] {
   })
 }
 
-function pointInRing(p: Point2, ring: Point2[]): boolean {
-  let inside = false
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i], b = ring[j]
-    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside
-  }
-  return inside
-}
+const signedArea = (ring: Point2[]) => ring.reduce((sum, p, i) => sum + p.x * ring[(i + 1) % ring.length].y - ring[(i + 1) % ring.length].x * p.y, 0) / 2
 
-const area = (ring: Point2[]) => Math.abs(ring.reduce((s, p, i) => s + p.x * ring[(i + 1) % ring.length].y - ring[(i + 1) % ring.length].x * p.y, 0) / 2)
-
-/** Outer contours and the holes inside them, by nesting depth: a ring
- * inside an odd number of others is a hole of the smallest one around it. */
+/** A glyph's contours as filled regions. Fonts draw a letter from
+ * overlapping strokes (an E is five contours here), with holes as
+ * contours running the other way, so the contours are resolved like
+ * the font does: the strokes, all wound like the biggest one, are
+ * united, the counter-wound contours are the holes taken out of them. */
 function regionsOf(rings: Point2[][]): ShapeRegion[] {
-  const depth = rings.map((r, i) => rings.filter((o, j) => j !== i && pointInRing(r[0], o)).length)
-  const regions: { outer: Point2[]; holes: Point2[][]; area: number }[] = []
-  rings.forEach((r, i) => {
-    if (depth[i] % 2 === 0) regions.push({ outer: r, holes: [], area: area(r) })
-  })
-  rings.forEach((r, i) => {
-    if (depth[i] % 2 === 1) {
-      const owners = regions.filter((g) => pointInRing(r[0], g.outer)).sort((a, b) => a.area - b.area)
-      if (owners[0]) owners[0].holes.push(r)
-    }
-  })
-  return regions.map((g) => ({ outer: { points: g.outer }, holes: g.holes.map((points) => ({ points })) }))
+  if (rings.length === 0) return []
+  const biggest = rings.reduce((best, r) => (Math.abs(signedArea(r)) > Math.abs(signedArea(best)) ? r : best), rings[0])
+  const outerSign = Math.sign(signedArea(biggest)) || 1
+  const asPoly = (r: Point2[]): Polygon => [r.map((p) => [p.x, p.y] as [number, number])]
+  const strokes = rings.filter((r) => Math.sign(signedArea(r)) === outerSign).map(asPoly)
+  const holes = rings.filter((r) => Math.sign(signedArea(r)) !== outerSign).map(asPoly)
+  let filled: MultiPolygon
+  try {
+    filled = union(strokes[0], ...strokes.slice(1))
+    if (holes.length) filled = difference(filled, holes[0], ...holes.slice(1))
+  } catch {
+    return rings.map((r) => ({ outer: { points: r }, holes: [] }))
+  }
+  const toRing = (ring: [number, number][]): Point2[] => {
+    const pts = ring.map(([x, y]) => ({ x, y }))
+    const first = pts[0], last = pts[pts.length - 1]
+    return first && last && Math.hypot(first.x - last.x, first.y - last.y) < 1e-9 ? pts.slice(0, -1) : pts
+  }
+  return filled.map((poly) => ({ outer: { points: toRing(poly[0]) }, holes: poly.slice(1).map((h) => ({ points: toRing(h) })) }))
 }
 
 /** `text` with capitals `size` mm tall, left edge at x = 0, baseline at

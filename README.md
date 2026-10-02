@@ -413,7 +413,17 @@ as it prints, with the name and a figure (paw, bone, fish, heart)
 standing on the front wall tilted with it, 2.5 mm into the wall and
 1.2 mm proud (or engraved), and a finger slot through each side; and
 the base band with a 6 mm lip that fits inside the body's open bottom
-with 0.3 mm play. Because the body is modelled upside down and turned
+with 0.3 mm play: the lip is a ring (an outline with a hole, no
+cutter) standing on a wider foot sunk 2.5 mm into the band's top, so
+lip, foot and band overlap and leave as one fused body. A product's
+cutter can be aimed at one part (`PartRecipe.cuts` → `ShapeLayer.onlyCuts`,
+honoured by the viewport and the exporter): the band's opening then
+leaves the lip standing in it alone. Glyph contours are resolved the
+way the font means them (`regionsOf`: the strokes, wound like the
+biggest contour, united; the counter-wound contours taken out as
+holes), since fonts draw a letter from overlapping strokes; and the
+multi-region extruder winds a hole opposite to its outline, so rings
+and letters with holes come out oriented. Because the body is modelled upside down and turned
 over about its front-back axis to use, the lettering is rotated half a
 turn in its plane. The two parts are separate groups and tiles, so
 they pack onto plates on their own and recolour on their own. A shape

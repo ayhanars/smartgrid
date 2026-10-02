@@ -44,6 +44,9 @@ export interface PartRecipe {
   texture?: SurfaceTexture
   perforation?: Perforation
   isHole?: boolean
+  /** For a cutter: the index of the one part it cuts; other parts it
+   * overlaps (a lip standing in a band's opening) are left alone. */
+  cuts?: number
   /** Which piece of a product split for the bed this part belongs to
    * (0 = the first). Each tile lands on its own plate. */
   tile?: number
