@@ -65,20 +65,14 @@ function figureRegions(kind: string): ShapeRegion[] {
     return [region(pad), region(ellipse(1.6, 6.2, 1.2, 1.5)), region(ellipse(4.0, 8.2, 1.25, 1.6)), region(ellipse(6.6, 8.1, 1.25, 1.6)), region(ellipse(8.8, 5.9, 1.2, 1.5))]
   }
   if (kind === 'bone') {
-    const pts: Point2[] = []
-    const lobe = (cx: number, cy: number, from: number, to: number) => {
-      for (let i = 0; i <= 10; i++) {
-        const a = from + (i / 10) * (to - from)
-        pts.push({ x: cx + 1.6 * Math.cos(a), y: cy + 1.6 * Math.sin(a) })
-      }
-    }
-    lobe(8.2, 6.6, -Math.PI / 2, Math.PI / 2)
-    lobe(8.2, 3.4, -Math.PI / 2, Math.PI / 2)
-    pts.push({ x: 8.2, y: 1.8 }, { x: 1.8, y: 1.8 })
-    lobe(1.8, 3.4, Math.PI / 2, (3 * Math.PI) / 2)
-    lobe(1.8, 6.6, Math.PI / 2, (3 * Math.PI) / 2)
-    pts.push({ x: 1.8, y: 8.2 }, { x: 8.2, y: 8.2 })
-    return [region(pts)]
+    // A shaft with a knob at each corner; the pieces overlap and fuse.
+    const shaft: Point2[] = [
+      { x: 2.2, y: 3.6 },
+      { x: 7.8, y: 3.6 },
+      { x: 7.8, y: 6.4 },
+      { x: 2.2, y: 6.4 },
+    ]
+    return [region(shaft), region(ellipse(1.9, 3.3, 1.7, 1.7)), region(ellipse(1.9, 6.7, 1.7, 1.7)), region(ellipse(8.1, 3.3, 1.7, 1.7)), region(ellipse(8.1, 6.7, 1.7, 1.7))]
   }
   if (kind === 'fish') {
     const body = ellipse(4.2, 5, 3.6, 2.3, 30)
@@ -150,9 +144,9 @@ export const petStand: ProductTemplate = {
   keywords: ['pet', 'dog', 'cat', 'bowl', 'stand', 'feeder', 'name', 'paw'],
   prepare: () => loadFont().then(() => undefined),
   fields: [
-    { kind: 'text', id: 'name', label: 'Name', maxLength: 14, placeholder: 'THEO', hint: 'In relief on the front. Capitals read best.' },
-    { kind: 'number', id: 'bowl', label: 'Bowl rim', unit: 'mm', min: 80, max: 230, step: 1, hint: 'Outer diameter of the bowl’s rim: it rests on the top by that rim.' },
-    { kind: 'number', id: 'bowlDepth', label: 'Bowl depth', unit: 'mm', min: 20, max: 150, step: 1, hint: 'Rim to the bottom of the bowl; the stand is made tall enough.' },
+    { kind: 'text', id: 'name', label: 'Name', maxLength: 14, placeholder: 'THEO', hint: 'In relief on the front, in a round, friendly letter. Capitals read best.' },
+    { kind: 'number', id: 'bowl', label: 'Bowl rim', unit: 'mm', min: 80, max: 230, step: 1, hint: 'Measure across the very top of the bowl, outside edge to outside edge (the widest point of the lip). The bowl rests on the stand by that lip.' },
+    { kind: 'number', id: 'bowlDepth', label: 'Bowl depth', unit: 'mm', min: 20, max: 150, step: 1, hint: 'Measure from the top of the lip straight down to the outside of the bottom. The stand is made deep enough for the bowl to hang free.' },
     { kind: 'number', id: 'height', label: 'Height', unit: 'mm', min: 40, max: 260, step: 1, hint: 'Floor to the bowl’s rim.' },
     { kind: 'number', id: 'band', label: 'Base band', unit: 'mm', min: 15, max: 120, step: 1, hint: 'Height of the second-colour band at the bottom; it is its own part.' },
     { kind: 'select', id: 'shape', label: 'Shape', options: [{ value: 'squircle', label: 'Rounded square' }, { value: 'round', label: 'Round' }] },

@@ -400,7 +400,8 @@ wall. The viewport and the exporter both pass these neighbours in.
 
 The pet bowl stand (`petStand.ts`, category Pets) is the first product
 with lettering: the pet's name in relief on the front, outlined from a
-bundled font (Nunito ExtraBold, OFL; `src/lib/text/textOutline.ts`
+bundled font (Baloo 2 ExtraBold, round and friendly, with the Turkish
+letters, OFL; `src/lib/text/textOutline.ts`
 parses it with opentype.js once, on `template.prepare()`, and
 `textRegions` then gives a string as shape regions with holes, cap
 height in mm; the `text` spec field kind and the `regions` part
@@ -415,7 +416,11 @@ the base band with a 6 mm lip that fits inside the body's open bottom
 with 0.3 mm play. Because the body is modelled upside down and turned
 over about its front-back axis to use, the lettering is rotated half a
 turn in its plane. The two parts are separate groups and tiles, so
-they pack onto plates on their own and recolour on their own.
+they pack onto plates on their own and recolour on their own. A shape
+of several regions (the letters, the pieces of a paw) is tilted about
+one pivot and settled once for all of them (`buildLayerGeometries`
+merges them for the bake), or each piece would turn about its own
+centre and drop to the bed.
 
 A product travels as a recipe (`recipe.ts`): the template id and its
 settings, which is all the generator needs to rebuild it exactly.

@@ -1,10 +1,11 @@
 import { parse, type Font, type PathCommand } from 'opentype.js'
 import type { Point2, ShapeRegion } from '../../types/document'
-import fontUrl from '@expo-google-fonts/nunito/800ExtraBold/Nunito_800ExtraBold.ttf?url'
+import fontUrl from '@expo-google-fonts/baloo-2/800ExtraBold/Baloo2_800ExtraBold.ttf?url'
 
 /**
- * Text as shape regions: letters outlined from a bundled font (Nunito
- * ExtraBold, SIL Open Font License), so a product can carry a name in
+ * Text as shape regions: letters outlined from a bundled font (Baloo 2
+ * ExtraBold: round, friendly, with the Turkish letters; SIL Open Font
+ * License), so a product can carry a name in
  * relief. The font is fetched once and kept; `textRegions` then works
  * synchronously, which is what the product builders need.
  */
