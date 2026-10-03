@@ -27,6 +27,15 @@ export interface BubbleOptions {
   fonts?: { value?: string; name?: string; noteValue?: string; micro?: string }
 }
 
+/** One entry of a hand-picked set (trivia rounds). */
+export interface SetItem {
+  country: Country
+  rank: number
+  value: number
+  display: string
+  share: number
+}
+
 export interface Bubble {
   country: Country
   rank: number
@@ -46,6 +55,8 @@ export interface Bubble {
   axis: number
   seed: number
   born: number
+  /** Radius the bubble is growing or shrinking toward (reveal animation). */
+  targetR?: number
 }
 
 interface Droplet {
@@ -125,6 +136,11 @@ export class BubbleScene {
   private motifPlate: HTMLCanvasElement | null = null
   private motifKey = ''
   private needsDrop = false
+  private hideValues = false
+  /** A small hand-picked set labels every bubble with name and value. */
+  private labelAll = false
+  /** Double-tap pops; a quiz turns it off so a tap only answers. */
+  allowPop = true
 
   constructor(container: HTMLElement, opts: BubbleOptions) {
     this.opts = opts
@@ -201,8 +217,35 @@ export class BubbleScene {
     return this.skin
   }
 
+  /** The theme's countries, ranked, with the leader at 1. */
+  ranked(): SetItem[] {
+    const t = this.theme
+    const entries = Object.entries(t.data)
+      .filter(([code, v]) => GEO.countries.some((c) => c.id === code) && Number.isFinite(v))
+      .sort((a, b) => b[1] - a[1])
+    const format = makeFormatter(t.format, entries.map((e) => e[1]))
+    const vmax = entries[0]?.[1] ?? 1
+    return entries.map(([code, value], i) => ({
+      country: GEO.countries.find((c) => c.id === code)!,
+      rank: i + 1,
+      value,
+      display: format(value),
+      share: value / vmax,
+    }))
+  }
+
   /** Every bubble goes back above the glass and falls in again, biggest first. */
   drop(): void {
+    this.hideValues = false
+    const items = this.ranked().slice(0, Math.max(1, this.opts.count ?? 18))
+    this.showSet(items)
+  }
+
+  /**
+   * Drop a chosen set. With `radius` every bubble gets that size and, with
+   * `hideValues`, only its name: the state of a trivia round before the answer.
+   */
+  showSet(items: SetItem[], opts: { radius?: number; hideValues?: boolean; stagger?: number } = {}): void {
     this.clear()
     this.select(null)
     if (this.box.h < 120 || this.box.w < 120) {
@@ -210,26 +253,43 @@ export class BubbleScene {
       return
     }
     this.needsDrop = false
+    this.hideValues = !!opts.hideValues
+    this.labelAll = items.length <= 6
     this.opts.onDrop?.()
-    const t = this.theme
-    const entries = Object.entries(t.data)
-      .filter(([code, v]) => GEO.countries.some((c) => c.id === code) && Number.isFinite(v))
-      .sort((a, b) => b[1] - a[1])
-    const n = Math.max(1, Math.min(this.opts.count ?? 18, entries.length))
-    const list = entries.slice(0, n)
-    const format = makeFormatter(t.format, entries.map((e) => e[1]))
-    const vmax = list[0][1]
-    const radii = this.layoutRadii(list.map(([, v]) => v / vmax))
-    list.forEach(([code, value], i) => {
-      const country = GEO.countries.find((c) => c.id === code)!
+    if (!items.length) return
+    const vmax = Math.max(...items.map((i) => i.value))
+    const radii = opts.radius ? items.map(() => opts.radius!) : this.layoutRadii(items.map((i) => i.value / vmax), items.length <= 6 ? 0.42 : 0.62)
+    const stagger = opts.stagger ?? 90
+    items.forEach((it, i) => {
       const R = radii[i]
       const timer = window.setTimeout(() => {
-        const x = this.box.x + R + 6 + Math.random() * Math.max(1, this.box.w - 2 * R - 12)
+        const lanes = items.length <= 3 ? items.length : 0
+        const x = lanes
+          ? this.box.x + (this.box.w / (lanes + 1)) * (i + 1) + (Math.random() - 0.5) * R * 0.4
+          : this.box.x + R + 6 + Math.random() * Math.max(1, this.box.w - 2 * R - 12)
         const y = this.box.y - R - 10 - Math.random() * 80
-        this.spawn(country, i + 1, value, format(value), value / vmax, R, x, y)
-      }, 90 * i + 80)
+        this.spawn(it.country, it.rank, it.value, it.display, it.share, R, Math.max(this.box.x + R + 4, Math.min(this.box.x + this.box.w - R - 4, x)), y)
+      }, stagger * i + 80)
       this.timers.push(timer)
     })
+  }
+
+  /** Show the numbers and let every bubble grow or shrink to its true relative size. */
+  revealValues(): void {
+    this.hideValues = false
+    if (!this.bubbles.length) return
+    const vmax = Math.max(...this.bubbles.map((b) => b.value))
+    const radii = this.layoutRadii(this.bubbles.map((b) => b.value / vmax), this.bubbles.length <= 6 ? 0.42 : 0.62)
+    this.bubbles.forEach((b, i) => {
+      b.targetR = radii[i]
+      b.amp = Math.max(b.amp, 0.14)
+      b.phase = 0
+    })
+  }
+
+  /** The bubble for a country in the current set, if any. */
+  bubbleOf(code: string): Bubble | null {
+    return this.bubbles.find((b) => b.country.id === code) ?? null
   }
 
   /** Burst a bubble into droplets; it re-forms above the glass a moment later. */
@@ -354,7 +414,7 @@ export class BubbleScene {
       const sp = Math.hypot(b.body.velocity.x, b.body.velocity.y)
       if (!d.moved && performance.now() - d.t0 < 450 && e.type === 'pointerup') {
         const now = performance.now()
-        if (this.lastTap.b === b && now - this.lastTap.t < 340) {
+        if (this.allowPop && this.lastTap.b === b && now - this.lastTap.t < 340) {
           this.lastTap = { t: 0, b: null }
           this.pop(b)
           return
@@ -397,12 +457,12 @@ export class BubbleScene {
   // ---------- internals ----------
 
   /** Radii so that area follows value (with a floor) and the set fills the glass well. */
-  private layoutRadii(ratios: number[]): number[] {
+  private layoutRadii(ratios: number[], fill = 0.62): number[] {
     const floor = 0.035
     const areas = ratios.map((r) => Math.max(floor, r))
     const glass = this.box.w * this.box.h
     const sum = areas.reduce((s, a) => s + a, 0)
-    let aMax = (glass * 0.62) / sum
+    let aMax = (glass * fill) / sum
     const rMaxAllowed = Math.min(this.box.w * 0.36, this.box.h * 0.26)
     aMax = Math.min(aMax, Math.PI * rMaxAllowed * rMaxAllowed)
     return areas.map((a) => Math.max(11, Math.sqrt((aMax * a) / Math.PI)))
@@ -522,6 +582,13 @@ export class BubbleScene {
     }
     Engine.update(this.engine, dt)
     for (const b of this.bubbles) {
+      if (b.targetR !== undefined) {
+        const next = Math.abs(b.targetR - b.R) < 0.4 ? b.targetR : b.R + (b.targetR - b.R) * Math.min(1, 0.1 * (dt / 16))
+        const k = next / b.R
+        Body.scale(b.body, k, k)
+        b.R = next
+        if (next === b.targetR) b.targetR = undefined
+      }
       if (b.amp > 0.002) {
         b.phase += dt * 0.02
         b.amp *= Math.pow(0.88, dt / 16)
@@ -1030,11 +1097,25 @@ export class BubbleScene {
     const note = this.skin === 'note'
     const f = this.opts.fonts
     const valueFont = note ? (f?.noteValue ?? 'Georgia, serif') : (f?.value ?? 'system-ui, sans-serif')
-    const labelled = b.rank <= (this.theme.top ?? 10)
+    const labelled = this.hideValues || this.labelAll || b.rank <= (this.theme.top ?? 10)
     ctx.save()
     ctx.globalAlpha = dim
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
+    if (this.hideValues) {
+      // a trivia round: the name is the whole label, set like a value
+      ctx.fillStyle = note ? b.ink : '#ffffff'
+      if (!note) {
+        ctx.shadowColor = 'rgba(0,0,0,0.35)'
+        ctx.shadowBlur = 6
+      }
+      const ns = Math.max(12, Math.min(26, R * 0.26))
+      ctx.font = note ? `700 ${ns}px ${valueFont}` : `italic 400 ${ns * 1.15}px ${f?.name ?? 'Georgia, serif'}`
+      const fits = ctx.measureText(b.country.name).width <= R * 1.7
+      ctx.fillText(fits ? b.country.name : b.country.id, p.x, p.y)
+      ctx.restore()
+      return
+    }
     if (note) ctx.fillStyle = b.ink
     else {
       ctx.fillStyle = '#ffffff'

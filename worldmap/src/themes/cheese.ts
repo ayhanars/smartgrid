@@ -16,6 +16,7 @@ export const cheese: NumericTheme = {
   top: 10,
   listRows: 10,
   format: { decimals: 0, compact: false },
+  quiz: { question: 'Who makes more cheese?' },
   decor: { pattern: 'lattice', motif: 'cheese' },
   source: {
     label: 'FAOSTAT & Eurostat',

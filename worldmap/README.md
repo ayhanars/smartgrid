@@ -150,6 +150,21 @@ noise. Unlocked by the first touch and muted from the dock; haptics use
 elsewhere. A height-only resize (a browser bar sliding away) just moves the
 floor; only a real width change re-lays the bubbles out.
 
+## Trivia
+
+The bubbles page has a game (`src/bubbles/quiz.ts`, the question-mark button in
+the dock): two countries drop in at the same size with only their names, the
+masthead asks the theme's question (`quiz.question`, e.g. "Who makes more
+cheese?"), and tapping a bubble answers. The bubbles then grow and shrink to
+their true relative sizes with the numbers revealed; the right one is ringed,
+the wrong one dims. Eight rounds, one point each, a bonus every third correct
+answer in a row, then a result card with "Play again" and "See the ranking".
+Pairs are drawn with a ratio between 1.25 and 6 so rounds are neither obvious
+nor coin flips, no pair repeats, and no country appears in two rounds in a
+row. The scene supports it through `showSet(items, { radius, hideValues })`,
+`revealValues()` and `allowPop` (double-tap popping is off during a game).
+Switching theme mid-game restarts it for that theme.
+
 ## Geometry
 
 `src/lib/geo/countries.json` holds 174 countries as SVG paths (Natural Earth

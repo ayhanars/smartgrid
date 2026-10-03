@@ -1,6 +1,7 @@
 import './bubbles.css'
 import { BubbleScene, type Bubble, type Skin } from './bubbles/bubbleScene'
 import { Sounds, haptic } from './bubbles/sound'
+import { Quiz } from './bubbles/quiz'
 import { hueAngle, oklchToHex } from './lib/color'
 import type { NumericTheme } from './lib/types'
 import { themes } from './themes'
@@ -43,6 +44,10 @@ mast.append(hint)
 const card = document.createElement('aside')
 card.className = 'glass card'
 card.hidden = true
+
+const centre = document.createElement('div')
+centre.className = 'centre'
+centre.hidden = true
 
 const dock = document.createElement('nav')
 dock.className = 'dock'
@@ -96,7 +101,8 @@ numericThemes.forEach((t) => {
 const icon = (d: string) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`
 const dropBtn = iconButton('drop-again', 'Drop them again', icon('M12 4v13M6 11l6 6 6-6M5 21h14'))
 dropBtn.addEventListener('click', () => {
-  bubbles.drop()
+  if (quiz?.active) leaveQuiz()
+  else bubbles.drop()
   haptic(8)
   hint.classList.remove('is-hidden')
 })
@@ -136,6 +142,14 @@ soundBtn.addEventListener('click', () => {
   }
   paintSound()
 })
+const playBtn = iconButton('play', 'Play the trivia', icon('M9 18l1-5M15 18l-1-5M8.5 9.5a3.5 3.5 0 1 1 7 0c0 2-2 2.5-3.5 4M12 16.5v.01'))
+playBtn.addEventListener('click', () => {
+  if (quiz?.active) leaveQuiz()
+  else {
+    quiz?.start(bubbles.getTheme())
+    playBtn.setAttribute('aria-pressed', 'true')
+  }
+})
 const skinBtn = iconButton('skin', 'Switch between glass and banknote', icon('M3 7h18v10H3zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 9v.01M18 15v.01'))
 skinBtn.setAttribute('aria-pressed', String(skin === 'note'))
 skinBtn.addEventListener('click', () => setSkin(skin === 'note' ? 'glass' : 'note'))
@@ -162,13 +176,14 @@ mapLink.className = 'glass iconbtn map-link'
 mapLink.title = 'Back to the world map'
 mapLink.setAttribute('aria-label', 'Back to the world map')
 mapLink.innerHTML = icon('M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18')
-actions.append(skinBtn, soundBtn, dropBtn, tiltBtn, mapLink)
+actions.append(playBtn, skinBtn, soundBtn, dropBtn, tiltBtn, mapLink)
 
 // the glass starts under the masthead, so the pile never climbs into the headline
 scene.append(mast, dock)
 headline.textContent = initial.title
 const mastH = mast.offsetHeight
 const dockH = dock.offsetHeight
+let quiz: Quiz | null = null // created right after the scene; the scene's callbacks run before that
 const bubbles = new BubbleScene(scene, {
   theme: initial,
   skin,
@@ -180,7 +195,10 @@ const bubbles = new BubbleScene(scene, {
     noteValue: "'Libre Bodoni', 'Bodoni 72', Didot, Georgia, serif",
     micro: "'Archivo Narrow', 'Arial Narrow', system-ui, sans-serif",
   },
-  onSelect: showCard,
+  onSelect: (b) => {
+    if (quiz?.active) quiz.answer(b)
+    else showCard(b)
+  },
   onLand: (b, speed) => {
     sounds.land(b.R, speed)
     if (speed > 3) haptic(6)
@@ -195,11 +213,58 @@ const bubbles = new BubbleScene(scene, {
   },
   onDrop: () => sounds.whoosh(),
 })
+quiz = new Quiz(bubbles, {
+  setHeadline(title, line) {
+    headline.textContent = title
+    unit.textContent = line
+    hint.hidden = true
+  },
+  setCard(el) {
+    centre.replaceChildren()
+    centre.hidden = !el
+    if (el) centre.append(el)
+  },
+  onCorrect(b) {
+    sounds.pop(b.R)
+    haptic([10, 30, 10])
+  },
+  onWrong() {
+    sounds.land(120, 4)
+    haptic(30)
+  },
+  onFinish(score, rounds, best) {
+    const el = document.createElement('div')
+    el.className = 'glass quiz-card'
+    const h = document.createElement('h2')
+    h.textContent = score === rounds ? 'Perfect.' : score >= rounds * 0.75 ? 'Sharp.' : score >= rounds / 2 ? 'Not bad.' : 'Tough one.'
+    const p = document.createElement('p')
+    p.textContent = `${score} points over ${rounds} rounds, best streak ${best}.`
+    const again = document.createElement('button')
+    again.type = 'button'
+    again.className = 'btn'
+    again.textContent = 'Play again'
+    again.addEventListener('click', () => quiz?.start(bubbles.getTheme()))
+    const back = document.createElement('button')
+    back.type = 'button'
+    back.className = 'btn is-quiet'
+    back.textContent = 'See the ranking'
+    back.addEventListener('click', () => leaveQuiz())
+    el.append(h, p, again, back)
+    centre.replaceChildren(el)
+    centre.hidden = false
+  },
+})
+function leaveQuiz() {
+  quiz?.stop()
+  playBtn.setAttribute('aria-pressed', 'false')
+  show(bubbles.getTheme().id, false)
+  bubbles.drop()
+}
 const grain = document.createElement('div')
 grain.className = 'grain'
 const vignette = document.createElement('div')
 vignette.className = 'vignette'
-scene.append(vignette, grain, card)
+scene.append(vignette, grain, card, centre)
 scene.append(mast, dock) // back on top of the canvas and overlays
 
 // fonts: the canvas draws every frame, so labels sharpen as soon as they land
@@ -230,15 +295,21 @@ function shortTitle(t: NumericTheme): string {
 function show(id: string, push: boolean) {
   const t = numericThemes.find((x) => x.id === id)
   if (!t) return
-  if (bubbles.getTheme() !== t) bubbles.setTheme(t)
+  if (bubbles.getTheme() !== t) {
+    bubbles.setTheme(t)
+    if (quiz?.active) quiz.start(t)
+  }
   const i = numericThemes.indexOf(t)
   idx.textContent = String(i + 1).padStart(2, '0')
   eyebrowText.textContent = shortTitle(t)
-  headline.textContent = t.title
-  unit.replaceChildren()
-  const b = document.createElement('b')
-  b.textContent = 'Bigger bubble, bigger number.'
-  unit.append(b, ` ${t.unit[0].toUpperCase()}${t.unit.slice(1)}.`)
+  if (!quiz?.active) {
+    headline.textContent = t.title
+    unit.replaceChildren()
+    const b = document.createElement('b')
+    b.textContent = 'Bigger bubble, bigger number.'
+    unit.append(b, ` ${t.unit[0].toUpperCase()}${t.unit.slice(1)}.`)
+    hint.hidden = false
+  }
   document.documentElement.style.setProperty('--accent', oklchToHex(0.8, 0.14, hueAngle(t.hue)))
   for (const [tid, btn] of buttons) btn.setAttribute('aria-pressed', String(tid === id))
   document.title = `${t.title} · World in Bubbles`

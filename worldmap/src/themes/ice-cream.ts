@@ -17,6 +17,7 @@ export const iceCream: NumericTheme = {
   scale: 'quantile',
   top: 10,
   format: { decimals: 1 },
+  quiz: { question: 'Who eats more ice cream per person?' },
   decor: { pattern: 'waves', motif: 'icecream' },
   source: {
     label: 'Industry estimates (Euromonitor, national dairy associations)',

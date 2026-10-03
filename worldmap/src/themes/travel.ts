@@ -16,6 +16,7 @@ export const travel: NumericTheme = {
   top: 10,
   listRows: 10,
   format: { decimals: 1, compact: false },
+  quiz: { question: 'Who gets more visitors?' },
   decor: { pattern: 'rays', motif: 'travel' },
   source: {
     label: 'UN Tourism barometer',

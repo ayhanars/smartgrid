@@ -282,6 +282,62 @@ body {
   opacity: 0;
 }
 
+/* trivia: a card in the middle of the glass, and buttons */
+.centre {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  pointer-events: none;
+}
+.centre[hidden] {
+  display: none;
+}
+.quiz-card {
+  pointer-events: auto;
+  width: min(360px, 100%);
+  border-radius: 22px;
+  padding: 22px 22px 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: card-in 360ms cubic-bezier(0.2, 0.9, 0.2, 1.1);
+}
+.quiz-card h2 {
+  margin: 0;
+  font: italic 400 40px/1 var(--serif);
+  letter-spacing: -0.01em;
+}
+.quiz-card p {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 14px;
+  line-height: 1.45;
+  text-wrap: balance;
+}
+.btn {
+  margin-top: 6px;
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 22px;
+  background: var(--fg);
+  color: var(--ink-on-light);
+  font: 600 14px var(--sans);
+  cursor: pointer;
+}
+.btn.is-quiet {
+  margin-top: 0;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--hairline);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
 /* the focus card: slides in under the masthead */
 .card {
   position: absolute;

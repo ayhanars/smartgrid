@@ -61,6 +61,8 @@ export interface NumericTheme {
    * subject, tiled as wallpaper.
    */
   decor?: { pattern?: 'waves' | 'lattice' | 'rays'; motif?: 'icecream' | 'cheese' | 'travel' }
+  /** Trivia: the question asked when two countries are compared ("Who eats more ice cream?"). */
+  quiz?: { question: string }
 }
 
 /** A categorical theme paints countries by membership ("drives on the left"). */
