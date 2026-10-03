@@ -113,6 +113,11 @@ tiltBtn.addEventListener('click', async () => {
   }
   tiltBtn.setAttribute('aria-pressed', String(tilt))
 })
+/** Where a bubble is across the screen, -1 (left) .. 1 (right), for stereo placement. */
+function panOf(b: Bubble): number {
+  return (b.body.position.x / Math.max(1, innerWidth)) * 2 - 1
+}
+
 // browsers allow audio only after a gesture: the first touch anywhere unlocks it
 addEventListener('pointerdown', () => sounds.unlock(), { capture: true })
 const soundBtn = iconButton('sound', 'Sound on or off', icon('M4 10v4h4l5 4V6l-5 4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11'))
@@ -182,15 +187,15 @@ const bubbles = new BubbleScene(scene, {
   },
   onSelect: showCard,
   onLand: (b, speed) => {
-    sounds.land(b.R, speed)
+    sounds.land(b.R, speed, panOf(b))
     if (speed > 3) haptic(6)
   },
-  onGrab: () => {
-    sounds.grab()
+  onGrab: (b) => {
+    sounds.grab(panOf(b))
     haptic(4)
   },
   onPop: (b) => {
-    sounds.pop(b.R)
+    sounds.pop(b.R, panOf(b))
     haptic([12, 40, 18])
   },
   onDrop: () => sounds.whoosh(),
@@ -296,6 +301,9 @@ function showCard(b: Bubble | null) {
   close.addEventListener('click', () => bubbles.select(null))
   card.append(close)
 }
+
+// a handle for tooling (offline sound renders, tests); not part of the page's UI
+;(window as unknown as { __bubbles?: unknown }).__bubbles = { scene: bubbles, sounds }
 
 show(initial.id, false)
 addEventListener('hashchange', () => {
