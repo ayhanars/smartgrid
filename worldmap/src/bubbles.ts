@@ -38,7 +38,7 @@ mast.append(eyebrow, headline, unit)
 
 const hint = document.createElement('p')
 hint.className = 'hint'
-hint.textContent = 'Pick a bubble up and let it go. Throw it. Tap twice to pop it.'
+hint.textContent = 'Pick a bubble up and let it go. Throw it. Hold one to pop it.'
 mast.append(hint)
 
 const card = document.createElement('aside')
@@ -211,6 +211,7 @@ const bubbles = new BubbleScene(scene, {
     sounds.pop(b.R)
     haptic([12, 40, 18])
   },
+  onCharge: () => haptic(5),
   onDrop: () => sounds.whoosh(),
 })
 quiz = new Quiz(bubbles, {

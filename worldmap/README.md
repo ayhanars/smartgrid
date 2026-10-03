@@ -15,7 +15,7 @@ Two pages use the same themes:
 - `index.html`: the world map (choropleth or ranked), legend, table, zoom.
 - `bubbles.html`: **World in Bubbles**, a full-screen glass into which the
   countries of a theme drop as soft, iridescent bubbles sized by their value.
-  Drag, throw, tap for details, double-tap to pop; "Drop again" lifts them back
+  Drag, throw, tap for details, hold to pop; "Drop again" lifts them back
   up; on a phone, tilt can steer gravity. Sounds and haptics. Two skins:
   **glass** (iridescent soap film on deep ink) and **note** (ink-drawn bubbles
   on engraved banknote paper, a light look). Physics by Matter.js.
@@ -137,7 +137,7 @@ choice in `localStorage`, and carries it in the hash as `#<theme>~<skin>`.
 
 Interaction is pointer-based (mouse, touch and pen alike): press a bubble to
 pick it up, it follows the finger through its velocity so letting go throws
-it; a short press without movement is a tap (focus card), two taps pop it.
+it; a short press without movement is a tap (focus card); holding a bubble still makes it swell and shake and, after about half a second, pop.
 Sounds are synthesised with the Web Audio API (`src/bubbles/sound.ts`), layered
 the way a sound designer would: a noise transient through a ringing filter for
 the body, a pitched element with a real envelope, tanh saturation for warmth,
@@ -162,7 +162,7 @@ answer in a row, then a result card with "Play again" and "See the ranking".
 Pairs are drawn with a ratio between 1.25 and 6 so rounds are neither obvious
 nor coin flips, no pair repeats, and no country appears in two rounds in a
 row. The scene supports it through `showSet(items, { radius, hideValues })`,
-`revealValues()` and `allowPop` (double-tap popping is off during a game).
+`revealValues()` and `allowPop` (press-and-hold popping is off during a game).
 Switching theme mid-game restarts it for that theme.
 
 ## Geometry

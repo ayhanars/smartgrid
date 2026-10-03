@@ -22,6 +22,8 @@ export interface BubbleOptions {
   onGrab?: (b: Bubble) => void
   onRelease?: (b: Bubble, speed: number) => void
   onPop?: (b: Bubble) => void
+  /** A press is turning into a pop: the bubble starts swelling. */
+  onCharge?: (b: Bubble) => void
   onDrop?: () => void
   /** Font stacks for the labels. Glass: `value`, `name`. Note: `noteValue`, `micro`. */
   fonts?: { value?: string; name?: string; noteValue?: string; micro?: string }
@@ -57,6 +59,8 @@ export interface Bubble {
   born: number
   /** Radius the bubble is growing or shrinking toward (reveal animation). */
   targetR?: number
+  /** Press-and-hold progress toward popping, 0..1. */
+  charge: number
 }
 
 interface Droplet {
@@ -98,6 +102,10 @@ interface Drag {
 
 const MAX_DPR = 2
 const RIM_POINTS = 64
+/** A press shorter than this is a tap; longer, and the bubble starts to swell. */
+const HOLD_DELAY = 170
+/** How long the swell lasts before the pop. */
+const HOLD_TIME = 430
 const TAU = Math.PI * 2
 
 /**
@@ -126,7 +134,6 @@ export class BubbleScene {
   private ro: ResizeObserver
   private selected: Bubble | null = null
   private drag: Drag | null = null
-  private lastTap = { t: 0, b: null as Bubble | null }
   private hue = 255
   private running = true
   private skin: Skin = 'glass'
@@ -139,7 +146,7 @@ export class BubbleScene {
   private hideValues = false
   /** A small hand-picked set labels every bubble with name and value. */
   private labelAll = false
-  /** Double-tap pops; a quiz turns it off so a tap only answers. */
+  /** Press-and-hold pops; a quiz turns it off so a tap only answers. */
   allowPop = true
 
   constructor(container: HTMLElement, opts: BubbleOptions) {
@@ -381,7 +388,7 @@ export class BubbleScene {
     this.canvas.remove()
   }
 
-  // ---------- pointer: grab, carry, throw, tap, double-tap ----------
+  // ---------- pointer: grab, carry, throw, tap, hold-to-pop ----------
 
   private bindPointer() {
     const c = this.canvas
@@ -404,22 +411,21 @@ export class BubbleScene {
       const [x, y] = this.local(e)
       d.tx = x
       d.ty = y
-      if (Math.hypot(x - d.startX, y - d.startY) > 8) d.moved = true
+      if (Math.hypot(x - d.startX, y - d.startY) > 8) {
+        d.moved = true
+        d.b.charge = 0 // moving the finger means a drag, not a pop
+      }
     })
     const end = (e: PointerEvent) => {
       const d = this.drag
       if (!d || d.pid !== e.pointerId) return
       this.drag = null
       const b = d.b
+      b.charge = 0
       const sp = Math.hypot(b.body.velocity.x, b.body.velocity.y)
-      if (!d.moved && performance.now() - d.t0 < 450 && e.type === 'pointerup') {
-        const now = performance.now()
-        if (this.allowPop && this.lastTap.b === b && now - this.lastTap.t < 340) {
-          this.lastTap = { t: 0, b: null }
-          this.pop(b)
-          return
-        }
-        this.lastTap = { t: now, b }
+      const held = performance.now() - d.t0
+      if (!d.moved && e.type === 'pointerup' && held < HOLD_DELAY + HOLD_TIME) {
+        // a tap (or a hold let go before the pop): focus the bubble
         this.select(b !== this.selected ? b : null)
       } else {
         this.opts.onRelease?.(b, sp)
@@ -428,7 +434,10 @@ export class BubbleScene {
     c.addEventListener('pointerup', end)
     c.addEventListener('pointercancel', end)
     c.addEventListener('lostpointercapture', (e) => {
-      if (this.drag?.pid === e.pointerId) this.drag = null
+      if (this.drag?.pid === e.pointerId) {
+        this.drag.b.charge = 0
+        this.drag = null
+      }
     })
   }
 
@@ -485,7 +494,7 @@ export class BubbleScene {
       slop: Math.max(0.6, R * 0.05),
       angle: Math.random() * TAU,
     })
-    const bubble: Bubble = { country, rank, value, display, share, color, light, ink, paper, body, R, amp: 0.08, phase: 0, axis: Math.PI / 2, seed: Math.random() * TAU, born: this.now }
+    const bubble: Bubble = { country, rank, value, display, share, color, light, ink, paper, body, R, amp: 0.08, phase: 0, axis: Math.PI / 2, seed: Math.random() * TAU, born: this.now, charge: 0 }
     this.bubbles.push(bubble)
     Composite.add(this.engine.world, body)
     return bubble
@@ -569,6 +578,22 @@ export class BubbleScene {
     this.now = now
     // carry the dragged bubble: its velocity steers toward the finger, so a release throws it
     const d = this.drag
+    if (d && !d.moved && this.allowPop) {
+      const held = now - d.t0
+      if (held > HOLD_DELAY) {
+        const was = d.b.charge
+        d.b.charge = Math.min(1, (held - HOLD_DELAY) / HOLD_TIME)
+        if (was === 0) this.opts.onCharge?.(d.b)
+        // the swell shakes harder as it goes
+        d.b.amp = Math.max(d.b.amp, 0.04 + d.b.charge * 0.1)
+        if (d.b.charge >= 1) {
+          this.pop(d.b)
+          this.draw()
+          this.raf = requestAnimationFrame(this.frame)
+          return
+        }
+      }
+    }
     if (d) {
       const b = d.b.body
       const k = 0.32
@@ -1045,7 +1070,7 @@ export class BubbleScene {
 
   /** Rim radius at angle θ: a circle flattened by contacts, squashed by impacts, breathing a little. */
   private rimRadius(b: Bubble, theta: number, contacts: Contact[]): number {
-    let r = b.R
+    let r = b.R * (1 + b.charge * 0.18)
     const s = b.amp * Math.sin(b.phase)
     r *= 1 + s * Math.cos(2 * (theta - b.axis))
     r *= 1 + 0.012 * Math.sin(3 * theta + this.now * 0.0014 + b.seed) + 0.008 * Math.sin(5 * theta - this.now * 0.0009 + b.seed)
