@@ -12,7 +12,61 @@
   --display: 'Unbounded', 'Arial Rounded MT Bold', system-ui, sans-serif;
   --serif: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --grain-blend: overlay;
+  --grain-opacity: 0.07;
+  --vignette: rgba(0, 0, 0, 0.55);
   color-scheme: dark;
+}
+/* Banknote skin: cream paper, one ink, engraved type. A light look by design. */
+.scene[data-skin='note'] {
+  --bg: #efe9dc;
+  --fg: #22302a;
+  --fg-2: rgba(34, 48, 42, 0.72);
+  --fg-3: rgba(34, 48, 42, 0.5);
+  --glass: rgba(255, 252, 245, 0.6);
+  --glass-strong: rgba(34, 48, 42, 0.08);
+  --hairline: rgba(34, 48, 42, 0.35);
+  --ink-on-light: #f3eee2;
+  --display: 'Libre Bodoni', 'Bodoni 72', Didot, Georgia, serif;
+  --serif: 'Libre Bodoni', 'Bodoni 72', Didot, Georgia, serif;
+  --grain-blend: multiply;
+  --grain-opacity: 0.16;
+  --vignette: rgba(80, 60, 20, 0.14);
+  color-scheme: light;
+  background: var(--bg);
+  color: var(--fg);
+}
+.scene[data-skin='note'] .eyebrow {
+  font-family: 'Archivo Narrow', 'Arial Narrow', var(--sans);
+  font-size: 12px;
+  letter-spacing: 0.28em;
+}
+.scene[data-skin='note'] .eyebrow .dot {
+  box-shadow: none;
+  background: var(--fg);
+}
+.scene[data-skin='note'] .headline {
+  letter-spacing: -0.005em;
+}
+.scene[data-skin='note'] .glass {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 6px 20px rgba(60, 50, 20, 0.12);
+}
+.scene[data-skin='note'] .flavour[aria-pressed='true'],
+.scene[data-skin='note'] .iconbtn[aria-pressed='true'] {
+  background: var(--fg);
+  color: var(--ink-on-light);
+}
+.scene[data-skin='note'] .card .rank {
+  font-family: 'Archivo Narrow', 'Arial Narrow', var(--sans);
+  font-size: 12px;
+}
+.scene[data-skin='note'] .card .value {
+  font-weight: 700;
+}
+.scene[data-skin='note'] .card .track {
+  background: rgba(34, 48, 42, 0.15);
 }
 * {
   box-sizing: border-box;
@@ -47,15 +101,15 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.07;
-  mix-blend-mode: overlay;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 .vignette {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  background: radial-gradient(120% 90% at 50% 40%, transparent 55%, var(--vignette) 100%);
 }
 
 /* masthead */
@@ -329,12 +383,25 @@ body {
     left: 14px;
     right: 14px;
   }
+  /* two rows: actions above, flavours below, so nothing is clipped */
+  .dock {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .actions {
+    justify-content: flex-end;
+  }
+  .flavours {
+    align-self: flex-start;
+    max-width: 100%;
+  }
   .headline {
     max-width: 10ch;
   }
   .card {
     top: auto;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 124px);
     left: 14px;
     right: 14px;
     width: auto;

@@ -4,8 +4,13 @@ import { makeFormatter } from '../lib/format'
 import type { Country, NumericTheme } from '../lib/types'
 import { GEO } from '../lib/worldmap'
 
+/** How the scene is drawn. The physics and interactions are the same for every skin. */
+export type Skin = 'glass' | 'note'
+
 export interface BubbleOptions {
   theme: NumericTheme
+  /** 'glass': iridescent soap film on deep ink. 'note': engraved banknote medallions on paper. */
+  skin?: Skin
   /** How many countries become bubbles (default 18). The theme's `top` are labelled. */
   count?: number
   /** Space (px) between the canvas edge and the glass: room for the page's chrome. */
@@ -13,8 +18,8 @@ export interface BubbleOptions {
   onSelect?: (b: Bubble | null) => void
   /** A bubble touched the floor at speed (ripple, haptic). */
   onLand?: (b: Bubble, speed: number) => void
-  /** Fonts for the labels: [display for numbers, serif for names]. */
-  fonts?: { value: string; name: string }
+  /** Font stacks for the labels. Glass: `value` (numbers) and `name`. Note: `noteValue`, `noteName`, `micro`. */
+  fonts?: { value?: string; name?: string; noteValue?: string; noteName?: string; micro?: string }
 }
 
 export interface Bubble {
@@ -26,6 +31,9 @@ export interface Bubble {
   share: number
   color: string
   light: string
+  /** Banknote skin: ink and paper tones. */
+  ink: string
+  paper: string
   body: Body
   R: number
   /** Squash-and-stretch (mode 2) state. */
@@ -34,6 +42,8 @@ export interface Bubble {
   axis: number
   seed: number
   born: number
+  /** Banknote skin: the engraved pattern, drawn once per bubble. */
+  plate?: HTMLCanvasElement
 }
 
 interface Droplet {
@@ -93,11 +103,13 @@ export class BubbleScene {
   private lastTap = { t: 0, b: null as Bubble | null }
   private hue = 255
   private running = true
+  private skin: Skin = 'glass'
   private tiltHandler: ((e: DeviceOrientationEvent) => void) | null = null
   private bg: { x: number; y: number; r: number; dx: number; dy: number; h: number }[] = []
 
   constructor(container: HTMLElement, opts: BubbleOptions) {
     this.opts = opts
+    this.skin = opts.skin ?? 'glass'
     this.canvas = document.createElement('canvas')
     this.canvas.className = 'bubble-canvas'
     this.canvas.style.touchAction = 'none'
@@ -192,6 +204,16 @@ export class BubbleScene {
     return this.theme
   }
 
+  /** Switch the look in place; the bubbles keep their positions. */
+  setSkin(skin: Skin): void {
+    this.skin = skin
+    for (const b of this.bubbles) b.plate = undefined
+  }
+
+  getSkin(): Skin {
+    return this.skin
+  }
+
   /** Every bubble goes back above the glass and falls in again, biggest first. */
   drop(): void {
     this.clear()
@@ -236,7 +258,7 @@ export class BubbleScene {
         vx: Math.cos(a) * sp + b.body.velocity.x * 0.5,
         vy: Math.sin(a) * sp + b.body.velocity.y * 0.5 - 1.5,
         r: 2 + Math.random() * Math.min(6, b.R * 0.12),
-        color: b.light,
+        color: this.skin === 'note' ? b.ink : b.light,
         t: this.now,
       })
     }
@@ -327,6 +349,8 @@ export class BubbleScene {
     const h = (this.hue + t * 36 - 10 + 360) % 360
     const color = oklchToHex(0.78 - t * 0.22, 0.17 - t * 0.05, h)
     const light = oklchToHex(0.9 - t * 0.12, 0.1, h)
+    const ink = oklchToHex(0.34 + t * 0.2, 0.085, h)
+    const paper = oklchToHex(0.965 - t * 0.02, 0.018, h)
     const body = Bodies.circle(x, y, R, {
       restitution: 0.18,
       friction: 0.08,
@@ -336,7 +360,7 @@ export class BubbleScene {
       slop: Math.max(0.6, R * 0.05),
       angle: Math.random() * TAU,
     })
-    const bubble: Bubble = { country, rank, value, display, share, color, light, body, R, amp: 0.08, phase: 0, axis: Math.PI / 2, seed: Math.random() * TAU, born: this.now }
+    const bubble: Bubble = { country, rank, value, display, share, color, light, ink, paper, body, R, amp: 0.08, phase: 0, axis: Math.PI / 2, seed: Math.random() * TAU, born: this.now }
     this.bubbles.push(bubble)
     Composite.add(this.engine.world, body)
     return bubble
@@ -377,6 +401,7 @@ export class BubbleScene {
     this.W = W
     this.H = H
     this.dpr = dpr
+    if (dpr !== this.dpr) for (const b of this.bubbles) b.plate = undefined
     this.canvas.width = W * dpr
     this.canvas.height = H * dpr
     this.canvas.style.width = `${W}px`
@@ -468,25 +493,31 @@ export class BubbleScene {
     const { ctx, W, H, dpr } = this
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, W, H)
-    this.drawBackdrop()
+    const note = this.skin === 'note'
+    if (note) this.drawPaper()
+    else this.drawBackdrop()
     const contacts = this.contacts()
     const floorY = this.box.y + this.box.h
-    // caustics: a soft pool of colour under each bubble near the floor
+    // under each bubble near the floor: a pool of colour (glass) or a hatched shadow (note)
     for (const b of this.bubbles) {
       const p = b.body.position
       const dist = floorY - (p.y + b.R)
       if (dist > b.R * 2.5) continue
-      const a = Math.max(0, 1 - dist / (b.R * 2.5)) * 0.5
+      const a = Math.max(0, 1 - dist / (b.R * 2.5)) * (note ? 0.16 : 0.5)
       const g = ctx.createRadialGradient(p.x, floorY, 0, p.x, floorY, b.R * 1.3)
-      g.addColorStop(0, hexA(b.color, a))
-      g.addColorStop(1, hexA(b.color, 0))
+      g.addColorStop(0, hexA(note ? b.ink : b.color, a))
+      g.addColorStop(1, hexA(note ? b.ink : b.color, 0))
       ctx.fillStyle = g
       ctx.beginPath()
       ctx.ellipse(p.x, floorY, b.R * 1.3, b.R * 0.35, 0, 0, TAU)
       ctx.fill()
     }
     for (const r of this.ripples) this.drawRipple(r)
-    for (const b of this.bubbles) this.drawBubble(b, contacts.get(b.body.id) ?? [])
+    for (const b of this.bubbles) {
+      const c = contacts.get(b.body.id) ?? []
+      if (note) this.drawNote(b, c)
+      else this.drawBubble(b, c)
+    }
     for (const d of this.droplets) {
       const k = 1 - (this.now - d.t) / 900
       ctx.fillStyle = hexA(d.color, 0.9 * k)
@@ -494,7 +525,195 @@ export class BubbleScene {
       ctx.arc(d.x, d.y, d.r * (0.6 + 0.4 * k), 0, TAU)
       ctx.fill()
     }
-    this.drawGlassEdge()
+    if (note) this.drawPaperEdge()
+    else this.drawGlassEdge()
+  }
+
+  // ---------- banknote skin ----------
+
+  private drawPaper() {
+    const { ctx, W, H, box } = this
+    ctx.fillStyle = oklchToHex(0.955, 0.012, (this.hue + 40) % 360)
+    ctx.fillRect(0, 0, W, H)
+    // a faint guilloché band drifting across the paper, like a note's background lathe
+    const ink = oklchToHex(0.45, 0.07, this.hue)
+    ctx.save()
+    ctx.strokeStyle = hexA(ink, 0.07)
+    ctx.lineWidth = 0.7
+    const cy = box.y + box.h * 0.55
+    const amp = box.h * 0.16
+    const drift = this.now * 0.00012
+    for (let i = 0; i < 14; i++) {
+      ctx.beginPath()
+      for (let x = 0; x <= W; x += 6) {
+        const u = x / W
+        const y = cy + Math.sin(u * TAU * 2.2 + i * 0.35 + drift) * amp * (0.6 + 0.4 * Math.sin(i)) + Math.sin(u * TAU * 7 - i * 0.8) * amp * 0.12 + (i - 7) * 4
+        if (x === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.stroke()
+    }
+    ctx.restore()
+  }
+
+  private drawPaperEdge() {
+    const { ctx, box } = this
+    const ink = oklchToHex(0.4, 0.07, this.hue)
+    const floorY = box.y + box.h
+    ctx.strokeStyle = hexA(ink, 0.55)
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(box.x + 8, floorY - 0.5)
+    ctx.lineTo(box.x + box.w - 8, floorY - 0.5)
+    ctx.stroke()
+    // engraved hatching under the line
+    ctx.strokeStyle = hexA(ink, 0.18)
+    ctx.lineWidth = 0.6
+    ctx.beginPath()
+    for (let x = box.x + 8; x < box.x + box.w - 8; x += 5) {
+      ctx.moveTo(x, floorY + 2)
+      ctx.lineTo(x + 3, floorY + 9)
+    }
+    ctx.stroke()
+  }
+
+  /** The engraved medallion for a bubble, drawn once at its size and cached. */
+  private plate(b: Bubble): HTMLCanvasElement {
+    if (b.plate) return b.plate
+    const R = b.R
+    const dpr = this.dpr
+    const size = Math.ceil(R * 2 + 4)
+    const c = document.createElement('canvas')
+    c.width = size * dpr
+    c.height = size * dpr
+    const g = c.getContext('2d')!
+    g.scale(dpr, dpr)
+    g.translate(size / 2, size / 2)
+    // paper fill, a touch darker toward the rim
+    const fill = g.createRadialGradient(0, 0, R * 0.2, 0, 0, R)
+    fill.addColorStop(0, b.paper)
+    fill.addColorStop(1, oklchToHex(0.93, 0.03, this.hue))
+    g.fillStyle = fill
+    g.beginPath()
+    g.arc(0, 0, R, 0, TAU)
+    g.fill()
+    g.strokeStyle = b.ink
+    g.lineCap = 'round'
+    // rosettes: nested rose curves, the classic lathe pattern
+    const layers = R >= 40 ? [[12, 0.56, 0.1, 4], [18, 0.4, 0.13, 3], [7, 0.2, 0.09, 3]] : R >= 24 ? [[10, 0.5, 0.12, 3], [6, 0.22, 0.1, 2]] : [[8, 0.4, 0.14, 2]]
+    for (const [k, a, amp, count] of layers) {
+      for (let m = 0; m < count; m++) {
+        const phase = (m / count) * (TAU / k)
+        g.globalAlpha = 0.42
+        g.lineWidth = 0.55
+        g.beginPath()
+        const n = 260
+        for (let i = 0; i <= n; i++) {
+          const th = (i / n) * TAU
+          const r = R * (a + amp * Math.cos(k * th + phase))
+          const x = Math.cos(th) * r
+          const y = Math.sin(th) * r
+          if (i === 0) g.moveTo(x, y)
+          else g.lineTo(x, y)
+        }
+        g.stroke()
+      }
+    }
+    // a fine-line interference ring (two offset circles' moiré)
+    if (R >= 30) {
+      g.globalAlpha = 0.22
+      g.lineWidth = 0.45
+      for (let i = 0; i < 9; i++) {
+        g.beginPath()
+        g.arc(R * 0.04, R * 0.03, R * (0.62 + i * 0.03), 0, TAU)
+        g.stroke()
+      }
+    }
+    // microprint around the inner ring
+    if (R >= 34) {
+      const fs = Math.max(5, Math.min(7.5, R * 0.085))
+      g.font = `600 ${fs}px ${this.opts.fonts?.micro ?? 'system-ui, sans-serif'}`
+      g.fillStyle = b.ink
+      g.globalAlpha = 0.85
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      const unit = `${this.theme.title}  ·  ${this.theme.unit}  ·  `.toUpperCase()
+      const rr = R * 0.79
+      const step = (fs * 0.62) / rr
+      let th = -Math.PI / 2
+      for (let i = 0; th < TAU * 1.5 - Math.PI / 2 && i < 400; i++) {
+        const ch = unit[i % unit.length]
+        g.save()
+        g.translate(Math.cos(th) * rr, Math.sin(th) * rr)
+        g.rotate(th + Math.PI / 2)
+        g.fillText(ch, 0, 0)
+        g.restore()
+        th += step * (ch === ' ' ? 0.7 : 1)
+        if (th > TAU - Math.PI / 2) break
+      }
+    }
+    b.plate = c
+    return c
+  }
+
+  private drawNote(b: Bubble, contacts: Contact[]) {
+    const { ctx } = this
+    const p = b.body.position
+    const dim = this.selected && this.selected !== b ? 0.35 : 1
+    const age = Math.min(1, (this.now - b.born) / 500)
+    const plate = this.plate(b)
+    const size = plate.width / this.dpr
+    const radii = this.rimRadii(b, contacts)
+    ctx.save()
+    ctx.globalAlpha = dim * (0.3 + 0.7 * age)
+    // a soft offset shadow grounds the medallion on the paper
+    ctx.save()
+    ctx.translate(0, 3)
+    this.rimPath(b, contacts, 1, radii)
+    ctx.fillStyle = hexA(b.ink, 0.12)
+    ctx.fill()
+    ctx.restore()
+    this.rimPath(b, contacts, 1, radii)
+    ctx.save()
+    ctx.clip()
+    // the engraving turns with the body, so a rolling bubble reads as a rolling coin
+    ctx.translate(p.x, p.y)
+    ctx.rotate(b.body.angle)
+    ctx.drawImage(plate, -size / 2, -size / 2, size, size)
+    ctx.restore()
+    // the border follows the soft outline: outer rule, reeded ticks, inner rule
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = 1.4
+    ctx.strokeStyle = hexA(b.ink, 0.95)
+    ctx.stroke()
+    this.rimPath(b, contacts, 0.86, radii)
+    ctx.lineWidth = 0.5
+    ctx.strokeStyle = hexA(b.ink, 0.85)
+    ctx.stroke()
+    const ticks = Math.max(24, Math.round(b.R * 1.4))
+    ctx.lineWidth = 0.6
+    ctx.strokeStyle = hexA(b.ink, 0.7)
+    ctx.beginPath()
+    for (let i = 0; i < ticks; i++) {
+      const th = (i / ticks) * TAU + b.body.angle
+      const k = (((th % TAU) + TAU) % TAU) / TAU * RIM_POINTS
+      const i0 = Math.floor(k) % RIM_POINTS
+      const r = radii[i0] + (radii[(i0 + 1) % RIM_POINTS] - radii[i0]) * (k - Math.floor(k))
+      const r0 = r * (i % 2 ? 0.88 : 0.9)
+      ctx.moveTo(p.x + Math.cos(th) * r0, p.y + Math.sin(th) * r0)
+      ctx.lineTo(p.x + Math.cos(th) * r * 0.965, p.y + Math.sin(th) * r * 0.965)
+    }
+    ctx.stroke()
+    ctx.restore()
+    if (b === this.selected) {
+      ctx.save()
+      this.rimPath(b, contacts)
+      ctx.lineWidth = 3
+      ctx.strokeStyle = b.ink
+      ctx.stroke()
+      ctx.restore()
+    }
+    this.drawLabel(b, dim)
   }
 
   private drawBackdrop() {
@@ -547,12 +766,13 @@ export class BubbleScene {
     const { ctx } = this
     const k = (this.now - r.t) / 800
     const rad = r.r * (0.6 + k * 2.2)
-    ctx.strokeStyle = `rgba(255,255,255,${0.5 * (1 - k)})`
+    const ink = this.skin === 'note' ? '40,48,44' : '255,255,255'
+    ctx.strokeStyle = `rgba(${ink},${0.5 * (1 - k)})`
     ctx.lineWidth = 1.2
     ctx.beginPath()
     ctx.ellipse(r.x, r.y, rad, rad * 0.22, 0, 0, TAU)
     ctx.stroke()
-    ctx.strokeStyle = `rgba(255,255,255,${0.25 * (1 - k)})`
+    ctx.strokeStyle = `rgba(${ink},${0.25 * (1 - k)})`
     ctx.beginPath()
     ctx.ellipse(r.x, r.y, rad * 0.6, rad * 0.14, 0, 0, TAU)
     ctx.stroke()
@@ -574,9 +794,8 @@ export class BubbleScene {
     return r
   }
 
-  private rimPath(b: Bubble, contacts: Contact[]) {
-    const { ctx } = this
-    const p = b.body.position
+  /** Smoothed rim radius per sample angle. */
+  private rimRadii(b: Bubble, contacts: Contact[]): number[] {
     const radii: number[] = []
     for (let i = 0; i < RIM_POINTS; i++) radii.push(this.rimRadius(b, (i / RIM_POINTS) * TAU, contacts))
     // soften the chord corners: two passes of a 3-tap blur around the ring
@@ -586,9 +805,15 @@ export class BubbleScene {
         radii[i] = 0.25 * prev[(i + RIM_POINTS - 1) % RIM_POINTS] + 0.5 * prev[i] + 0.25 * prev[(i + 1) % RIM_POINTS]
       }
     }
+    return radii
+  }
+
+  private rimPath(b: Bubble, contacts: Contact[], scale = 1, radii = this.rimRadii(b, contacts)) {
+    const { ctx } = this
+    const p = b.body.position
     const pts: [number, number][] = radii.map((r, i) => {
       const th = (i / RIM_POINTS) * TAU
-      return [p.x + Math.cos(th) * r, p.y + Math.sin(th) * r]
+      return [p.x + Math.cos(th) * r * scale, p.y + Math.sin(th) * r * scale]
     })
     ctx.beginPath()
     const n = pts.length
@@ -669,26 +894,45 @@ export class BubbleScene {
     const { ctx } = this
     const p = b.body.position
     const R = b.R
-    const fonts = this.opts.fonts ?? { value: 'system-ui, sans-serif', name: 'system-ui, sans-serif' }
+    const note = this.skin === 'note'
+    const f = this.opts.fonts
+    const fonts = note
+      ? { value: f?.noteValue ?? 'Georgia, serif', name: f?.noteName ?? 'Georgia, serif' }
+      : { value: f?.value ?? 'system-ui, sans-serif', name: f?.name ?? 'system-ui, sans-serif' }
     const labelled = b.rank <= (this.theme.top ?? 10)
     ctx.save()
     ctx.globalAlpha = dim
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle = '#ffffff'
-    ctx.shadowColor = 'rgba(0,0,0,0.35)'
-    ctx.shadowBlur = 6
+    if (note) {
+      // a clear paper disc under the numeral, as the lathe stops around a note's figure
+      const disc = R >= 34 && labelled ? R * 0.5 : R * 0.42
+      ctx.fillStyle = hexA(b.paper, 0.92)
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, disc, 0, TAU)
+      ctx.fill()
+      ctx.strokeStyle = hexA(b.ink, 0.5)
+      ctx.lineWidth = 0.6
+      ctx.stroke()
+      ctx.fillStyle = b.ink
+    } else {
+      ctx.fillStyle = '#ffffff'
+      ctx.shadowColor = 'rgba(0,0,0,0.35)'
+      ctx.shadowBlur = 6
+    }
     if (R >= 34 && labelled) {
-      const vs = Math.max(13, Math.min(34, R * 0.42))
+      const vs = Math.max(13, Math.min(34, R * (note ? 0.36 : 0.42)))
       ctx.font = `700 ${vs}px ${fonts.value}`
       ctx.fillText(b.display, p.x, p.y + vs * 0.08)
-      const ns = Math.max(11, Math.min(18, R * 0.2))
-      ctx.font = `italic 400 ${ns}px ${fonts.name}`
+      const ns = Math.max(note ? 8 : 11, Math.min(18, R * (note ? 0.15 : 0.2)))
+      ctx.font = note ? `600 ${ns}px ${f?.micro ?? 'system-ui, sans-serif'}` : `italic 400 ${ns}px ${fonts.name}`
       ctx.globalAlpha = dim * 0.9
-      const name = ctx.measureText(b.country.name).width <= R * 1.7 ? b.country.name : b.country.id
+      if (note) ctx.letterSpacing = '0.12em'
+      const label = note ? b.country.name.toUpperCase() : b.country.name
+      const name = ctx.measureText(label).width <= R * (note ? 0.95 : 1.7) ? label : b.country.id
       ctx.fillText(name, p.x, p.y - vs * 0.72)
     } else if (R >= 20) {
-      ctx.font = `700 ${Math.max(10, R * 0.42)}px ${fonts.value}`
+      ctx.font = `700 ${Math.max(10, R * (note ? 0.36 : 0.42))}px ${fonts.value}`
       ctx.fillText(b.country.id, p.x, p.y + 1)
     }
     ctx.restore()

@@ -1,5 +1,5 @@
 import './bubbles.css'
-import { BubbleScene, type Bubble } from './bubbles/bubbleScene'
+import { BubbleScene, type Bubble, type Skin } from './bubbles/bubbleScene'
 import { hueAngle, oklchToHex } from './lib/color'
 import type { NumericTheme } from './lib/types'
 import { themes } from './themes'
@@ -54,32 +54,22 @@ const safeBottom = parseFloat(getComputedStyle(probe).paddingBottom) || 0
 const safeTop = parseFloat(getComputedStyle(probe).paddingTop) || 0
 probe.remove()
 
-const initial = numericThemes.find((x) => x.id === location.hash.slice(1)) ?? numericThemes[0]
-// the glass starts under the masthead, so the pile never climbs into the headline
-scene.append(mast)
-headline.textContent = initial.title
-const mastH = mast.offsetHeight
-const bubbles = new BubbleScene(scene, {
-  theme: initial,
-  count: 18,
-  inset: { top: safeTop + mastH + 24, bottom: safeBottom + 74, left: 0, right: 0 },
-  fonts: { value: "'Unbounded', system-ui, sans-serif", name: "'Instrument Serif', Georgia, serif" },
-  onSelect: showCard,
-  onLand: (_b, speed) => {
-    if (speed > 3 && 'vibrate' in navigator) navigator.vibrate?.(6)
-  },
-})
-const grain = document.createElement('div')
-grain.className = 'grain'
-const vignette = document.createElement('div')
-vignette.className = 'vignette'
-scene.append(vignette, grain, card, dock)
-scene.append(mast) // back on top of the canvas and overlays
-
-// fonts: the canvas draws every frame, so labels sharpen as soon as they land
-document.fonts?.load("700 20px 'Unbounded'")
-document.fonts?.load("italic 400 20px 'Instrument Serif'")
-
+// the hash is "<theme>~<skin>"; the skin is also remembered per browser
+const parseHash = () => {
+  const [themeId, skinId] = location.hash.slice(1).split('~')
+  return { themeId, skin: skinId === 'note' || skinId === 'glass' ? (skinId as Skin) : undefined }
+}
+let skin: Skin = parseHash().skin ?? 'glass'
+if (!parseHash().skin) {
+  try {
+    const saved = localStorage.getItem('bubbles:skin')
+    if (saved === 'note' || saved === 'glass') skin = saved
+  } catch {
+    /* storage unavailable: keep the default */
+  }
+}
+scene.dataset.skin = skin
+const initial = numericThemes.find((x) => x.id === parseHash().themeId) ?? numericThemes[0]
 const buttons = new Map<string, HTMLButtonElement>()
 numericThemes.forEach((t) => {
   const b = document.createElement('button')
@@ -115,12 +105,70 @@ tiltBtn.addEventListener('click', async () => {
   }
   tiltBtn.setAttribute('aria-pressed', String(tilt))
 })
+const skinBtn = iconButton('skin', 'Switch between glass and banknote', icon('M3 7h18v10H3zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 9v.01M18 15v.01'))
+skinBtn.setAttribute('aria-pressed', String(skin === 'note'))
+skinBtn.addEventListener('click', () => setSkin(skin === 'note' ? 'glass' : 'note'))
+function setSkin(next: Skin) {
+  skin = next
+  scene.dataset.skin = skin
+  bubbles.setSkin(skin)
+  skinBtn.setAttribute('aria-pressed', String(skin === 'note'))
+  try {
+    localStorage.setItem('bubbles:skin', skin)
+  } catch {
+    /* ignore */
+  }
+  updateHash()
+}
+function updateHash() {
+  const t = bubbles.getTheme()
+  const h = `#${t.id}~${skin}`
+  if (location.hash !== h) history.replaceState(null, '', h)
+  mapLink.href = `index.html#${t.id}`
+}
 const mapLink = document.createElement('a')
 mapLink.className = 'glass iconbtn map-link'
 mapLink.title = 'Back to the world map'
 mapLink.setAttribute('aria-label', 'Back to the world map')
 mapLink.innerHTML = icon('M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18')
-actions.append(dropBtn, tiltBtn, mapLink)
+actions.append(skinBtn, dropBtn, tiltBtn, mapLink)
+
+// the glass starts under the masthead, so the pile never climbs into the headline
+scene.append(mast, dock)
+headline.textContent = initial.title
+const mastH = mast.offsetHeight
+const dockH = dock.offsetHeight
+const bubbles = new BubbleScene(scene, {
+  theme: initial,
+  skin,
+  count: 18,
+  inset: { top: safeTop + mastH + 24, bottom: safeBottom + dockH + 22, left: 0, right: 0 },
+  fonts: {
+    value: "'Unbounded', system-ui, sans-serif",
+    name: "'Instrument Serif', Georgia, serif",
+    noteValue: "'Libre Bodoni', 'Bodoni 72', Didot, Georgia, serif",
+    noteName: "'Libre Bodoni', Georgia, serif",
+    micro: "'Archivo Narrow', 'Arial Narrow', system-ui, sans-serif",
+  },
+  onSelect: showCard,
+  onLand: (_b, speed) => {
+    if (speed > 3 && 'vibrate' in navigator) navigator.vibrate?.(6)
+  },
+})
+const grain = document.createElement('div')
+grain.className = 'grain'
+const vignette = document.createElement('div')
+vignette.className = 'vignette'
+scene.append(vignette, grain, card)
+scene.append(mast, dock) // back on top of the canvas and overlays
+
+// fonts: the canvas draws every frame, so labels sharpen as soon as they land
+document.fonts?.load("700 20px 'Unbounded'")
+document.fonts?.load("italic 400 20px 'Instrument Serif'")
+document.fonts?.load("700 20px 'Libre Bodoni'")
+document.fonts?.load("600 10px 'Archivo Narrow'")
+document.fonts?.ready.then(() => bubbles.setSkin(bubbles.getSkin())) // redraw the engraved plates with the real fonts
+
 
 function iconButton(id: string, label: string, svg: string): HTMLButtonElement {
   const b = document.createElement('button')
@@ -153,9 +201,9 @@ function show(id: string, push: boolean) {
   document.documentElement.style.setProperty('--accent', oklchToHex(0.8, 0.14, hueAngle(t.hue)))
   for (const [tid, btn] of buttons) btn.setAttribute('aria-pressed', String(tid === id))
   document.title = `${t.title} · World in Bubbles`
-  mapLink.href = `index.html#${id}`
   hint.classList.remove('is-hidden')
-  if (push && location.hash !== `#${id}`) history.replaceState(null, '', `#${id}`)
+  if (push) updateHash()
+  else mapLink.href = `index.html#${id}`
 }
 
 function showCard(b: Bubble | null) {
@@ -209,4 +257,8 @@ function showCard(b: Bubble | null) {
 }
 
 show(initial.id, false)
-addEventListener('hashchange', () => show(location.hash.slice(1), false))
+addEventListener('hashchange', () => {
+  const h = parseHash()
+  show(h.themeId, false)
+  if (h.skin && h.skin !== skin) setSkin(h.skin)
+})
