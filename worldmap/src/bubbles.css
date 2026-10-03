@@ -19,7 +19,7 @@
 }
 /* Banknote skin: cream paper, one ink, engraved type. A light look by design. */
 .scene[data-skin='note'] {
-  --bg: #efe9dc;
+  --bg: #f0ebe0;
   --fg: #22302a;
   --fg-2: rgba(34, 48, 42, 0.72);
   --fg-3: rgba(34, 48, 42, 0.5);

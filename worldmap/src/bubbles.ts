@@ -1,10 +1,17 @@
 import './bubbles.css'
 import { BubbleScene, type Bubble, type Skin } from './bubbles/bubbleScene'
+import { Sounds, haptic } from './bubbles/sound'
 import { hueAngle, oklchToHex } from './lib/color'
 import type { NumericTheme } from './lib/types'
 import { themes } from './themes'
 
 const numericThemes = themes.filter((t): t is NumericTheme => t.mode !== 'categorical')
+const sounds = new Sounds()
+try {
+  sounds.muted = localStorage.getItem('bubbles:muted') === '1'
+} catch {
+  /* storage unavailable */
+}
 
 const app = document.getElementById('app')!
 const scene = document.createElement('div')
@@ -30,7 +37,7 @@ mast.append(eyebrow, headline, unit)
 
 const hint = document.createElement('p')
 hint.className = 'hint'
-hint.textContent = 'Drag a bubble. Throw it. Tap twice to pop it.'
+hint.textContent = 'Pick a bubble up and let it go. Throw it. Tap twice to pop it.'
 mast.append(hint)
 
 const card = document.createElement('aside')
@@ -90,6 +97,7 @@ const icon = (d: string) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d
 const dropBtn = iconButton('drop-again', 'Drop them again', icon('M12 4v13M6 11l6 6 6-6M5 21h14'))
 dropBtn.addEventListener('click', () => {
   bubbles.drop()
+  haptic(8)
   hint.classList.remove('is-hidden')
 })
 const tiltBtn = iconButton('tilt', 'Steer gravity by tilting the phone', icon('M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2'))
@@ -104,6 +112,29 @@ tiltBtn.addEventListener('click', async () => {
     if (!tilt) tiltBtn.hidden = true
   }
   tiltBtn.setAttribute('aria-pressed', String(tilt))
+})
+// browsers allow audio only after a gesture: the first touch anywhere unlocks it
+addEventListener('pointerdown', () => sounds.unlock(), { capture: true })
+const soundBtn = iconButton('sound', 'Sound on or off', icon('M4 10v4h4l5 4V6l-5 4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11'))
+const soundOff = icon('M4 10v4h4l5 4V6l-5 4H4zM16 9l5 6M21 9l-5 6')
+const soundOn = soundBtn.innerHTML
+const paintSound = () => {
+  soundBtn.innerHTML = sounds.muted ? soundOff : soundOn
+  soundBtn.setAttribute('aria-pressed', String(!sounds.muted))
+}
+paintSound()
+soundBtn.addEventListener('click', () => {
+  sounds.muted = !sounds.muted
+  if (!sounds.muted) {
+    sounds.unlock()
+    sounds.grab()
+  }
+  try {
+    localStorage.setItem('bubbles:muted', sounds.muted ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+  paintSound()
 })
 const skinBtn = iconButton('skin', 'Switch between glass and banknote', icon('M3 7h18v10H3zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 9v.01M18 15v.01'))
 skinBtn.setAttribute('aria-pressed', String(skin === 'note'))
@@ -131,7 +162,7 @@ mapLink.className = 'glass iconbtn map-link'
 mapLink.title = 'Back to the world map'
 mapLink.setAttribute('aria-label', 'Back to the world map')
 mapLink.innerHTML = icon('M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18')
-actions.append(skinBtn, dropBtn, tiltBtn, mapLink)
+actions.append(skinBtn, soundBtn, dropBtn, tiltBtn, mapLink)
 
 // the glass starts under the masthead, so the pile never climbs into the headline
 scene.append(mast, dock)
@@ -147,13 +178,22 @@ const bubbles = new BubbleScene(scene, {
     value: "'Unbounded', system-ui, sans-serif",
     name: "'Instrument Serif', Georgia, serif",
     noteValue: "'Libre Bodoni', 'Bodoni 72', Didot, Georgia, serif",
-    noteName: "'Libre Bodoni', Georgia, serif",
     micro: "'Archivo Narrow', 'Arial Narrow', system-ui, sans-serif",
   },
   onSelect: showCard,
-  onLand: (_b, speed) => {
-    if (speed > 3 && 'vibrate' in navigator) navigator.vibrate?.(6)
+  onLand: (b, speed) => {
+    sounds.land(b.R, speed)
+    if (speed > 3) haptic(6)
   },
+  onGrab: () => {
+    sounds.grab()
+    haptic(4)
+  },
+  onPop: (b) => {
+    sounds.pop(b.R)
+    haptic([12, 40, 18])
+  },
+  onDrop: () => sounds.whoosh(),
 })
 const grain = document.createElement('div')
 grain.className = 'grain'

@@ -54,6 +54,8 @@ export interface NumericTheme {
   data: Record<CountryCode, number>
   /** One extra line per country, shown in the tooltip. */
   notes?: Record<CountryCode, string>
+  /** Backdrop motif for the bubble scene's banknote skin. */
+  decor?: { pattern?: 'waves' | 'lattice' | 'rays' }
 }
 
 /** A categorical theme paints countries by membership ("drives on the left"). */

@@ -15,9 +15,9 @@ Two pages use the same themes:
 - `bubbles.html`: **World in Bubbles**, a full-screen glass into which the
   countries of a theme drop as soft, iridescent bubbles sized by their value.
   Drag, throw, tap for details, double-tap to pop; "Drop again" lifts them back
-  up; on a phone, tilt can steer gravity. Two skins: **glass** (iridescent soap
-  film on deep ink) and **note** (engraved banknote medallions on cream paper,
-  a light look). Physics by Matter.js.
+  up; on a phone, tilt can steer gravity. Sounds and haptics. Two skins:
+  **glass** (iridescent soap film on deep ink) and **note** (ink-drawn bubbles
+  on engraved banknote paper, a light look). Physics by Matter.js.
 
 ## Run it
 
@@ -117,15 +117,26 @@ bubble into droplets and it re-forms above the glass. `enableTilt()` requests
 device orientation (iOS asks for permission) and steers gravity.
 
 Skins (`skin: 'glass' | 'note'`, `setSkin()`): the physics, sizes and
-interactions are shared, only the drawing differs. The note skin draws each
-bubble as an engraved medallion: a paper fill, nested rose-curve guilloché
-layers, a moiré ring, microprint of the theme's title and unit around the inner
-ring (all rendered once per bubble to an offscreen plate that turns with the
-body), with the outer rule, reeded ticks and inner rule drawn live along the
-deformed outline so the border squashes with the bubble. The page toggles skins
-from the dock, remembers the choice in `localStorage`, and carries it in the
-hash as `#<theme>~<skin>`. Fonts: Unbounded and Instrument Serif for glass,
-Libre Bodoni and Archivo Narrow for note.
+interactions are shared, only the drawing differs. The note skin puts the
+banknote feel into the paper, not the bubbles: a cream ground with a two-tone
+tint, a lathe field chosen by the theme (`decor.pattern`: `waves`, `lattice`
+or `rays`), a large faint rosette watermark behind the pile, a double-rule
+frame with corner rosettes and a hatched floor line, all rendered once to an
+offscreen plate. Bubbles are translucent paper with an ink rule, a thin inner
+rule, engraved cross-hatch shading that fades toward the light, and a crescent
+highlight. Fonts: Unbounded and Instrument Serif for glass, Libre Bodoni and
+Archivo Narrow for note. The page toggles skins from the dock, remembers the
+choice in `localStorage`, and carries it in the hash as `#<theme>~<skin>`.
+
+Interaction is pointer-based (mouse, touch and pen alike): press a bubble to
+pick it up, it follows the finger through its velocity so letting go throws
+it; a short press without movement is a tap (focus card), two taps pop it.
+Sounds are synthesised with the Web Audio API (`src/bubbles/sound.ts`: pop,
+plop on landing pitched by size, a tick on grab, a whoosh on "drop again"),
+unlocked by the first touch and muted from the dock; haptics use
+`navigator.vibrate` where the platform has it (Android), and are silent
+elsewhere. A height-only resize (a browser bar sliding away) just moves the
+floor; only a real width change re-lays the bubbles out.
 
 ## Geometry
 
@@ -148,6 +159,7 @@ src/lib/types.ts      theme schema
 src/themes/*.ts       one file per infographic
 bubbles.html, src/bubbles.ts, src/bubbles.css   the World in Bubbles page
 src/bubbles/bubbleScene.ts  soft-bubble physics scene (Matter.js)
+src/bubbles/sound.ts        synthesised sounds and haptics
 scripts/build-geo.mjs regenerates the geometry
 scripts/inline.mjs    single-file build
 ```

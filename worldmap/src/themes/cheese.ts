@@ -15,6 +15,7 @@ export const cheese: NumericTheme = {
   top: 10,
   listRows: 10,
   format: { decimals: 0, compact: false },
+  decor: { pattern: 'lattice' },
   source: {
     label: 'FAOSTAT & Eurostat',
     url: 'https://www.fao.org/faostat/',

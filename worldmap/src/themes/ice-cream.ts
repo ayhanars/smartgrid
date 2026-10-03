@@ -16,6 +16,7 @@ export const iceCream: NumericTheme = {
   scale: 'quantile',
   top: 10,
   format: { decimals: 1 },
+  decor: { pattern: 'waves' },
   source: {
     label: 'Industry estimates (Euromonitor, national dairy associations)',
     note: 'approximate figures, c. 2022',
