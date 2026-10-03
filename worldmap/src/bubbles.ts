@@ -222,7 +222,8 @@ function iconButton(id: string, label: string, svg: string): HTMLButtonElement {
 }
 
 function shortTitle(t: NumericTheme): string {
-  const m = t.title.match(/ice cream|cheese|coffee|chocolate|wine|beer|tea/i)
+  if (t.label) return t.label
+  const m = t.title.match(/ice cream|cheese|travel|coffee|chocolate|wine|beer|tea/i)
   return m ? m[0][0].toUpperCase() + m[0].slice(1).toLowerCase() : t.title
 }
 

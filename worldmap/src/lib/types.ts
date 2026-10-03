@@ -28,6 +28,8 @@ export interface ThemeSource {
 export interface NumericTheme {
   id: string
   title: string
+  /** One or two words for chips and eyebrows ("Ice cream"); derived from the title when absent. */
+  label?: string
   subtitle?: string
   /** Unit written after values: "litres per person per year". */
   unit: string
@@ -54,8 +56,11 @@ export interface NumericTheme {
   data: Record<CountryCode, number>
   /** One extra line per country, shown in the tooltip. */
   notes?: Record<CountryCode, string>
-  /** Backdrop motif for the bubble scene's banknote skin. */
-  decor?: { pattern?: 'waves' | 'lattice' | 'rays' }
+  /**
+   * Backdrop for the bubble scene: a lathe-work field and an engraved motif of the
+   * subject, tiled as wallpaper.
+   */
+  decor?: { pattern?: 'waves' | 'lattice' | 'rays'; motif?: 'icecream' | 'cheese' | 'travel' }
 }
 
 /** A categorical theme paints countries by membership ("drives on the left"). */

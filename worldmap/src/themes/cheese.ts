@@ -8,6 +8,7 @@ import type { NumericTheme } from '../lib/types'
 export const cheese: NumericTheme = {
   id: 'cheese',
   title: 'The world’s top cheese producers',
+  label: 'Cheese',
   subtitle: 'Cheese produced per year, in thousand tonnes. The United States makes a quarter of the world’s cheese; Europe’s big five make another third.',
   unit: 'thousand tonnes per year',
   hue: 'amber',
@@ -15,7 +16,7 @@ export const cheese: NumericTheme = {
   top: 10,
   listRows: 10,
   format: { decimals: 0, compact: false },
-  decor: { pattern: 'lattice' },
+  decor: { pattern: 'lattice', motif: 'cheese' },
   source: {
     label: 'FAOSTAT & Eurostat',
     url: 'https://www.fao.org/faostat/',

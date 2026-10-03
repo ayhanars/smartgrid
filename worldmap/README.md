@@ -4,10 +4,11 @@ One responsive world map, any dataset. Drop in a theme (a title, a unit, a hue a
 a table of country codes to values) and the map paints itself, builds the legend,
 the ranked list and the tooltips, and works from a phone to a wide screen.
 
-Two themes ship as examples: **ice cream consumption per person** (a choropleth)
-and **the world's top cheese producers** (a ranked top-10). Their figures are
-approximate industry/FAO-style numbers for illustration; replace `data` before
-publishing.
+Three themes ship as examples: **ice cream consumption per person** (a
+choropleth), **the world's top cheese producers** (a ranked top-10) and **where
+the world travels** (international arrivals, ranked). Their figures are
+approximate industry, FAO and UN Tourism style numbers for illustration;
+replace `data` before publishing.
 
 Two pages use the same themes:
 
@@ -44,6 +45,8 @@ import type { NumericTheme } from '../lib/types'
 export const coffee: NumericTheme = {
   id: 'coffee',                       // used in the URL: /#coffee
   title: 'Who drinks the most coffee?',
+  label: 'Coffee',                    // chips and eyebrows
+  decor: { pattern: 'waves', motif: 'icecream' }, // bubble-scene backdrop (add a motif in src/bubbles/motifs.ts)
   subtitle: 'Cups per person per day.',
   unit: 'kg per person per year',
   hue: 'amber',                       // blue | teal | green | lime | amber | orange | red | magenta | violet, or an OKLCH hue angle
@@ -119,10 +122,14 @@ device orientation (iOS asks for permission) and steers gravity.
 Skins (`skin: 'glass' | 'note'`, `setSkin()`): the physics, sizes and
 interactions are shared, only the drawing differs. The note skin puts the
 banknote feel into the paper, not the bubbles: a cream ground with a two-tone
-tint, a lathe field chosen by the theme (`decor.pattern`: `waves`, `lattice`
-or `rays`), a large faint rosette watermark behind the pile, a double-rule
-frame with corner rosettes and a hatched floor line, all rendered once to an
-offscreen plate. Bubbles are translucent paper with an ink rule, a thin inner
+tint, a faint lathe field chosen by the theme (`decor.pattern`: `waves`,
+`lattice` or `rays`), the theme's subject engraved and tiled as vignette
+wallpaper (`decor.motif`: `icecream` draws cones, popsicles and sundaes;
+`cheese` wedges, wheels and grapes; `travel` planes, suitcases, compasses and
+passport stamps; `src/bubbles/motifs.ts` holds them as line-and-hatch
+drawings in a unit square), a double-rule frame with corner rosettes and a
+hatched floor line, all rendered once to an offscreen plate. The glass skin
+shows the same wallpaper as faint white lines over its glow. Bubbles are translucent paper with an ink rule, a thin inner
 rule, engraved cross-hatch shading that fades toward the light, and a crescent
 highlight. Fonts: Unbounded and Instrument Serif for glass, Libre Bodoni and
 Archivo Narrow for note. The page toggles skins from the dock, remembers the
@@ -160,6 +167,7 @@ src/themes/*.ts       one file per infographic
 bubbles.html, src/bubbles.ts, src/bubbles.css   the World in Bubbles page
 src/bubbles/bubbleScene.ts  soft-bubble physics scene (Matter.js)
 src/bubbles/sound.ts        synthesised sounds and haptics
+src/bubbles/motifs.ts       engraved subject motifs for the backdrop
 scripts/build-geo.mjs regenerates the geometry
 scripts/inline.mjs    single-file build
 ```

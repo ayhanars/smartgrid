@@ -3,6 +3,7 @@ import { hueAngle, oklchToHex } from '../lib/color'
 import { makeFormatter } from '../lib/format'
 import type { Country, NumericTheme } from '../lib/types'
 import { GEO } from '../lib/worldmap'
+import { drawMotif, motifCount, type Motif } from './motifs'
 
 /** How the scene is drawn. Physics and interactions are the same for every skin. */
 export type Skin = 'glass' | 'note'
@@ -121,6 +122,8 @@ export class BubbleScene {
   private tiltHandler: ((e: DeviceOrientationEvent) => void) | null = null
   private bg: { x: number; y: number; r: number; dx: number; dy: number; h: number }[] = []
   private paperPlate: HTMLCanvasElement | null = null
+  private motifPlate: HTMLCanvasElement | null = null
+  private motifKey = ''
   private needsDrop = false
 
   constructor(container: HTMLElement, opts: BubbleOptions) {
@@ -172,6 +175,7 @@ export class BubbleScene {
     this.theme = theme
     this.hue = hueAngle(theme.hue)
     this.paperPlate = null
+    this.motifPlate = null
     this.bg = Array.from({ length: 4 }, (_, i) => ({
       x: Math.random(),
       y: Math.random(),
@@ -626,6 +630,12 @@ export class BubbleScene {
       ctx.fillRect(x - r, y - r, r * 2, r * 2)
     }
     ctx.globalCompositeOperation = 'source-over'
+    const wall = this.wallpaper('#ffffff')
+    if (wall) {
+      ctx.globalAlpha = 0.075
+      ctx.drawImage(wall, 0, 0, W, H)
+      ctx.globalAlpha = 1
+    }
     const { box } = this
     const sheen = ctx.createLinearGradient(0, box.y - 60, 0, box.y + box.h)
     sheen.addColorStop(0, 'rgba(255,255,255,0)')
@@ -739,7 +749,7 @@ export class BubbleScene {
     g.lineCap = 'round'
     if (pattern === 'waves') {
       // two families of long wavy lines, interleaved: the classic wavy-line field
-      g.globalAlpha = 0.16
+      g.globalAlpha = 0.09
       for (let fam = 0; fam < 2; fam++) {
         for (let i = 0; i < 46; i++) {
           g.beginPath()
@@ -755,7 +765,7 @@ export class BubbleScene {
       }
     } else if (pattern === 'lattice') {
       // crossing diagonal sine bands make a woven net
-      g.globalAlpha = 0.14
+      g.globalAlpha = 0.08
       const S = Math.max(W, H)
       for (const ang of [0.6, -0.6]) {
         g.save()
@@ -775,7 +785,7 @@ export class BubbleScene {
       }
     } else {
       // rays from the floor's centre and faint arcs across them
-      g.globalAlpha = 0.12
+      g.globalAlpha = 0.07
       const cx = W / 2
       for (let i = 0; i < 180; i++) {
         const a = Math.PI + (i / 179) * Math.PI
@@ -791,26 +801,11 @@ export class BubbleScene {
       }
     }
 
-    // the watermark: a big rosette behind the pile, barely there
-    g.globalAlpha = 0.09
-    g.lineWidth = 0.7
-    const rx = W / 2
-    const ry = floorY - box.h * 0.36
-    const RR = Math.min(W, H) * 0.42
-    for (const [k, a, amp, count] of [[16, 0.7, 0.1, 4], [24, 0.5, 0.12, 3], [9, 0.3, 0.1, 3]]) {
-      for (let m = 0; m < count; m++) {
-        const phase = (m / count) * (TAU / k)
-        g.beginPath()
-        for (let i = 0; i <= 360; i++) {
-          const th = (i / 360) * TAU
-          const r = RR * (a + amp * Math.cos(k * th + phase))
-          const x = rx + Math.cos(th) * r
-          const y = ry + Math.sin(th) * r
-          if (i === 0) g.moveTo(x, y)
-          else g.lineTo(x, y)
-        }
-        g.stroke()
-      }
+    // the subject, engraved and tiled like a note's vignette wallpaper
+    const wall = this.wallpaper(ink)
+    if (wall) {
+      g.globalAlpha = 0.2
+      g.drawImage(wall, 0, 0, W, H)
     }
 
     // frame: a double rule with small corner rosettes
@@ -848,6 +843,38 @@ export class BubbleScene {
     }
     g.stroke()
     this.paperPlate = c
+    return c
+  }
+
+  /** The theme's motif tiled across the canvas in staggered rows, cached per size and ink. */
+  private wallpaper(ink: string): HTMLCanvasElement | null {
+    const motif = this.theme.decor?.motif as Motif | undefined
+    if (!motif) return null
+    const key = `${motif}|${ink}|${this.W}x${this.H}|${this.dpr}`
+    if (this.motifPlate && this.motifKey === key) return this.motifPlate
+    const { W, H, dpr } = this
+    const c = document.createElement('canvas')
+    c.width = W * dpr
+    c.height = H * dpr
+    const g = c.getContext('2d')!
+    g.scale(dpr, dpr)
+    g.strokeStyle = ink
+    g.fillStyle = ink
+    const cell = Math.max(84, Math.min(136, W / 4.2))
+    const n = motifCount(motif)
+    let j = 0
+    for (let y = -cell * 0.3; y < H + cell; y += cell * 0.98, j++) {
+      const shift = (j % 2) * (cell / 2)
+      let i = 0
+      for (let x = -cell * 0.4 + shift; x < W + cell; x += cell, i++) {
+        const idx = (i + j * 2) % n
+        const angle = (((i * 7 + j * 13) % 7) - 3) * 0.07
+        const size = cell * (0.58 + ((i * 3 + j) % 3) * 0.04)
+        drawMotif(g, motif, idx, x, y, size, angle)
+      }
+    }
+    this.motifPlate = c
+    this.motifKey = key
     return c
   }
 

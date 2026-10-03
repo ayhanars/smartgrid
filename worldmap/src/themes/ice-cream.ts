@@ -8,6 +8,7 @@ import type { NumericTheme } from '../lib/types'
 export const iceCream: NumericTheme = {
   id: 'ice-cream',
   title: 'Who eats the most ice cream?',
+  label: 'Ice cream',
   subtitle: 'Yearly ice cream consumption per person. New Zealand and the United States lead by a wide margin; most of Asia and Africa eats under a litre.',
   unit: 'litres per person per year',
   hue: 'blue',
@@ -16,7 +17,7 @@ export const iceCream: NumericTheme = {
   scale: 'quantile',
   top: 10,
   format: { decimals: 1 },
-  decor: { pattern: 'waves' },
+  decor: { pattern: 'waves', motif: 'icecream' },
   source: {
     label: 'Industry estimates (Euromonitor, national dairy associations)',
     note: 'approximate figures, c. 2022',
