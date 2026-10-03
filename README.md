@@ -492,3 +492,13 @@ The bevel geometry-safety system (clamps top/bottom bevel to what's safe for
 a shape's geometry) is solid for single-region shapes but can still produce
 a broken cap on a multi-region shape with holes packed close together and a
 large bevel. This needs a proper fix here rather than being re-inherited as-is.
+
+## Grafakir (nostalji sayfası)
+
+`public/grafakir/index.html` eski grafakir sitesinin yeniden canlandırılmış hâli:
+karikatür tarzı su altı şehri, balıklar, sazlıklar, ziyaretçi sayan şehir
+tabelası ve karıncalı eski TV açılışı. Bağımsız tek bir HTML dosyasıdır; Vite
+`public/` klasörünü olduğu gibi kopyaladığı için GitHub Pages'te
+`/smartgrid/grafakir/` adresinden yayınlanır. Ziyaretçi sayacı önce
+counterapi.dev üzerinden ortak sayacı dener, ulaşamazsa tarayıcı yerel
+sayacına düşer.
