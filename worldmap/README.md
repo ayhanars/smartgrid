@@ -138,9 +138,14 @@ choice in `localStorage`, and carries it in the hash as `#<theme>~<skin>`.
 Interaction is pointer-based (mouse, touch and pen alike): press a bubble to
 pick it up, it follows the finger through its velocity so letting go throws
 it; a short press without movement is a tap (focus card), two taps pop it.
-Sounds are synthesised with the Web Audio API (`src/bubbles/sound.ts`: pop,
-plop on landing pitched by size, a tick on grab, a whoosh on "drop again"),
-unlocked by the first touch and muted from the dock; haptics use
+Sounds are synthesised with the Web Audio API (`src/bubbles/sound.ts`), layered
+the way a sound designer would: a noise transient through a ringing filter for
+the body, a pitched element with a real envelope, tanh saturation for warmth,
+a short dark room (a generated convolution impulse) and a master compressor,
+with a little random pitch variation per event. Pop is a skin-snap click plus
+a rising water bloop; landing a low rounded thud whose loudness follows speed
+and pitch follows size; grab a soft wet touch; "drop again" a swell of pink
+noise. Unlocked by the first touch and muted from the dock; haptics use
 `navigator.vibrate` where the platform has it (Android), and are silent
 elsewhere. A height-only resize (a browser bar sliding away) just moves the
 floor; only a real width change re-lays the bubbles out.
