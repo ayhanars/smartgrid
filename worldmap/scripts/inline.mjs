@@ -1,7 +1,7 @@
 // Builds one page on its own and bundles it into a single self-contained HTML file
 // that can be dropped into a CMS, an HTML block, or hosted anywhere as one file.
 //   node scripts/inline.mjs            -> dist/index.standalone.html
-//   node scripts/inline.mjs jelly.html -> dist/jelly.standalone.html
+//   node scripts/inline.mjs bubbles.html -> dist/jelly.standalone.html
 import { execSync } from 'node:child_process'
 import { readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'

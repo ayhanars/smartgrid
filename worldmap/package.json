@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "geo": "node scripts/build-geo.mjs",
     "build:single": "node scripts/inline.mjs",
-    "build:single:jelly": "node scripts/inline.mjs jelly.html"
+    "build:single:bubbles": "node scripts/inline.mjs bubbles.html"
   },
   "devDependencies": {
     "@types/matter-js": "^0.20.2",
@@ -22,7 +22,6 @@
     "world-countries": "^5.1.0"
   },
   "dependencies": {
-    "matter-js": "^0.20.0",
-    "poly-decomp": "^0.3.0"
+    "matter-js": "^0.20.0"
   }
 }

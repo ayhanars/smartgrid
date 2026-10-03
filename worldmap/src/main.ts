@@ -24,8 +24,8 @@ switcher.className = 'themes'
 switcher.setAttribute('aria-label', 'Infographic theme')
 const jellyLink = document.createElement('a')
 jellyLink.className = 'theme-btn theme-link'
-jellyLink.href = 'jelly.html'
-jellyLink.textContent = 'Jelly view'
+jellyLink.href = 'bubbles.html'
+jellyLink.textContent = 'Bubbles'
 topbar.append(brand, switcher)
 
 const card = document.createElement('section')
@@ -64,7 +64,7 @@ function show(id: string, push: boolean) {
   for (const [tid, b] of buttons) b.setAttribute('aria-pressed', String(tid === id))
   document.title = `${t.title} · World Map Infographics`
   if (push && location.hash !== `#${id}`) history.replaceState(null, '', `#${id}`)
-  jellyLink.href = `jelly.html#${id}`
+  jellyLink.href = `bubbles.html#${id}`
 }
 show(initial.id, false)
 addEventListener('hashchange', () => show(location.hash.slice(1), false))

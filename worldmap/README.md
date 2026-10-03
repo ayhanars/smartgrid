@@ -12,9 +12,10 @@ publishing.
 Two pages use the same themes:
 
 - `index.html`: the world map (choropleth or ranked), legend, table, zoom.
-- `jelly.html`: **Jelly Countries**, a full-screen glass panel into which the top
-  countries of a theme drop as translucent jellies sized by their value. Drag,
-  throw and tap them; "Drop again" lifts them back up. Physics by Matter.js.
+- `bubbles.html`: **World in Bubbles**, a full-screen glass into which the
+  countries of a theme drop as soft, iridescent bubbles sized by their value.
+  Drag, throw, tap for details, double-tap to pop; "Drop again" lifts them back
+  up; on a phone, tilt can steer gravity. Physics by Matter.js.
 
 ## Run it
 
@@ -23,12 +24,12 @@ npm install
 npm run dev          # http://localhost:5173
 npm run build        # static site in dist/
 npm run build:single       # dist/index.standalone.html, one self-contained file
-npm run build:single:jelly # dist/jelly.standalone.html
+npm run build:single:bubbles # dist/bubbles.standalone.html
 ```
 
 The map page has no runtime dependencies: plain HTML, CSS and ES modules
-(about 55 kB gzipped, geometry included). The jelly page adds Matter.js and
-poly-decomp (about 35 kB gzipped more). Deploy `dist/` to any static host.
+(about 55 kB gzipped, geometry included). The bubbles page adds Matter.js (about
+30 kB gzipped more) and loads two Google Fonts. Deploy `dist/` to any static host.
 For a sub-path such as GitHub Pages set `VITE_BASE=/your-path/ npm run build`.
 
 ## Add an infographic
@@ -97,18 +98,21 @@ Options: `hideHeader` (the page writes its own title), `hideList` (no table),
 - **Micro states.** Countries too small to see (Singapore, Malta…) get a dot in
   their colour so they are never silently dropped.
 
-## Jelly Countries
+## World in Bubbles
 
-`src/jelly/jellyScene.ts` is a `JellyScene(container, { theme, count?, inset?, onSelect? })`
-class on a `<canvas>`. For each of the top countries it takes the main landmass
-from the same geometry file (`src/jelly/outline.ts` picks the largest ring and
-simplifies it to about 36 points), scales it so that its area is proportional to
-its value (with a floor so small values stay readable), and builds a concave
-rigid body from it. "Jelly" is squash-and-stretch on impact and while dragged,
-plus a translucent gradient fill, rim light and gloss. Sizes adapt to the
-canvas: the biggest country never exceeds 80 % of the width or half the height,
-and together the jellies fill about 60 % of the glass. The scene re-drops on a
-large resize (a phone rotating).
+`src/bubbles/bubbleScene.ts` is a `BubbleScene(container, { theme, count?, inset?, fonts?, onSelect?, onLand? })`
+class on a `<canvas>`. Rigid circles do the physics (Matter.js, with a generous
+`slop` so bubbles overlap a little), and the rendering makes them soft: each rim
+is flattened along the chord where it presses on a neighbour or the floor, gets a
+mode-2 squash on impact and a stretch along its motion while dragged, and
+breathes slightly at rest. The film is a radial gradient that gathers colour at
+the rim, the rim is a slowly turning conic sweep of neighbouring hues
+(iridescence), with a soft highlight, a crisp specular arc and a dim lower
+reflection; a coloured caustic pools under each bubble near the floor and a
+ripple rings where one lands. Bubble area follows value with a floor; the leader
+is the brightest and the tail drifts around the theme hue. Double-tap pops a
+bubble into droplets and it re-forms above the glass. `enableTilt()` requests
+device orientation (iOS asks for permission) and steers gravity.
 
 ## Geometry
 
@@ -129,9 +133,8 @@ src/lib/color.ts      OKLCH ramps, categorical palette
 src/lib/format.ts     number formatting, class breaks
 src/lib/types.ts      theme schema
 src/themes/*.ts       one file per infographic
-jelly.html, src/jelly.ts, src/jelly.css   the Jelly Countries page
-src/jelly/jellyScene.ts  physics scene (Matter.js)
-src/jelly/outline.ts     main-landmass polygon from a country path
+bubbles.html, src/bubbles.ts, src/bubbles.css   the World in Bubbles page
+src/bubbles/bubbleScene.ts  soft-bubble physics scene (Matter.js)
 scripts/build-geo.mjs regenerates the geometry
 scripts/inline.mjs    single-file build
 ```
