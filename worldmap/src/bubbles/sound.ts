@@ -1,12 +1,9 @@
 /**
- * Sounds for the bubble scene, synthesised from a physical model rather than
- * from oscillators with envelopes: a water bubble rings as a damped sine whose
- * pitch rises slightly as it shrinks (van den Doel, "Physically based models
- * for liquid sounds", 2005). A pop is a small cloud of such bubbles, a landing
- * is a low one with a soft skin, and everything is randomised in pitch, decay,
- * level and timing, placed in stereo by position, softened by a low-pass and
- * given a short dark room, so no two events sound alike and nothing sounds
- * like a machine.
+ * Synthesised sounds for the bubble scene, no audio files. Built the way a
+ * sound designer would layer them: a noise transient shaped by resonant
+ * filters (the "body"), a pitched element with a real envelope, a touch of
+ * saturation, and a short room so nothing sounds dry and electronic. Every
+ * call varies pitch slightly, as real objects do.
  *
  * The context is created on the first user gesture (browsers refuse autoplay
  * before that).
@@ -15,10 +12,9 @@ export class Sounds {
   private ctx: AudioContext | null = null
   private master: GainNode | null = null
   private send: GainNode | null = null
-  private white: AudioBuffer | null = null
   private pink: AudioBuffer | null = null
-  private lastLand = -1
-  private landCount = 0
+  private white: AudioBuffer | null = null
+  private last = -1
   muted = false
 
   /** Call from a pointerdown/click handler once; a no-op afterwards. */
@@ -32,27 +28,20 @@ export class Sounds {
     try {
       const ctx = new AC()
       this.ctx = ctx
-      // master: soften the top end, then a soft clipper so stacked events never crack
-      const lp = ctx.createBiquadFilter()
-      lp.type = 'lowpass'
-      lp.frequency.value = 5200
-      lp.Q.value = 0.5
-      const clip = ctx.createWaveShaper()
-      const n = 1024
-      const curve = new Float32Array(n)
-      for (let i = 0; i < n; i++) {
-        const x = (i / (n - 1)) * 2 - 1
-        curve[i] = Math.tanh(x * 1.3) / Math.tanh(1.3)
-      }
-      clip.curve = curve
-      clip.oversample = '2x'
+      // master: a gentle compressor glues the layers and keeps pops from spiking
+      const comp = ctx.createDynamicsCompressor()
+      comp.threshold.value = -18
+      comp.knee.value = 12
+      comp.ratio.value = 3
+      comp.attack.value = 0.003
+      comp.release.value = 0.12
       const master = ctx.createGain()
-      master.gain.value = 0.85
-      master.connect(lp).connect(clip).connect(ctx.destination)
+      master.gain.value = 0.9
+      master.connect(comp).connect(ctx.destination)
       this.master = master
       // room: a short, dark reverb from a decaying noise impulse
       const room = ctx.createConvolver()
-      room.buffer = this.impulse(ctx, 0.5, 2.8)
+      room.buffer = this.impulse(ctx, 0.55, 2.2)
       const send = ctx.createGain()
       send.gain.value = 0.22
       send.connect(room).connect(master)
@@ -69,52 +58,95 @@ export class Sounds {
     return this.ctx
   }
 
-  /**
-   * A bubble bursting. `pan` is -1..1 across the screen. The film gives one soft
-   * tick, then a handful of small water bubbles ring out in quick succession,
-   * lower and fewer for a big bubble, higher and busier for a small one.
-   */
-  pop(radius: number, pan = 0): void {
+  /** A bubble bursting: a skin-snap click and a rising water "bloop". Bigger bubbles sit lower. */
+  pop(radius: number): void {
     const ac = this.ac
     if (!ac) return
     const t = ac.currentTime
+    const size = Math.min(1, radius / 120) // 0 small .. 1 large
+    const vary = 1 + (Math.random() - 0.5) * 0.16
+    // 1. the snap: a few milliseconds of white noise through a ringing band-pass
+    this.burst(t, 0.012, 0.5, (2600 - size * 1400) * vary, 6, 0.06)
+    // 2. the bloop: a sine that rises as the cavity closes, with a fast decay
+    const f0 = (520 - size * 300) * vary
+    const o = ac.createOscillator()
+    o.type = 'sine'
+    o.frequency.setValueAtTime(f0, t)
+    o.frequency.exponentialRampToValueAtTime(f0 * 2.1, t + 0.07 + size * 0.05)
+    const g = ac.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.5 + size * 0.2, t + 0.006)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13 + size * 0.08)
+    o.connect(this.warm(ac, 1.6)).connect(g)
+    this.out(g, 0.5)
+    o.start(t)
+    o.stop(t + 0.25)
+    // 3. a breath of air leaving, low and quiet
+    this.burst(t + 0.004, 0.09, 0.14, 700 - size * 300, 0.8, 0.09)
+  }
+
+  /** Landing on the floor: a soft, rounded thud; loudness follows speed, pitch follows size. */
+  land(radius: number, speed: number): void {
+    const ac = this.ac
+    if (!ac) return
+    const t = ac.currentTime
+    if (t - this.last < 0.03) return // a pile settling fires many contacts at once
+    this.last = t
     const size = Math.min(1, radius / 120)
-    // the film: a soft, dark tick (no bright static)
-    this.tick(t, 0.12, 900 - size * 400, pan)
-    // the cloud: bubbles of random size; the first is the main one
-    const count = 3 + Math.round((1 - size) * 3)
-    for (let i = 0; i < count; i++) {
-      const main = i === 0
-      const f0 = (main ? 650 - size * 320 : 950 - size * 300) * rnd(0.8, 1.3)
-      const when = t + (main ? 0.004 : 0.02 + Math.random() * 0.09)
-      const level = (main ? 0.55 : 0.16) * rnd(0.75, 1.15)
-      this.waterBubble(when, f0, level, pan + rnd(-0.15, 0.15), 1, 0.003, main ? 0.26 : 0.16)
+    const vol = Math.min(1, 0.12 + speed * 0.12)
+    const vary = 1 + (Math.random() - 0.5) * 0.12
+    // body: a low sine that drops in pitch, through saturation for warmth
+    const f0 = (150 - size * 80) * vary
+    const o = ac.createOscillator()
+    o.type = 'sine'
+    o.frequency.setValueAtTime(f0 * 1.5, t)
+    o.frequency.exponentialRampToValueAtTime(f0, t + 0.07)
+    const g = ac.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.6 * vol, t + 0.008)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16 + size * 0.1)
+    o.connect(this.warm(ac, 2.5)).connect(g)
+    this.out(g, 0.35)
+    o.start(t)
+    o.stop(t + 0.35)
+    // skin: a dull low-passed noise tap
+    this.burst(t, 0.045, 0.35 * vol, 320 + speed * 40, 0.7, 0.05, 'lowpass')
+    // small bubbles add a faint wet "plip"
+    if (size < 0.4) {
+      const p = ac.createOscillator()
+      p.type = 'sine'
+      p.frequency.setValueAtTime(900 * vary, t)
+      p.frequency.exponentialRampToValueAtTime(1500 * vary, t + 0.04)
+      const pg = ac.createGain()
+      pg.gain.setValueAtTime(0.0001, t)
+      pg.gain.exponentialRampToValueAtTime(0.08 * vol, t + 0.004)
+      pg.gain.exponentialRampToValueAtTime(0.0001, t + 0.06)
+      p.connect(pg)
+      this.out(pg, 0.6)
+      p.start(t)
+      p.stop(t + 0.08)
     }
   }
 
-  /** Landing on the floor: a low bubble with a soft skin; quieter and darker than a pop. */
-  land(radius: number, speed: number, pan = 0): void {
+  /** Picking a bubble up: a soft wet touch. */
+  grab(): void {
     const ac = this.ac
     if (!ac) return
     const t = ac.currentTime
-    // a settling pile fires many contacts: thin them out and get quieter each time
-    if (t - this.lastLand < 0.05) return
-    this.landCount = t - this.lastLand > 0.6 ? 0 : this.landCount + 1
-    this.lastLand = t
-    const crowd = Math.max(0.25, 1 - this.landCount * 0.12)
-    const size = Math.min(1, radius / 120)
-    const vol = Math.min(1, 0.1 + speed * 0.1) * crowd
-    const f0 = (210 - size * 110) * rnd(0.85, 1.15)
-    this.waterBubble(t, f0, 0.6 * vol, pan, 1.6, 0.012, 0.3)
-    this.tick(t, 0.5 * vol, 240 + speed * 30, pan, 'lowpass', 0.04)
-  }
-
-  /** Picking a bubble up: the lightest touch on water. */
-  grab(pan = 0): void {
-    const ac = this.ac
-    if (!ac) return
-    const t = ac.currentTime
-    this.waterBubble(t, 1000 * rnd(0.8, 1.25), 0.28, pan, 0.9, 0.002, 0.09)
+    const vary = 1 + (Math.random() - 0.5) * 0.2
+    this.burst(t, 0.01, 0.16, 1800 * vary, 4, 0.04)
+    const o = ac.createOscillator()
+    o.type = 'sine'
+    o.frequency.setValueAtTime(700 * vary, t)
+    o.frequency.exponentialRampToValueAtTime(1100 * vary, t + 0.03)
+    const g = ac.createGain()
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.1, t + 0.004)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05)
+    o.connect(g)
+    this.out(g, 0.4)
+    o.start(t)
+    o.stop(t + 0.07)
   }
 
   /** Everything dropping again: a swell of air. */
@@ -124,66 +156,27 @@ export class Sounds {
     const t = ac.currentTime
     const src = ac.createBufferSource()
     src.buffer = this.pink
-    src.playbackRate.value = rnd(0.85, 1.1)
+    src.playbackRate.value = 0.9 + Math.random() * 0.2
     const bp = ac.createBiquadFilter()
     bp.type = 'bandpass'
-    bp.Q.value = 0.7
-    bp.frequency.setValueAtTime(220, t)
-    bp.frequency.exponentialRampToValueAtTime(1100, t + 0.3)
-    bp.frequency.exponentialRampToValueAtTime(300, t + 0.8)
+    bp.Q.value = 0.9
+    bp.frequency.setValueAtTime(260, t)
+    bp.frequency.exponentialRampToValueAtTime(1400, t + 0.28)
+    bp.frequency.exponentialRampToValueAtTime(380, t + 0.7)
     const g = ac.createGain()
     g.gain.setValueAtTime(0.0001, t)
-    g.gain.exponentialRampToValueAtTime(1.3, t + 0.25)
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.82)
+    g.gain.exponentialRampToValueAtTime(0.28, t + 0.22)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.72)
     src.connect(bp).connect(g)
-    this.out(g, 0, 0.9)
-    src.start(t, Math.random() * 0.4)
-    src.stop(t + 0.9)
+    this.out(g, 0.8)
+    src.start(t)
+    src.stop(t + 0.8)
   }
 
-  // ---------- the model ----------
+  // ---------- building blocks ----------
 
-  /**
-   * One water bubble: a damped sine at f0 whose frequency rises a little as it
-   * decays. Decay follows the model (higher bubbles die faster); `stretch`
-   * lengthens it for the big, slow ones.
-   */
-  private waterBubble(t: number, f0: number, level: number, pan: number, stretch = 1, attack = 0.003, maxDur = 0.3) {
-    const ac = this.ac
-    if (!ac) return
-    const beta = (0.043 * f0 + 0.0014 * Math.pow(f0, 1.5)) / stretch // 1/s
-    const dur = Math.min(maxDur, Math.max(0.05, 6 / beta))
-    const rise = 1 + rnd(0.08, 0.22) // the bubble shrinks, pitch climbs
-    const o = ac.createOscillator()
-    o.type = 'sine'
-    o.frequency.setValueAtTime(f0, t)
-    o.frequency.exponentialRampToValueAtTime(f0 * rise, t + dur)
-    // a second, quiet partial gives the ring some body
-    const o2 = ac.createOscillator()
-    o2.type = 'sine'
-    o2.frequency.setValueAtTime(f0 * 2.02, t)
-    o2.frequency.exponentialRampToValueAtTime(f0 * 2.02 * rise, t + dur)
-    const g2 = ac.createGain()
-    g2.gain.value = 0.18
-    const g = ac.createGain()
-    g.gain.setValueAtTime(0.0001, t)
-    g.gain.exponentialRampToValueAtTime(level, t + attack)
-    // exponential decay e^{-beta t}, drawn as a curve so it is smooth to silence
-    const n = 48
-    const curve = new Float32Array(n)
-    for (let i = 0; i < n; i++) curve[i] = Math.max(0.0001, level * Math.exp((-beta * i * dur) / (n - 1)))
-    g.gain.setValueCurveAtTime(curve, t + attack, dur)
-    o.connect(g)
-    o2.connect(g2).connect(g)
-    this.out(g, pan, 0.45)
-    o.start(t)
-    o2.start(t)
-    o.stop(t + attack + dur + 0.02)
-    o2.stop(t + attack + dur + 0.02)
-  }
-
-  /** A very short, filtered noise tap: skin, film, contact. */
-  private tick(t: number, level: number, freq: number, pan: number, type: BiquadFilterType = 'bandpass', tail = 0.03) {
+  /** A short noise transient through a resonant filter with an exponential tail. */
+  private burst(t: number, attackDur: number, vol: number, freq: number, q: number, tail: number, type: BiquadFilterType = 'bandpass') {
     const ac = this.ac
     if (!ac || !this.white) return
     const src = ac.createBufferSource()
@@ -191,34 +184,41 @@ export class Sounds {
     src.loop = true
     const f = ac.createBiquadFilter()
     f.type = type
-    f.Q.value = type === 'bandpass' ? 1.4 : 0.7
+    f.Q.value = q
     f.frequency.setValueAtTime(freq, t)
-    f.frequency.exponentialRampToValueAtTime(Math.max(80, freq * 0.5), t + tail)
+    f.frequency.exponentialRampToValueAtTime(Math.max(60, freq * 0.45), t + attackDur + tail)
     const g = ac.createGain()
     g.gain.setValueAtTime(0.0001, t)
-    g.gain.exponentialRampToValueAtTime(level, t + 0.003)
-    g.gain.exponentialRampToValueAtTime(0.0001, t + tail)
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.002)
+    g.gain.setValueAtTime(vol, t + attackDur)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + attackDur + tail)
     src.connect(f).connect(g)
-    this.out(g, pan, 0.4)
+    this.out(g, 0.5)
     src.start(t, Math.random() * 0.5)
-    src.stop(t + tail + 0.02)
+    src.stop(t + attackDur + tail + 0.02)
   }
 
-  /** Route a node to the master (placed in stereo) and, by `wet`, to the room. */
-  private out(node: AudioNode, pan: number, wet: number) {
-    const ac = this.ctx
-    if (!ac || !this.master || !this.send) return
-    let tail: AudioNode = node
-    if (typeof ac.createStereoPanner === 'function') {
-      const p = ac.createStereoPanner()
-      p.pan.value = Math.max(-0.8, Math.min(0.8, pan))
-      node.connect(p)
-      tail = p
+  /** Gentle saturation: rounds a sine into something with a little body. */
+  private warm(ac: AudioContext, drive: number): WaveShaperNode {
+    const ws = ac.createWaveShaper()
+    const n = 256
+    const curve = new Float32Array(n)
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1
+      curve[i] = Math.tanh(x * drive) / Math.tanh(drive)
     }
-    tail.connect(this.master)
-    const s = ac.createGain()
+    ws.curve = curve
+    ws.oversample = '2x'
+    return ws
+  }
+
+  /** Route a node to the master and, by `wet`, to the room. */
+  private out(node: AudioNode, wet: number) {
+    if (!this.master || !this.send) return
+    node.connect(this.master)
+    const s = this.ctx!.createGain()
     s.gain.value = wet
-    tail.connect(s).connect(this.send)
+    node.connect(s).connect(this.send)
   }
 
   private noiseBuffer(ac: AudioContext, seconds: number, pinkish: boolean): AudioBuffer {
@@ -229,6 +229,7 @@ export class Sounds {
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1
       return buf
     }
+    // Paul Kellet's pink noise filter
     let b0 = 0
     let b1 = 0
     let b2 = 0
@@ -260,16 +261,12 @@ export class Sounds {
       for (let i = 0; i < len; i++) {
         const k = i / len
         const env = Math.pow(1 - k, decay)
-        lp += (Math.random() * 2 - 1 - lp) * (0.5 - k * 0.4)
+        lp += ((Math.random() * 2 - 1) - lp) * (0.6 - k * 0.45) // darkens over time
         d[i] = lp * env
       }
     }
     return buf
   }
-}
-
-function rnd(lo: number, hi: number): number {
-  return lo + Math.random() * (hi - lo)
 }
 
 /** Haptic tap where the platform offers it (Android browsers); silently nothing elsewhere. */

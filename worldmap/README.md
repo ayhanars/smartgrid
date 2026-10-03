@@ -138,18 +138,14 @@ choice in `localStorage`, and carries it in the hash as `#<theme>~<skin>`.
 Interaction is pointer-based (mouse, touch and pen alike): press a bubble to
 pick it up, it follows the finger through its velocity so letting go throws
 it; a short press without movement is a tap (focus card), two taps pop it.
-Sounds are synthesised with the Web Audio API (`src/bubbles/sound.ts`) from a
-physical model rather than from oscillators with envelopes: a water bubble
-rings as a damped sine whose pitch rises slightly as it shrinks (van den Doel,
-2005), with decay set by its frequency. A pop is a soft film tick and a small
-cloud of such bubbles, fewer and lower for a big one; a landing is a low
-bubble with a dull skin tap, quieter and darker, thinned out while a pile
-settles; a grab is the lightest touch; "drop again" a swell of pink noise.
-Every event is randomised in pitch, decay, level and timing, placed in stereo
-by the bubble's position, softened by a low-pass, given a short dark room (a
-generated convolution impulse) and a soft clipper at the master. A WAV of the
-set can be rendered offline from the page's `window.__bubbles.sounds` handle.
-Unlocked by the first touch and muted from the dock; haptics use
+Sounds are synthesised with the Web Audio API (`src/bubbles/sound.ts`), layered
+the way a sound designer would: a noise transient through a ringing filter for
+the body, a pitched element with a real envelope, tanh saturation for warmth,
+a short dark room (a generated convolution impulse) and a master compressor,
+with a little random pitch variation per event. Pop is a skin-snap click plus
+a rising water bloop; landing a low rounded thud whose loudness follows speed
+and pitch follows size; grab a soft wet touch; "drop again" a swell of pink
+noise. Unlocked by the first touch and muted from the dock; haptics use
 `navigator.vibrate` where the platform has it (Android), and are silent
 elsewhere. A height-only resize (a browser bar sliding away) just moves the
 floor; only a real width change re-lays the bubbles out.
