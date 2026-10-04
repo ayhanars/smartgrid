@@ -259,16 +259,21 @@ export const petStand: ProductTemplate = {
     const by = wBot / 2
     const wIn = wBot - 2 * wall
     const wLip = wMid - 2 * wall - 2 * PLAY
+    const wLipIn = wLip - 2 * LIP_T
+    // The band's opening narrows toward the top until the wall is as
+    // wide as the lip's inner edge: the lip then stands on solid wall
+    // (sunk 1 mm into it, so the two fuse), and nothing overhangs the
+    // opening, so the band prints without support. The inner wall
+    // leans in a few degrees more than the outer; the cutter's profile
+    // is set so the opening is `wLipIn` less a hair exactly at the top.
+    const topScale = (wLipIn - 0.5) / wIn
+    const cutterEnd = 1 + (topScale - 1) * ((band + 2) / band)
     parts.push(
       { name: 'Base band', color: BAND_COLOR, outline: { kind: 'path', points: footprint(shape, wBot, bx, by) }, depth: band, profile: { points: [{ z: 0, scale: 1 }, { z: band, scale: wMid / wBot }], smooth: false }, tile: 1 },
-      { name: 'Band opening', outline: { kind: 'path', points: footprint(shape, wIn, bx, by) }, depth: band + 2, z: -1, profile: { points: [{ z: 0, scale: 1 }, { z: band + 2, scale: (wMid - 2 * wall) / wIn }], smooth: false }, isHole: true, cuts: bandIndex, tile: 1 },
-      // The lip is a ring (an outline with a hole, no cutter), and it
-      // stands on a foot: a wider ring sunk into the band's top that
-      // reaches out over the band's wall, so lip, foot and band overlap
-      // and leave as one fused body. The lip itself fits inside the
-      // body's open bottom with `PLAY` each side.
-      { name: 'Lip', color: BAND_COLOR, outline: { kind: 'regions', regions: [{ outer: { points: footprint(shape, wLip, bx, by) }, holes: [{ points: footprint(shape, wLip - 2 * LIP_T, bx, by) }] }] }, depth: LIP_H + 1, z: band - 1, tile: 1 },
-      { name: 'Lip foot', color: BAND_COLOR, outline: { kind: 'regions', regions: [{ outer: { points: footprint(shape, wMid - 1, bx, by) }, holes: [{ points: footprint(shape, wLip - 2 * LIP_T, bx, by) }] }] }, depth: 2.5, z: band - 2.5, tile: 1 },
+      { name: 'Band opening', outline: { kind: 'path', points: footprint(shape, wIn, bx, by) }, depth: band + 2, z: -1, profile: { points: [{ z: 0, scale: 1 }, { z: band + 2, scale: cutterEnd }], smooth: false }, isHole: true, cuts: bandIndex, tile: 1 },
+      // The lip: a ring (an outline with a hole, no cutter) that fits
+      // inside the body's open bottom with `PLAY` each side.
+      { name: 'Lip', color: BAND_COLOR, outline: { kind: 'regions', regions: [{ outer: { points: footprint(shape, wLip, bx, by) }, holes: [{ points: footprint(shape, wLipIn, bx, by) }] }] }, depth: LIP_H + 1, z: band - 1, tile: 1 },
     )
     const bodyParts = Array.from({ length: bodyCount }, (_, i) => i)
     const bandParts = Array.from({ length: parts.length - bodyCount }, (_, i) => bodyCount + i)
