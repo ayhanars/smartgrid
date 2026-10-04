@@ -761,3 +761,40 @@
 .field-icon__head {
   fill: var(--accent, #4d8dff);
 }
+
+.create-panel__status {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.map-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.map-preview__plate {
+  fill: #e9e3d7;
+  stroke: #b9b2a4;
+  stroke-width: 1;
+}
+
+.map-preview__window {
+  fill: #ded7ca;
+}
+
+.map-preview__caption {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  text-align: center;
+}

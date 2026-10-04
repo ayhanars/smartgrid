@@ -117,7 +117,7 @@ export interface TrayPreview {
   caption?: string
 }
 
-export type ProductPreview = MountPreview | TrayPreview
+export type ProductPreview = MountPreview | TrayPreview | import('./cityMap').MapPreview
 
 export interface ProductTemplate {
   id: string
@@ -127,9 +127,13 @@ export interface ProductTemplate {
   category: string
   /** Keywords the search also matches. */
   keywords?: string[]
-  /** Loads what the builder needs first (a font for lettering); the
-   * panel awaits it before building or previewing. */
-  prepare?: () => Promise<void>
+  /** Loads what the builder needs first (a font for lettering, the map
+   * of the place in the spec); the panel awaits it before building or
+   * previewing, and again whenever the spec changes. */
+  prepare?: (spec: ProductSpec) => Promise<void>
+  /** A line on what `prepare` found for a spec (the map loaded, or why
+   * not), shown under the form. */
+  status?: (spec: ProductSpec) => string | null
   fields: SpecField[]
   defaults: ProductSpec
   /** Lays the product out from a spec. Never throws for a spec within

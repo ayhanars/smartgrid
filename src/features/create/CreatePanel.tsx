@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Anchor, ClipboardPaste, Clock, Copy, Grid2x2, Link, Package, PawPrint, Plus, Rows3, Search, X } from 'lucide-react'
+import { ArrowLeft, Anchor, ClipboardPaste, Clock, Copy, Grid2x2, Link, Map as MapIcon, Package, PawPrint, Plus, Rows3, Search, X } from 'lucide-react'
 import { PRODUCT_TEMPLATES, cleanSpec, productTemplate, searchTemplates, type ProductSpec, type ProductTemplate, type SpecValue } from '../../lib/products'
 import { artboardSize, useDocumentStore } from '../../state/documentStore'
 import { useViewStore } from '../../state/viewStore'
@@ -10,7 +10,7 @@ import { describeSpec, listRecentProducts, rememberRecentProduct, type RecentPro
 import { buildPrompt, encodeSpecParam, parseRecipe } from '../../lib/products/recipe'
 import './CreatePanel.css'
 
-const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'skadis-hook': Anchor, 'bror-bin': Package, 'bror-hook': Anchor, 'pegboard-bin': Package, 'pegboard-hook': Anchor, 'drawer-tray': Grid2x2, 'drawer-divider': Rows3, 'pet-stand': PawPrint }
+const ICONS: Record<string, typeof Package> = { 'skadis-container': Package, 'skadis-hook': Anchor, 'bror-bin': Package, 'bror-hook': Anchor, 'pegboard-bin': Package, 'pegboard-hook': Anchor, 'drawer-tray': Grid2x2, 'drawer-divider': Rows3, 'pet-stand': PawPrint, 'city-map': MapIcon }
 
 /**
  * The product workshop: a sheet over the editor with the picker (search,
@@ -56,12 +56,29 @@ export function CreatePanel() {
     setRequested(null)
     setRequestedSpec(null)
     if (t) {
-      void (t.prepare?.() ?? Promise.resolve()).catch(() => undefined).then(() => {
+      const first = { ...t.defaults, ...(requestedSpec ? cleanSpec(t, requestedSpec) : {}) }
+      void (t.prepare?.(first) ?? Promise.resolve()).catch(() => undefined).then(() => {
         setPickedId(t.id)
-        setSpec({ ...t.defaults, ...(requestedSpec ? cleanSpec(t, requestedSpec) : {}) })
+        setSpec(first)
       })
     }
   }, [open, requested, requestedSpec, setRequested, setRequestedSpec])
+
+  // A template that loads per spec (the map of a place) is prepared
+  // again when the spec changes, a moment after the last keystroke;
+  // the preview and status re-render once it is done.
+  const [prepared, setPrepared] = useState(0)
+  useEffect(() => {
+    if (!picked?.prepare) return
+    const t = picked
+    const snapshot = cleanSpec(t, spec)
+    const timer = window.setTimeout(() => {
+      setPrepared((n) => n + 1)
+      void t.prepare!(snapshot).catch(() => undefined).then(() => setPrepared((n) => n + 1))
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [picked, spec])
+  void prepared
 
   useEffect(() => {
     if (!open) return
@@ -81,9 +98,10 @@ export function CreatePanel() {
   const pick = (t: ProductTemplate, withSpec?: ProductSpec) => {
     // A template that needs something loaded first (a font) gets it
     // before its form opens, so the first build already has it.
-    void (t.prepare?.() ?? Promise.resolve()).catch(() => undefined).then(() => {
+    const first = { ...t.defaults, ...(withSpec ? cleanSpec(t, withSpec) : {}) }
+    void (t.prepare?.(first) ?? Promise.resolve()).catch(() => undefined).then(() => {
       setPickedId(t.id)
-      setSpec({ ...t.defaults, ...(withSpec ? cleanSpec(t, withSpec) : {}) })
+      setSpec(first)
     })
   }
   const add = () => {
@@ -161,6 +179,7 @@ export function CreatePanel() {
                     <GeneratorArt template={picked.id} />
                   </div>
                 )}
+                {picked.status?.(cleanPicked) && <p className="create-panel__status">{picked.status(cleanPicked)}</p>}
                 {picked.notes && <p className="create-panel__notes">{picked.notes}</p>}
               </div>
               <div className="create-sheet__form">
