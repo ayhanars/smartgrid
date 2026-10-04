@@ -435,6 +435,34 @@ one pivot and settled once for all of them (`buildLayerGeometries`
 merges them for the bake), or each piece would turn about its own
 centre and drop to the bed.
 
+The city map (`cityMap.ts`, category Decor) is a relief map of a patch
+of a city, the kind that hangs on a wall: the streets raised 1 mm on a
+plate (wider for the main roads, never under 0.9 mm), the buildings as
+blocks in four heights by their storey counts (or all alike), water
+sunk 0.8 mm (the plate cut through there and filled lower, in its own
+colour), parks laid flat, surface rail on request, a raised frame and
+the city's name along the bottom edge; square, round or hexagonal.
+Every layer is its own part in its own colour, fused with the plate,
+so a multi-colour printer paints the map and a single colour still
+reads as relief. The map data is OpenStreetMap's (`src/lib/map/osm.ts`:
+the Overpass API returns the tagged ways of the patch with geometry,
+Photon or Nominatim turn a place name into coordinates; both open and
+keyless, with the credit "© OpenStreetMap contributors" the notes
+carry — Google's map data may not be extracted into derived works and
+its APIs give no vector geometry). `template.prepare(spec)` resolves
+the place and fetches the patch into a session cache; the Create panel
+prepares again half a second after the spec settles, and the build
+reads the cache synchronously. Berlin Mitte is bundled
+(`berlinMitte.ts`, hand-drawn in Overpass's own form: Museum Island,
+the Spree, Alexanderplatz) so the product works offline and stands in
+when a fetch fails. The 2D work (`mapShapes.ts`) is polygon-clipping:
+lines widened into strips with round joins, footprints united so
+touching buildings merge, each layer clipped to the window inside the
+frame and above the label and taken out of the layers above it,
+slivers under a square millimetre dropped. The panel shows the map
+from above (`MapPreview`) as it changes, with the scale and a status
+line (`template.status`) on what was loaded.
+
 A product added from the Create panel lands centred: on a plate that
 had nothing on it, its bodies are packed together and the cluster is
 centred on the plate (one bin in the middle; nine boxes as a centred

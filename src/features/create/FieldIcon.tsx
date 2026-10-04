@@ -231,6 +231,84 @@ const GLYPHS: Record<string, () => React.ReactNode> = {
       <Arrow d="M8 17 H16" />
     </>
   ),
+  place: () => (
+    <>
+      <path className="field-icon__line" d="M15 22 C9 15 6 11 6 8 a9 9 0 0 1 18 0 c0 3 -3 7 -9 14 Z" />
+      <circle className="field-icon__mark" cx="15" cy="8" r="2.6" />
+    </>
+  ),
+  span: () => (
+    <>
+      <Plan />
+      <path className="field-icon__line" d="M8 4 V20 M16 4 V20 M4 11 H26" />
+      <Arrow d="M4 23 H26" />
+    </>
+  ),
+  base: () => (
+    <>
+      <Plan />
+      <Arrow d="M28 16 V20" />
+      <path className="field-icon__line" d="M4 20 L8 24 H30 M26 20 L30 24" />
+    </>
+  ),
+  frame: () => (
+    <>
+      <Plan />
+      <rect className="field-icon__mark" x="7" y="7" width="16" height="10" fill="none" />
+    </>
+  ),
+  label: () => (
+    <>
+      <Plan />
+      <path className="field-icon__mark" d="M8 16 H22" />
+    </>
+  ),
+  roads: () => (
+    <>
+      <Plan />
+      <path className="field-icon__mark" d="M4 13 C10 13 12 7 18 7 H26 M12 4 V20" />
+    </>
+  ),
+  buildings: () => (
+    <>
+      <Plan />
+      <rect className="field-icon__mark" x="7" y="7" width="5" height="5" />
+      <rect className="field-icon__mark" x="14" y="9" width="7" height="6" />
+      <rect className="field-icon__mark" x="8" y="14" width="4" height="3" />
+    </>
+  ),
+  relief: () => (
+    <>
+      <path className="field-icon__line" d="M3 22 H27" />
+      <path className="field-icon__mark" d="M5 22 V14 H10 V22 M12 22 V8 H17 V22 M19 22 V17 H24 V22" />
+    </>
+  ),
+  water: () => (
+    <>
+      <Plan />
+      <path className="field-icon__mark" d="M4 10 C8 8 10 14 14 12 S20 8 26 10" />
+      <path className="field-icon__mark" d="M4 15 C8 13 10 19 14 17 S20 13 26 15" />
+    </>
+  ),
+  green: () => (
+    <>
+      <Plan />
+      <circle className="field-icon__mark" cx="11" cy="11" r="3.5" />
+      <circle className="field-icon__mark" cx="19" cy="13" r="2.5" />
+    </>
+  ),
+  outline: () => (
+    <>
+      <path className="field-icon__line" d="M15 2 L26 8 V17 L15 23 L4 17 V8 Z" />
+      <circle className="field-icon__mark" cx="15" cy="12.5" r="4" />
+    </>
+  ),
+  rail: () => (
+    <>
+      <Plan />
+      <path className="field-icon__mark" d="M4 14 H26 M4 10 H26 M8 10 V14 M14 10 V14 M20 10 V14" />
+    </>
+  ),
 }
 
 const ALIASES: Record<string, string> = { band: 'floor', name: 'pattern' }

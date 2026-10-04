@@ -4,6 +4,7 @@
  */
 export function GeneratorArt({ template }: { template: string }) {
   if (template === 'pet-stand') return <PetStandArt />
+  if (template === 'city-map') return <CityMapArt />
   const kind = template.startsWith('drawer-tray') ? 'tray' : template.startsWith('drawer-divider') ? 'divider' : template.endsWith('hook') ? 'hook' : 'bin'
   return (
     <svg viewBox="0 0 160 120" className={`generator-art generator-art--${kind}`} aria-hidden="true">
@@ -70,6 +71,30 @@ function PetStandArt() {
         <circle cx="81.6" cy="46.6" r="1.5" />
         <circle cx="84.8" cy="48.6" r="1.4" />
       </g>
+    </svg>
+  )
+}
+
+function CityMapArt() {
+  return (
+    <svg viewBox="0 0 160 120" className="generator-art generator-art--map" aria-hidden="true">
+      <rect x="20" y="8" width="120" height="104" rx="4" fill="currentColor" fillOpacity="0.18" stroke="currentColor" strokeOpacity="0.6" strokeWidth="2" />
+      <path d="M20 70 C50 60 70 88 100 78 S130 60 140 66 V84 C120 80 110 98 90 92 S50 70 20 84 Z" fill="currentColor" fillOpacity="0.45" />
+      <g stroke="currentColor" strokeOpacity="0.95" strokeWidth="3" strokeLinecap="round" fill="none">
+        <path d="M24 30 H136" />
+        <path d="M60 12 V108" />
+        <path d="M100 12 V108" />
+        <path d="M24 52 H136" />
+      </g>
+      <g fill="currentColor" fillOpacity="0.8">
+        <rect x="30" y="36" width="22" height="10" />
+        <rect x="68" y="16" width="24" height="8" />
+        <rect x="108" y="36" width="20" height="10" />
+        <rect x="68" y="36" width="12" height="10" />
+        <rect x="30" y="92" width="22" height="12" />
+        <rect x="110" y="94" width="20" height="10" />
+      </g>
+      <circle cx="40" cy="20" r="7" fill="currentColor" fillOpacity="0.5" />
     </svg>
   )
 }

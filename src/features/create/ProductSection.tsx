@@ -39,7 +39,7 @@ export function ProductSection({ selection }: { selection: string[] }) {
 
   const dirty = Object.keys(spec).some((k) => spec[k] !== recipe.spec[k])
   const update = async () => {
-    await (template.prepare?.() ?? Promise.resolve()).catch(() => undefined)
+    await (template.prepare?.(cleanSpec(template, spec)) ?? Promise.resolve()).catch(() => undefined)
     const newId = regenerateProduct(groupId, cleanSpec(template, spec))
     if (newId) {
       const s = useDocumentStore.getState()
