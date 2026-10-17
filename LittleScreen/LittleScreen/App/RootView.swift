@@ -30,6 +30,16 @@ struct RootView: View {
         .background {
             ParentGestureRecognizer { app.requestParentAccess() }
         }
+        #if DEBUG
+        // Debug builds only: ⌘⇧P on a hardware keyboard (or the Simulator)
+        // opens parent verification, for testing where the gesture is awkward.
+        .background {
+            Button("Open parent verification") { app.requestParentAccess() }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
+        #endif
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:

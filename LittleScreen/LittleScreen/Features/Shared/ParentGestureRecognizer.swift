@@ -5,7 +5,13 @@ import UIKit
 /// Tuned so a toddler's palm or a two-finger grab does not fire it, and so it
 /// cannot be confused with the single-finger holds used elsewhere in the app.
 enum ParentGesture {
+    #if targetEnvironment(simulator)
+    /// The Simulator can only synthesise two touches (hold ⌥ Option), so the
+    /// gesture is two fingers there. Real devices always use three.
+    static let fingers = 2
+    #else
     static let fingers = 3
+    #endif
     static let holdDuration: TimeInterval = 1.0
     static let description = "Hold \(fingers) fingers on the screen for about a second"
 }

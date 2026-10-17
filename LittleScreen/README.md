@@ -34,6 +34,11 @@ xcodebuild -project LittleScreen.xcodeproj -scheme LittleScreen \
 CI (`.github/workflows/littlescreen-ios.yml`) does exactly this on a macOS
 runner whenever files under `LittleScreen/` change.
 
+In the **Simulator** the parent gesture is a *two*-finger hold (hold ⌥ Option
+to get two touches, then click and hold for a second), because the Simulator
+cannot synthesise three. Debug builds also accept ⌘⇧P. Real devices always
+use three fingers.
+
 Testing on a **physical iPhone** matters for this app: the three-finger
 gesture, Guided Access and Airplane-Mode playback cannot be judged in the
 simulator.
