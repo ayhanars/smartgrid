@@ -20,10 +20,13 @@ struct SettingsView: View {
                 Toggle(isOn: $settings.allowLongPressExit) {
                     Label("Hold to leave a video", systemImage: "hand.tap")
                 }
+                Toggle(isOn: $settings.showSkipButton) {
+                    Label("Hold-to-skip circle", systemImage: "forward.end.circle")
+                }
             } header: {
                 Text("Child mode")
             } footer: {
-                Text("With “Hold to leave” on, pressing one finger on the video for a couple of seconds shows a single Back button. With it off, a video can only be left when it ends or with the parent gesture. The next video never starts on its own.")
+                Text("“Hold to leave”: pressing one finger on the video for a couple of seconds shows a single Back button. “Hold-to-skip circle”: a small circle in the corner jumps to the next video when held for about a second and a half; taps do nothing. The next video never starts on its own.")
             }
 
             Section {

@@ -75,7 +75,10 @@ Ways out of a video, all deliberate:
    straight back to the library);
 2. a one-finger hold of 1.5 s reveals a single Back button for 4 s (parents
    can turn this off in Settings);
-3. the parent gesture.
+3. holding the small skip circle in the corner for 1.5 s moves to the next
+   video in library order, wrapping to the first (a tap does nothing; parents
+   can turn it off in Settings);
+4. the parent gesture.
 
 Interruptions (calls, Siri), backgrounding and playback failures are handled;
 the child sees at worst a friendly "Oops" screen with a Back button.

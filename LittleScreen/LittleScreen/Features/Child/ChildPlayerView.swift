@@ -3,13 +3,15 @@ import UIKit
 
 /// Full-screen, control-free playback (FR-02).
 ///
-/// There is no scrubber, no skip, no tap-to-show-controls. The only ways out
-/// are: the video ends, a deliberate one-finger hold reveals a single Back
-/// button (parent-configurable), or the parent gesture.
+/// There is no scrubber and no tap-to-show-controls. The only ways out are:
+/// the video ends, a deliberate one-finger hold reveals a single Back button
+/// (parent-configurable), a hold on the skip circle moves to the next video
+/// (parent-configurable), or the parent gesture.
 struct ChildPlayerView: View {
     let item: VideoItem
     let url: URL
     let onExit: () -> Void
+    let onSkip: () -> Void
 
     @Environment(AppModel.self) private var app
     @Environment(\.scenePhase) private var scenePhase
@@ -20,10 +22,11 @@ struct ChildPlayerView: View {
     private let exitHoldDuration: Double = 1.5
     private let exitButtonTimeout: Double = 4
 
-    init(item: VideoItem, url: URL, onExit: @escaping () -> Void) {
+    init(item: VideoItem, url: URL, onExit: @escaping () -> Void, onSkip: @escaping () -> Void) {
         self.item = item
         self.url = url
         self.onExit = onExit
+        self.onSkip = onSkip
         _controller = State(initialValue: PlayerController(url: url))
     }
 
@@ -55,6 +58,17 @@ struct ChildPlayerView: View {
                 if exitVisible {
                     exitButton
                         .transition(.opacity)
+                }
+
+                if app.settings.showSkipButton, controller.state != .finished {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            HoldToSkipButton(action: onSkip)
+                                .padding(24)
+                        }
+                    }
                 }
 
                 if controller.state == .finished,
@@ -155,6 +169,52 @@ struct CompletionView: View {
             }
         }
         .onAppear { appeared = true }
+    }
+}
+
+/// A circle that does nothing when tapped and skips to the next video when
+/// held: the ring fills while the finger stays down, so the child (and the
+/// parent) can see it is a deliberate action.
+struct HoldToSkipButton: View {
+    let action: () -> Void
+    @State private var pressing = false
+    @State private var fired = false
+
+    private let holdDuration: Double = 1.5
+    private let size: CGFloat = 64
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.black.opacity(0.35))
+            Circle()
+                .strokeBorder(Color.white.opacity(0.5), lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: pressing ? 1 : 0)
+                .stroke(ChildTheme.frames[1], style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .padding(1.5)
+                .animation(pressing ? .linear(duration: holdDuration) : .easeOut(duration: 0.2), value: pressing)
+            Image(systemName: "forward.end.fill")
+                .font(.system(size: 24, weight: .heavy))
+                .foregroundStyle(.white)
+        }
+        .frame(width: size, height: size)
+        .scaleEffect(pressing ? 1.1 : 1)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: pressing)
+        .opacity(0.9)
+        .contentShape(Circle())
+        .onLongPressGesture(minimumDuration: holdDuration, maximumDistance: 40) {
+            guard !fired else { return }
+            fired = true
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            action()
+        } onPressingChanged: { isPressing in
+            pressing = isPressing
+            if isPressing { fired = false }
+        }
+        .accessibilityLabel("Next video")
+        .accessibilityHint("Hold for a moment to skip to the next video")
     }
 }
 

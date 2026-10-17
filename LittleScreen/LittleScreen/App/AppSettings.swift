@@ -24,6 +24,7 @@ final class AppSettings {
         static let showTitles = "settings.showTitlesInChildMode"
         static let endOfVideo = "settings.endOfVideoBehavior"
         static let longPressExit = "settings.allowLongPressExit"
+        static let skipButton = "settings.showSkipButton"
         static let biometrics = "settings.biometricUnlockEnabled"
         static let onboarding = "settings.hasCompletedOnboarding"
     }
@@ -45,6 +46,12 @@ final class AppSettings {
         didSet { defaults.set(allowLongPressExit, forKey: Key.longPressExit) }
     }
 
+    /// Shows a small circle during playback that skips to the next video when
+    /// held for a moment. A tap does nothing.
+    var showSkipButton: Bool {
+        didSet { defaults.set(showSkipButton, forKey: Key.skipButton) }
+    }
+
     var biometricUnlockEnabled: Bool {
         didSet { defaults.set(biometricUnlockEnabled, forKey: Key.biometrics) }
     }
@@ -58,6 +65,7 @@ final class AppSettings {
         showTitlesInChildMode = defaults.object(forKey: Key.showTitles) as? Bool ?? false
         endOfVideoBehavior = EndOfVideoBehavior(rawValue: defaults.string(forKey: Key.endOfVideo) ?? "") ?? .completionScreen
         allowLongPressExit = defaults.object(forKey: Key.longPressExit) as? Bool ?? true
+        showSkipButton = defaults.object(forKey: Key.skipButton) as? Bool ?? true
         biometricUnlockEnabled = defaults.bool(forKey: Key.biometrics)
         hasCompletedOnboarding = defaults.bool(forKey: Key.onboarding)
     }
