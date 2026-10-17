@@ -1,0 +1,72 @@
+name: LittleScreen iOS
+
+# Builds and unit-tests the LittleScreen iPhone app whenever its sources change.
+# The Xcode project is generated from LittleScreen/project.yml with XcodeGen.
+
+on:
+  push:
+    paths:
+      - "LittleScreen/**"
+      - ".github/workflows/littlescreen-ios.yml"
+  pull_request:
+    paths:
+      - "LittleScreen/**"
+      - ".github/workflows/littlescreen-ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: littlescreen-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: LittleScreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Pick a simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available -j \
+            | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; devs=[x for rt,xs in d.items() if "iOS" in rt for x in xs if x["name"].startswith("iPhone")]; print(devs[-1]["udid"])')
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep "$UDID"
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project LittleScreen.xcodeproj \
+            -scheme LittleScreen \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            test 2>&1 | tee xcodebuild.log | grep -E "error:|warning: unre|Test Case|Test Suite|BUILD|TEST" || true
+          # Fail the step on real failures (grep above swallows the exit code).
+          if grep -qE "(error:|\*\* TEST FAILED \*\*|\*\* BUILD FAILED \*\*)" xcodebuild.log; then
+            echo "::group::Full xcodebuild log"; cat xcodebuild.log; echo "::endgroup::"
+            exit 1
+          fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: littlescreen-test-results
+          path: |
+            LittleScreen/TestResults.xcresult
+            LittleScreen/xcodebuild.log
+          if-no-files-found: ignore

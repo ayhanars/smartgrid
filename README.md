@@ -8,6 +8,12 @@ and keeps running as-is; this is a separate, independent codebase.
 A Figma-style 2D vector editor for drawing/importing SVG shapes, paired with a
 live 3D preview that extrudes those shapes into printable models (STL / 3MF).
 
+## Also in this repository
+
+- [`LittleScreen/`](LittleScreen/README.md) — a separate native iOS app: a
+  parent-controlled, offline video player for young children (SwiftUI,
+  AVFoundation). It shares nothing with the web app; see its own README.
+
 ## Status
 
 Early scaffold. Core libraries are wired in but the 2D canvas, 3D viewport,
