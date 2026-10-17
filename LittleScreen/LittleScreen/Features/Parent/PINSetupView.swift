@@ -10,11 +10,14 @@ struct PINSetupView: View {
     @State private var firstEntry = ""
     @State private var entry = ""
     @State private var message: String?
+    @State private var shakes = 0
 
     private enum Step { case enter, confirm }
 
     var body: some View {
         VStack(spacing: 20) {
+            IconBadge(systemImage: "key.fill", size: 64)
+                .padding(.top, 8)
             PINPadView(
                 title: step == .enter ? title : "Enter it once more",
                 subtitle: step == .enter
@@ -22,14 +25,17 @@ struct PINSetupView: View {
                     : nil,
                 entry: $entry,
                 submitLabel: step == .enter ? "Next" : "Save PIN",
+                shakeTrigger: shakes,
                 onSubmit: handle
             )
             Text(message ?? " ")
-                .font(.footnote)
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(.red)
                 .multilineTextAlignment(.center)
+            Spacer(minLength: 0)
         }
         .padding()
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle("Parent PIN")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -38,6 +44,7 @@ struct PINSetupView: View {
         switch step {
         case .enter:
             guard PINManager.isValidPIN(pin) else {
+                shakes += 1
                 message = "Use \(PINManager.minLength) to \(PINManager.maxLength) digits."
                 return
             }
@@ -47,6 +54,7 @@ struct PINSetupView: View {
             step = .confirm
         case .confirm:
             guard pin == firstEntry else {
+                shakes += 1
                 message = "Those didn't match. Start again."
                 firstEntry = ""
                 entry = ""

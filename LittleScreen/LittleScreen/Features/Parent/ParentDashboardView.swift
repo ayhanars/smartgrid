@@ -19,7 +19,8 @@ struct ParentDashboardView: View {
                 }
 
                 Section {
-                    StorageSummaryRow()
+                    StorageCard()
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
                 }
 
                 Section {
@@ -28,6 +29,13 @@ struct ParentDashboardView: View {
                             Label("No videos yet", systemImage: "film.stack")
                         } description: {
                             Text("Tap Add to import MP4 or MOV files from the Files app. They are copied into LittleScreen and play offline.")
+                        } actions: {
+                            Button {
+                                showingFilePicker = true
+                            } label: {
+                                Label("Add a video", systemImage: "plus")
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
                     } else {
                         ForEach(app.library.items) { item in
@@ -57,14 +65,22 @@ struct ParentDashboardView: View {
             .navigationDestination(for: UUID.self) { id in
                 VideoDetailView(videoID: id)
             }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        app.returnToChildMode()
-                    } label: {
-                        Label("Child Mode", systemImage: "play.rectangle.fill")
-                    }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    app.returnToChildMode()
+                } label: {
+                    Label("Back to Child Mode", systemImage: "figure.and.child.holdinghands")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.horizontal)
+                .padding(.vertical, 10)
+                .background(.bar)
+            }
+            .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if !app.library.items.isEmpty {
                         EditButton()
@@ -135,17 +151,26 @@ struct VideoRow: View {
     let availability: MediaAvailability
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             ThumbnailImage(item: item)
-                .frame(width: 96, height: 54)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
+                .frame(width: 104, height: 58)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(ChildTheme.frame(for: item), lineWidth: 2.5)
+                )
+                .opacity(availability.isPlayable ? 1 : 0.5)
+            VStack(alignment: .leading, spacing: 5) {
                 Text(item.title)
-                    .font(.body)
+                    .font(.headline)
                     .lineLimit(2)
                 HStack(spacing: 8) {
-                    if let duration = item.formattedDuration { Text(duration) }
-                    if let size = item.formattedFileSize { Text(size) }
+                    if let duration = item.formattedDuration {
+                        Label(duration, systemImage: "clock")
+                    }
+                    if let size = item.formattedFileSize {
+                        Text(size)
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -233,24 +258,42 @@ struct ImportProgressView: View {
     }
 }
 
-struct StorageSummaryRow: View {
+/// Capacity gauge + counts. Used at the top of the dashboard and in Settings.
+struct StorageCard: View {
     @Environment(AppModel.self) private var app
     @State private var usedBytes: Int64 = 0
     @State private var freeBytes: Int64?
 
+    private var fraction: Double {
+        guard let freeBytes, usedBytes + freeBytes > 0 else { return 0 }
+        return Double(usedBytes) / Double(usedBytes + freeBytes)
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "internaldrive")
-                .font(.title2)
-                .foregroundStyle(Color.accentColor)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(app.library.items.count) \(app.library.items.count == 1 ? "video" : "videos") · \(ByteCountFormatter.string(fromByteCount: usedBytes, countStyle: .file)) used")
+        HStack(spacing: 18) {
+            Gauge(value: fraction) {
+                EmptyView()
+            } currentValueLabel: {
+                Image(systemName: "internaldrive.fill")
+                    .font(.title3)
+            }
+            .gaugeStyle(.accessoryCircularCapacity)
+            .tint(Gradient(colors: [ChildTheme.frames[2], ChildTheme.frames[1], ChildTheme.frames[0]]))
+            .scaleEffect(1.25)
+            .frame(width: 70, height: 70)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(app.library.items.count) \(app.library.items.count == 1 ? "video" : "videos")")
+                    .font(.title3.weight(.semibold))
+                Text("\(ByteCountFormatter.string(fromByteCount: usedBytes, countStyle: .file)) in LittleScreen")
+                    .foregroundStyle(.secondary)
                 if let freeBytes {
                     Text("\(ByteCountFormatter.string(fromByteCount: freeBytes, countStyle: .file)) free on this iPhone")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
+            Spacer(minLength: 0)
         }
         .task(id: app.library.items) {
             let media = app.library.media

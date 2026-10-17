@@ -114,7 +114,7 @@ LittleScreen/
     Child/          ChildRootView, ChildLibraryView, ChildPlayerView, PlayerLayerView
     Parent/         OnboardingView, PINEntryView, PINSetupView, ParentDashboardView,
                     VideoDetailView (+ FramePickerView), SettingsView (+ Guided Access help)
-    Shared/         ParentGestureRecognizer, ThumbnailImage/Cache, PINPadView, BigChildButton
+    Shared/         ParentGestureRecognizer, ThumbnailImage/Cache, PINPadView, BigChildButton, ChildTheme
 LittleScreenTests/  LibraryStore, PIN/lockout, importer helpers
 docs/               DECISIONS.md, DEVICE_PROTECTION.md, ACCEPTANCE.md
 ```

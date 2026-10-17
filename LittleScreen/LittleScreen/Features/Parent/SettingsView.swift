@@ -7,13 +7,19 @@ struct SettingsView: View {
         @Bindable var settings = app.settings
         Form {
             Section {
-                Toggle("Show video titles", isOn: $settings.showTitlesInChildMode)
-                Picker("When a video ends", selection: $settings.endOfVideoBehavior) {
+                Toggle(isOn: $settings.showTitlesInChildMode) {
+                    Label("Show video titles", systemImage: "textformat")
+                }
+                Picker(selection: $settings.endOfVideoBehavior) {
                     ForEach(AppSettings.EndOfVideoBehavior.allCases) { behavior in
                         Text(behavior.label).tag(behavior)
                     }
+                } label: {
+                    Label("When a video ends", systemImage: "flag.checkered")
                 }
-                Toggle("Hold to leave a video", isOn: $settings.allowLongPressExit)
+                Toggle(isOn: $settings.allowLongPressExit) {
+                    Label("Hold to leave a video", systemImage: "hand.tap")
+                }
             } header: {
                 Text("Child mode")
             } footer: {
@@ -21,9 +27,11 @@ struct SettingsView: View {
             }
 
             Section {
-                NavigationLink("Change PIN") { ChangePINView() }
+                NavigationLink { ChangePINView() } label: { Label("Change PIN", systemImage: "key.fill") }
                 if let name = BiometricAuth.displayName {
-                    Toggle("Unlock with \(name)", isOn: $settings.biometricUnlockEnabled)
+                    Toggle(isOn: $settings.biometricUnlockEnabled) {
+                        Label("Unlock with \(name)", systemImage: name == "Touch ID" ? "touchid" : "faceid")
+                    }
                 }
                 LabeledContent("Parent gesture", value: ParentGesture.description)
             } header: {
@@ -41,7 +49,7 @@ struct SettingsView: View {
             }
 
             Section("Storage") {
-                StorageSummaryRow()
+                StorageCard()
                 LabeledContent("Library location", value: "On this iPhone only")
             }
 

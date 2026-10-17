@@ -96,11 +96,12 @@ struct ChildPlayerView: View {
             HStack {
                 Button(action: onExit) {
                     Label("Back", systemImage: "chevron.left")
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 24)
-                        .frame(minHeight: 64)
-                        .background(Capsule().fill(.white.opacity(0.9)))
-                        .foregroundStyle(.black)
+                        .font(.system(size: 24, weight: .heavy, design: .rounded))
+                        .padding(.horizontal, 26)
+                        .frame(minHeight: 66)
+                        .background(Capsule().fill(Color.white))
+                        .foregroundStyle(ChildTheme.text)
+                        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
                 }
                 .buttonStyle(TileButtonStyle())
                 .padding(24)
@@ -126,15 +127,30 @@ struct CompletionView: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.55).ignoresSafeArea()
-            VStack(spacing: 28) {
-                Image(systemName: "star.fill")
-                    .font(.system(size: 96))
-                    .foregroundStyle(.yellow)
-                    .symbolEffect(.bounce, value: appeared)
+            LinearGradient(
+                colors: [Color.black.opacity(0.25), Color.black.opacity(0.7)],
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
+            VStack(spacing: 30) {
+                HStack(spacing: 18) {
+                    ForEach(0..<3, id: \.self) { index in
+                        Image(systemName: "star.fill")
+                            .font(.system(size: index == 1 ? 96 : 68))
+                            .foregroundStyle(ChildTheme.frames[1])
+                            .shadow(color: ChildTheme.frames[1].opacity(0.6), radius: 16)
+                            .scaleEffect(appeared ? 1 : 0.2)
+                            .rotationEffect(.degrees(appeared ? 0 : -30))
+                            .animation(
+                                .spring(response: 0.55, dampingFraction: 0.55).delay(Double(index) * 0.12),
+                                value: appeared
+                            )
+                    }
+                }
                 Text("All done!")
-                    .font(.system(size: 40, weight: .heavy, design: .rounded))
+                    .font(.system(size: 46, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
                 BigChildButton(title: "More videos", systemImage: "square.grid.2x2.fill", action: onDone)
             }
         }
@@ -148,11 +164,9 @@ struct ChildErrorView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "face.dashed")
-                .font(.system(size: 80))
-                .foregroundStyle(.white.opacity(0.9))
+            IconBadge(systemImage: "face.dashed", size: 110, colors: [ChildTheme.frames[3], ChildTheme.frames[4]])
             Text("Oops! This video can't play right now.")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 30, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)

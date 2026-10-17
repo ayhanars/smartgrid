@@ -23,7 +23,8 @@ targets:
       path: LittleScreen/Info.plist
       properties:
         CFBundleDisplayName: LittleScreen
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
