@@ -5,7 +5,7 @@ import XCTest
 final class VideoImporterTests: XCTestCase {
     func testDefaultTitleCleansFileName() {
         XCTAssertEqual(VideoImporter.defaultTitle(for: URL(fileURLWithPath: "/x/Peppa_Pig-ep01.mp4")), "Peppa Pig ep01")
-        XCTAssertEqual(VideoImporter.defaultTitle(for: URL(fileURLWithPath: "/x/.mp4")), "Untitled video")
+        XCTAssertEqual(VideoImporter.defaultTitle(for: URL(fileURLWithPath: "/x/___.mp4")), "Untitled video")
         let long = String(repeating: "a", count: 200)
         XCTAssertEqual(VideoImporter.defaultTitle(for: URL(fileURLWithPath: "/x/\(long).mov")).count, VideoImporter.maxTitleLength)
     }
