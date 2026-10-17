@@ -64,7 +64,7 @@ struct VideoImporter: Sendable {
             for: destination,
             at: Self.thumbnailTime(for: inspection.duration)
         ) {
-            let name = "\(id.uuidString)-\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+            let name = "\(id.uuidString)-\(UUID().uuidString).jpg"
             if (try? data.write(to: paths.thumbnailDirectory.appendingPathComponent(name), options: .atomic)) != nil {
                 thumbnailFileName = name
             }

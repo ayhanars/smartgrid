@@ -105,11 +105,12 @@ final class LibraryStore {
         try save()
     }
 
-    /// Stores a new thumbnail and points the record at it. The file name
-    /// changes every time so image caches refresh naturally.
+    /// Stores a new thumbnail and points the record at it. The file name is
+    /// unique every time (never reused, even within the same millisecond) so
+    /// image caches refresh naturally and the old file can be removed safely.
     func setThumbnail(for id: UUID, jpegData: Data) throws {
         guard let index = items.firstIndex(where: { $0.id == id }) else { throw LibraryError.notFound }
-        let name = "\(id.uuidString)-\(Int(Date().timeIntervalSince1970 * 1000)).jpg"
+        let name = "\(id.uuidString)-\(UUID().uuidString).jpg"
         do {
             try jpegData.write(to: paths.thumbnailDirectory.appendingPathComponent(name), options: .atomic)
         } catch {
