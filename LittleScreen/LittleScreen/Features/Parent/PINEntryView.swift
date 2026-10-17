@@ -19,7 +19,7 @@ struct PINEntryView: View {
             ScrollView {
                 VStack(spacing: 22) {
                     IconBadge(systemImage: "lock.fill", size: 72)
-                        .padding(.top, 24)
+                        .padding(.top, 28)
 
                     PINPadView(
                         title: "Parents only",
@@ -40,7 +40,7 @@ struct PINEntryView: View {
                             Text(" ")
                         }
                     }
-                    .font(.footnote.weight(.medium))
+                    .font(AppFont.parent(13, .semibold, relativeTo: .footnote))
                     .multilineTextAlignment(.center)
                     .frame(minHeight: 20)
 
@@ -49,13 +49,17 @@ struct PINEntryView: View {
                             Task { await tryBiometrics(name: name) }
                         } label: {
                             Label("Use \(name)", systemImage: name == "Touch ID" ? "touchid" : "faceid")
+                                .font(AppFont.parent(16, .bold))
                         }
                         .buttonStyle(.bordered)
+                        .tint(ParentTheme.accent)
                         .controlSize(.large)
                     }
 
-                    Button("Cancel", role: .cancel) { app.cancelParentAccess() }
-                        .controlSize(.large)
+                    Button("Cancel") { app.cancelParentAccess() }
+                        .font(AppFont.parent(17, .semibold))
+                        .foregroundStyle(ParentTheme.secondaryText)
+                        .padding(.vertical, 10)
                         .padding(.bottom, 24)
                 }
                 .padding(.horizontal)
@@ -63,7 +67,7 @@ struct PINEntryView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(ParentTheme.ground.ignoresSafeArea())
         .onAppear { restartIdleTimer() }
         .onDisappear { idleTask?.cancel() }
         .onChange(of: entry) { _, _ in restartIdleTimer() }

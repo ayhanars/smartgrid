@@ -28,9 +28,18 @@ Settings.
 ## 4. After a video ends: back to the library, or hold the last frame?
 
 **Hold the last frame under an "All done" screen with one big button**
-(default), with a Settings option to go straight back to the library. Holding
-the frame keeps the moment calm; the single button keeps the child in the
-intended flow (home → video → home). Nothing ever autoplays.
+(default). Settings also offer: straight back to the library, replay the same
+video, or play the next one. The automatic options exist because parents
+asked for them; they are off by default, are never chosen by the child, and
+stop when the daily limit is reached.
+
+## Daily limit
+
+Parents can cap how long videos play per day (off by default). Only actual
+playback time counts, so browsing the grid does not eat the allowance. The
+child sees a friendly "all done for today" screen; the parent can add 15
+minutes for today or reset the day. The limit lives in the app, not in
+Screen Time, so it works without any iOS configuration.
 
 ## 5. Is Guided Access acceptable as the optional system-level safeguard?
 

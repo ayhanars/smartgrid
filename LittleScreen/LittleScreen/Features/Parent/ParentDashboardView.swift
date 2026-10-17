@@ -20,7 +20,11 @@ struct ParentDashboardView: View {
 
                 Section {
                     StorageCard()
-                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
+                    if app.usage.isLimitEnabled {
+                        UsageRow()
+                            .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    }
                 }
 
                 Section {
@@ -36,6 +40,7 @@ struct ParentDashboardView: View {
                                 Label("Add a video", systemImage: "plus")
                             }
                             .buttonStyle(.borderedProminent)
+                            .tint(ParentTheme.accent)
                         }
                     } else {
                         ForEach(app.library.items) { item in
@@ -57,10 +62,15 @@ struct ParentDashboardView: View {
                     }
                 } header: {
                     Text("Videos")
+                        .font(AppFont.parent(13, .bold, relativeTo: .footnote))
                 } footer: {
                     Text("Only these videos appear in child mode. Entries whose file is missing are hidden from the child until the video is imported again.")
+                        .font(AppFont.parent(12, .regular, relativeTo: .caption))
                 }
             }
+            .font(AppFont.parent(17))
+            .scrollContentBackground(.hidden)
+            .background(ParentTheme.ground)
             .navigationTitle("Parent Area")
             .navigationDestination(for: UUID.self) { id in
                 VideoDetailView(videoID: id)
@@ -70,31 +80,32 @@ struct ParentDashboardView: View {
                     app.returnToChildMode()
                 } label: {
                     Label("Back to Child Mode", systemImage: "figure.and.child.holdinghands")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.horizontal)
-                .padding(.vertical, 10)
-                .background(.bar)
+                .buttonStyle(ParentPrimaryButtonStyle())
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(ParentTheme.ground.opacity(0.96))
+                .overlay(alignment: .top) { ParentTheme.hairline.frame(height: 1) }
             }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if !app.library.items.isEmpty {
                         EditButton()
+                            .font(AppFont.parent(16, .bold))
+                            .tint(ParentTheme.accent)
                     }
                     Button {
                         showingFilePicker = true
                     } label: {
-                        Label("Add", systemImage: "plus")
+                        ToolbarCircleLabel(systemImage: "plus")
                     }
+                    .accessibilityLabel("Add video")
                     NavigationLink {
                         SettingsView()
                     } label: {
-                        Label("Settings", systemImage: "gearshape")
+                        ToolbarCircleLabel(systemImage: "gearshape.fill")
                     }
+                    .accessibilityLabel("Settings")
                 }
             }
             .fileImporter(
@@ -143,6 +154,7 @@ struct ParentDashboardView: View {
                 Text(errorMessage ?? "")
             }
         }
+        .tint(ParentTheme.accent)
     }
 }
 
@@ -160,20 +172,23 @@ struct VideoRow: View {
                         .strokeBorder(ChildTheme.frame(for: item), lineWidth: 2.5)
                 )
                 .opacity(availability.isPlayable ? 1 : 0.5)
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.headline)
+                    .font(AppFont.parent(16, .bold, relativeTo: .body))
                     .lineLimit(2)
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     if let duration = item.formattedDuration {
-                        Label(duration, systemImage: "clock")
+                        Text(duration)
+                    }
+                    if item.formattedDuration != nil, item.formattedFileSize != nil {
+                        Text("·")
                     }
                     if let size = item.formattedFileSize {
                         Text(size)
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(AppFont.parent(12, .regular, relativeTo: .caption))
+                .foregroundStyle(ParentTheme.secondaryText)
                 AvailabilityBadge(availability: availability)
             }
         }
@@ -185,9 +200,9 @@ struct AvailabilityBadge: View {
     let availability: MediaAvailability
 
     var body: some View {
-        Label(availability.parentLabel, systemImage: availability.isPlayable ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-            .font(.caption2)
-            .foregroundStyle(availability.isPlayable ? Color.green : Color.orange)
+        Text(availability.parentLabel)
+            .font(AppFont.parent(12, .bold, relativeTo: .caption))
+            .foregroundStyle(availability.isPlayable ? ParentTheme.success : ParentTheme.warning)
     }
 }
 
@@ -205,12 +220,15 @@ struct ImportProgressView: View {
                         Text(entry.fileName).lineLimit(1)
                         if case .failed(let reason) = entry.status {
                             Text(reason)
-                                .font(.caption)
+                                .font(AppFont.parent(12, .regular, relativeTo: .caption))
                                 .foregroundStyle(.red)
                         }
                     }
                 }
             }
+            .font(AppFont.parent(16))
+            .scrollContentBackground(.hidden)
+            .background(ParentTheme.ground)
             .navigationTitle(session.isRunning ? "Importing…" : "Import finished")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -225,12 +243,13 @@ struct ImportProgressView: View {
             .safeAreaInset(edge: .bottom) {
                 if !session.isRunning {
                     Text(summary)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .font(AppFont.parent(13, .regular, relativeTo: .footnote))
+                        .foregroundStyle(ParentTheme.secondaryText)
                         .padding()
                 }
             }
         }
+        .tint(ParentTheme.accent)
     }
 
     private var summary: String {
@@ -251,14 +270,14 @@ struct ImportProgressView: View {
         case .importing:
             ProgressView()
         case .done:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(ParentTheme.success)
         case .failed:
             Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
         }
     }
 }
 
-/// Capacity gauge + counts. Used at the top of the dashboard and in Settings.
+/// Storage ring + counts, as drawn on the dashboard artboard.
 struct StorageCard: View {
     @Environment(AppModel.self) private var app
     @State private var usedBytes: Int64 = 0
@@ -270,27 +289,32 @@ struct StorageCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 18) {
-            Gauge(value: fraction) {
-                EmptyView()
-            } currentValueLabel: {
-                Image(systemName: "internaldrive.fill")
-                    .font(.title3)
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .stroke(ParentTheme.ringTrack, lineWidth: 8)
+                Circle()
+                    .trim(from: 0, to: max(0.02, fraction))
+                    .stroke(ParentTheme.accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeOut(duration: 0.6), value: fraction)
+                Image(systemName: "internaldrive")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(ParentTheme.secondaryText)
             }
-            .gaugeStyle(.accessoryCircularCapacity)
-            .tint(Gradient(colors: [ChildTheme.frames[2], ChildTheme.frames[1], ChildTheme.frames[0]]))
-            .scaleEffect(1.25)
             .frame(width: 70, height: 70)
+            .accessibilityLabel("\(Int((fraction * 100).rounded())) percent of storage used")
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text("\(app.library.items.count) \(app.library.items.count == 1 ? "video" : "videos")")
-                    .font(.title3.weight(.semibold))
+                    .font(AppFont.parent(19, .extrabold, relativeTo: .title3))
                 Text("\(ByteCountFormatter.string(fromByteCount: usedBytes, countStyle: .file)) in LittleScreen")
-                    .foregroundStyle(.secondary)
+                    .font(AppFont.parent(15, .regular, relativeTo: .subheadline))
+                    .foregroundStyle(ParentTheme.secondaryText)
                 if let freeBytes {
                     Text("\(ByteCountFormatter.string(fromByteCount: freeBytes, countStyle: .file)) free on this iPhone")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(AppFont.parent(13, .regular, relativeTo: .footnote))
+                        .foregroundStyle(ParentTheme.secondaryText)
                 }
             }
             Spacer(minLength: 0)
@@ -302,6 +326,51 @@ struct StorageCard: View {
             }.value
             usedBytes = used
             freeBytes = free
+        }
+    }
+}
+
+/// Today's watching against the daily limit, with a one-tap bonus.
+struct UsageRow: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        let usage = app.usage
+        let allowed = max(1, usage.allowedSecondsToday)
+        let fraction = min(1, Double(usage.secondsToday) / Double(allowed))
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Watched today")
+                        .font(AppFont.parent(15, .bold, relativeTo: .subheadline))
+                    Spacer()
+                    Text("\(usage.minutesWatchedToday) of \(usage.allowedSecondsToday / 60) min")
+                        .font(AppFont.parent(13, .semibold, relativeTo: .footnote))
+                        .foregroundStyle(usage.isLimitReached ? ParentTheme.warning : ParentTheme.secondaryText)
+                        .monospacedDigit()
+                }
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(ParentTheme.ringTrack)
+                        Capsule()
+                            .fill(usage.isLimitReached ? ParentTheme.warning : ParentTheme.accent)
+                            .frame(width: max(6, proxy.size.width * fraction))
+                    }
+                }
+                .frame(height: 8)
+            }
+            Button {
+                app.usage.addBonus()
+            } label: {
+                Text("+\(UsageTracker.bonusMinutes) min")
+                    .font(AppFont.parent(13, .extrabold, relativeTo: .footnote))
+                    .foregroundStyle(ParentTheme.accent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(ParentTheme.accent.opacity(0.14)))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add \(UsageTracker.bonusMinutes) minutes for today")
         }
     }
 }

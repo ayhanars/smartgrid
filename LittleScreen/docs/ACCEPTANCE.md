@@ -20,7 +20,8 @@ PRD §7, with where each criterion is met and how to verify it on a device.
 | Plays full-screen | `PlayerLayerView`, status bar + home indicator hidden | — |
 | No seek/skip controls | bare `AVPlayerLayer`, `PlayerController` has no seek API | — |
 | Tapping does not reveal controls | touch shield in `ChildPlayerView` | Tap, double-tap, swipe during playback |
-| Finishing does not start another video | `actionAtItemEnd = .pause`, `CompletionView` | Let a video end |
+| Finishing does not start another video (default) | `actionAtItemEnd = .pause`, `CompletionView`; replay/next only if the parent enables them | Let a video end |
+| Daily limit stops playback | `UsageTracker`, `TimeUpView` | Set a 15-minute limit, watch past it |
 | Works in Airplane Mode | local files only | Enable Airplane Mode, play |
 
 ## Parent mode

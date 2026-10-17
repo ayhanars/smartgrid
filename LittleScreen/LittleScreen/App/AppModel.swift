@@ -20,12 +20,14 @@ final class AppModel {
     let library: LibraryStore
     let pin: PINManager
     let settings: AppSettings
+    let usage: UsageTracker
     let importer: VideoImporter
 
-    init(library: LibraryStore, pin: PINManager, settings: AppSettings) {
+    init(library: LibraryStore, pin: PINManager, settings: AppSettings, usage: UsageTracker) {
         self.library = library
         self.pin = pin
         self.settings = settings
+        self.usage = usage
         self.importer = VideoImporter(paths: library.paths, media: library.media)
     }
 
@@ -33,7 +35,7 @@ final class AppModel {
         let paths = (try? AppPaths.default()) ?? AppPaths.temporary()
         let library = LibraryStore(paths: paths)
         library.load()
-        return AppModel(library: library, pin: PINManager(), settings: AppSettings())
+        return AppModel(library: library, pin: PINManager(), settings: AppSettings(), usage: UsageTracker())
     }
 
     /// First launch: a PIN must exist before child mode can be left.
@@ -56,6 +58,7 @@ final class AppModel {
     func returnToChildMode() {
         mode = .child
         library.refreshAvailability()
+        usage.rolloverIfNeeded()
     }
 
     func completeOnboarding() {

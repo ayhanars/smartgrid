@@ -46,6 +46,7 @@ struct RootView: View {
                 backgroundedAt = Date()
             case .active:
                 app.library.refreshAvailability()
+                app.usage.rolloverIfNeeded()
                 if let backgroundedAt, app.mode != .child,
                    Date().timeIntervalSince(backgroundedAt) > parentModeBackgroundTimeout {
                     app.returnToChildMode()

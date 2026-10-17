@@ -36,6 +36,15 @@ targets:
         UIViewControllerBasedStatusBarAppearance: true
         NSFaceIDUsageDescription: "LittleScreen can use Face ID so parents can open the parent area without typing the PIN."
         ITSAppUsesNonExemptEncryption: false
+        UIAppFonts:
+          - Fredoka-Regular.ttf
+          - Fredoka-Medium.ttf
+          - Fredoka-SemiBold.ttf
+          - Fredoka-Bold.ttf
+          - Nunito-Regular.ttf
+          - Nunito-SemiBold.ttf
+          - Nunito-Bold.ttf
+          - Nunito-ExtraBold.ttf
         # Child safety: no document sharing, no URL schemes, no browser.
         UIFileSharingEnabled: false
         LSSupportsOpeningDocumentsInPlace: false

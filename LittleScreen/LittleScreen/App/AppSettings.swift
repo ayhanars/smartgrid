@@ -2,13 +2,18 @@ import Foundation
 import Observation
 
 /// Parent-adjustable behaviour, persisted in UserDefaults. Nothing here is a
-/// secret; the PIN lives in `PINManager`.
+/// secret; the PIN lives in `PINManager`, watch time in `UsageTracker`.
 @MainActor
 @Observable
 final class AppSettings {
+    /// What happens when a video reaches its end. The default never starts
+    /// anything by itself; the two automatic options are a deliberate parent
+    /// choice and still respect the daily limit.
     enum EndOfVideoBehavior: String, CaseIterable, Identifiable {
         case completionScreen
         case returnToLibrary
+        case loopSame
+        case playNext
 
         var id: String { rawValue }
 
@@ -16,8 +21,12 @@ final class AppSettings {
             switch self {
             case .completionScreen: return "Show an “All done” screen"
             case .returnToLibrary: return "Go back to the library"
+            case .loopSame: return "Play the same video again"
+            case .playNext: return "Play the next video"
             }
         }
+
+        var isAutomatic: Bool { self == .loopSame || self == .playNext }
     }
 
     private enum Key {
@@ -62,7 +71,7 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        showTitlesInChildMode = defaults.object(forKey: Key.showTitles) as? Bool ?? false
+        showTitlesInChildMode = defaults.object(forKey: Key.showTitles) as? Bool ?? true
         endOfVideoBehavior = EndOfVideoBehavior(rawValue: defaults.string(forKey: Key.endOfVideo) ?? "") ?? .completionScreen
         allowLongPressExit = defaults.object(forKey: Key.longPressExit) as? Bool ?? true
         showSkipButton = defaults.object(forKey: Key.skipButton) as? Bool ?? true

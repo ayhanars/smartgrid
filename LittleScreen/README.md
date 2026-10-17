@@ -76,8 +76,10 @@ can reveal. `PlayerController` has no seek API at all. `actionAtItemEnd` is
 
 Ways out of a video, all deliberate:
 
-1. the video ends → an "All done" screen with one big button (or, by setting,
-   straight back to the library);
+1. the video ends → by default an "All done" screen with one big button.
+   Parents can instead choose: back to the library, replay the same video,
+   or play the next one (Settings → When a video ends). The automatic
+   options are a parent decision and still stop at the daily limit;
 2. a one-finger hold of 1.5 s reveals a single Back button for 4 s (parents
    can turn this off in Settings);
 3. holding the small skip circle in the corner for 1.5 s moves to the next
@@ -87,6 +89,23 @@ Ways out of a video, all deliberate:
 
 Interruptions (calls, Siri), backgrounding and playback failures are handled;
 the child sees at worst a friendly "Oops" screen with a Back button.
+
+### Daily limit
+
+`UsageTracker` counts seconds only while a video is in the `.playing` state
+and compares them with a parent-set daily allowance (off, 15 min … 3 h).
+When it is used up, the child sees "All done for today" in the library and
+over the player, and nothing plays until local midnight. The parent area
+shows today's total with a "+15 min" bonus for today only, and Settings can
+reset the day. State lives in UserDefaults and rolls over by calendar day.
+
+### Look
+
+The design is kept as a canvas (child library, PIN, dashboard, style tile,
+player, all-done). Two OFL typefaces are bundled in `Resources/Fonts`:
+Fredoka for child mode and Nunito for the parent area, registered through
+`UIAppFonts`; `AppFont` wraps them, and `ChildTheme` / `ParentTheme` hold
+the palette (cream ground, cocoa text, coral accent, five tile colours).
 
 ### Import and storage
 
@@ -114,6 +133,7 @@ LittleScreen/
   App/              LittleScreenApp, AppModel (mode machine), AppSettings, RootView
   Models/           VideoItem, MediaAvailability, ImportError, LibraryError
   Services/
+    Usage/          UsageTracker (daily watching limit)
     Storage/        AppPaths, MediaStore (files), LibraryStore (library.json)
     Import/         VideoImporter, ThumbnailGenerator, ImportSession
     Security/       PINManager + PINHasher + LockoutPolicy, SecretStore/Keychain, BiometricAuth

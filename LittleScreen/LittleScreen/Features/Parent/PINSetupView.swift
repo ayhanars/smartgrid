@@ -15,27 +15,31 @@ struct PINSetupView: View {
     private enum Step { case enter, confirm }
 
     var body: some View {
-        VStack(spacing: 20) {
-            IconBadge(systemImage: "key.fill", size: 64)
-                .padding(.top, 8)
-            PINPadView(
-                title: step == .enter ? title : "Enter it once more",
-                subtitle: step == .enter
-                    ? "\(PINManager.minLength) to \(PINManager.maxLength) digits. Pick something your child won't see you type."
-                    : nil,
-                entry: $entry,
-                submitLabel: step == .enter ? "Next" : "Save PIN",
-                shakeTrigger: shakes,
-                onSubmit: handle
-            )
-            Text(message ?? " ")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.red)
-                .multilineTextAlignment(.center)
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(spacing: 20) {
+                IconBadge(systemImage: "key.fill", size: 64)
+                    .padding(.top, 16)
+                PINPadView(
+                    title: step == .enter ? title : "Enter it once more",
+                    subtitle: step == .enter
+                        ? "\(PINManager.minLength) to \(PINManager.maxLength) digits. Pick something your child won't see you type."
+                        : nil,
+                    entry: $entry,
+                    submitLabel: step == .enter ? "Next" : "Save PIN",
+                    shakeTrigger: shakes,
+                    onSubmit: handle
+                )
+                Text(message ?? " ")
+                    .font(AppFont.parent(13, .semibold, relativeTo: .footnote))
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.bottom, 24)
+            }
+            .padding(.horizontal)
+            .frame(maxWidth: .infinity)
         }
-        .padding()
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .scrollBounceBehavior(.basedOnSize)
+        .background(ParentTheme.ground.ignoresSafeArea())
         .navigationTitle("Parent PIN")
         .navigationBarTitleDisplayMode(.inline)
     }

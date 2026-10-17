@@ -90,6 +90,9 @@ struct VideoDetailView: View {
                 Text("Deleting removes the video and its file from this iPhone. The original in Files is not affected.")
             }
         }
+        .font(AppFont.parent(17))
+        .scrollContentBackground(.hidden)
+        .background(ParentTheme.ground)
         .navigationTitle(item.title)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { title = item.title }

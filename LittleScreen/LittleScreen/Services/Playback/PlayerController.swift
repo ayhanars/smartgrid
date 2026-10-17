@@ -85,6 +85,20 @@ final class PlayerController {
         notificationTokens = []
     }
 
+    // MARK: Parent-configured and limit-driven control (never exposed to the child UI)
+
+    func pause() {
+        player.pause()
+        if state == .playing { state = .paused }
+    }
+
+    /// Plays the same item again from the start (the "loop" end-of-video option).
+    func restart() {
+        player.seek(to: .zero)
+        player.play()
+        state = .playing
+    }
+
     // MARK: App lifecycle
 
     func sceneWillResignActive() {

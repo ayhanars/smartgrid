@@ -20,15 +20,15 @@ struct PINPadView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 26) {
-            VStack(spacing: 8) {
+        VStack(spacing: 24) {
+            VStack(spacing: 6) {
                 Text(title)
-                    .font(.system(.title2, design: .rounded).bold())
+                    .font(AppFont.parent(26, .extrabold, relativeTo: .title2))
                     .multilineTextAlignment(.center)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(AppFont.parent(15, .regular, relativeTo: .subheadline))
+                        .foregroundStyle(ParentTheme.secondaryText)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
                 }
@@ -38,13 +38,14 @@ struct PINPadView: View {
                 ForEach(0..<PINManager.maxLength, id: \.self) { index in
                     let filled = index < entry.count
                     Circle()
-                        .strokeBorder(Color.accentColor.opacity(filled ? 0 : 0.5), lineWidth: 2)
-                        .background(Circle().fill(filled ? Color.accentColor : Color.clear))
+                        .strokeBorder(ParentTheme.accent.opacity(filled ? 0 : 0.5), lineWidth: 2)
+                        .background(Circle().fill(filled ? ParentTheme.accent : Color.clear))
                         .frame(width: 18, height: 18)
                         .scaleEffect(filled ? 1.15 : 1)
                         .animation(.spring(response: 0.25, dampingFraction: 0.6), value: filled)
                 }
             }
+            .padding(.vertical, 4)
             .modifier(ShakeEffect(animatableData: CGFloat(shakeTrigger)))
             .animation(.linear(duration: 0.4), value: shakeTrigger)
             .accessibilityLabel("\(entry.count) of up to \(PINManager.maxLength) digits entered")
@@ -63,12 +64,15 @@ struct PINPadView: View {
                 onSubmit(entry)
             } label: {
                 Text(submitLabel)
-                    .font(.headline)
-                    .frame(maxWidth: 260)
+                    .font(AppFont.parent(17, .extrabold, relativeTo: .headline))
+                    .foregroundStyle(.white)
+                    .frame(width: 260, height: 50)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(ParentTheme.accent))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(TileButtonStyle())
             .disabled(entry.count < PINManager.minLength || isDisabled)
+            .opacity(entry.count < PINManager.minLength || isDisabled ? 0.45 : 1)
+            .padding(.top, 4)
         }
     }
 
@@ -83,19 +87,19 @@ struct PINPadView: View {
                 Group {
                     if key == "delete" {
                         Image(systemName: "delete.left.fill")
-                            .font(.title2.weight(.semibold))
+                            .font(.system(size: 26, weight: .semibold))
                     } else {
                         Text(key)
-                            .font(.system(size: 32, weight: .medium, design: .rounded))
+                            .font(AppFont.parent(32, .semibold))
                     }
                 }
                 .frame(width: 78, height: 78)
                 .background(
                     Circle()
-                        .fill(key == "delete" ? Color.clear : Color(.secondarySystemBackground))
-                        .shadow(color: .black.opacity(key == "delete" ? 0 : 0.08), radius: 6, y: 3)
+                        .fill(key == "delete" ? Color.clear : ParentTheme.card)
+                        .shadow(color: .black.opacity(key == "delete" ? 0 : 0.08), radius: 7, y: 4)
                 )
-                .foregroundStyle(key == "delete" ? Color.secondary : Color.primary)
+                .foregroundStyle(key == "delete" ? ParentTheme.secondaryText : Color.primary)
             }
             .buttonStyle(TileButtonStyle())
             .disabled(isDisabled)

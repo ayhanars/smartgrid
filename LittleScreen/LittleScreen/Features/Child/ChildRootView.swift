@@ -10,6 +10,7 @@ struct ChildRootView: View {
     var body: some View {
         ZStack {
             ChildLibraryView { item in
+                guard !app.usage.isLimitReached else { return }
                 withAnimation(.easeInOut(duration: 0.2)) { selected = item }
             }
             if let selected {
