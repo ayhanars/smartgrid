@@ -16,6 +16,9 @@ final class AppLifecycleManager: NSObject, NSApplicationDelegate, ObservableObje
         // `swift run` has no Info.plist; LSUIElement in the bundled app does the same thing.
         NSApp.setActivationPolicy(.accessory)
         appState.start()
+        if ProcessInfo.processInfo.environment["ROBOVAC_SMOKE_TEST"] == "1" {
+            appState.runSmokeTest()
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

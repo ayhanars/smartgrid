@@ -142,7 +142,7 @@ public struct GeneralSettings: Codable, Equatable, Sendable {
         launchAtLogin: Bool = false,
         showDesktopRobot: Bool = true,
         desktopURL: URL? = nil,
-        previewBeforeEveryRun: Bool = true,
+        previewBeforeEveryRun: Bool = false,
         hasCompletedFirstPreview: Bool = false
     ) {
         self.launchAtLogin = launchAtLogin
@@ -162,7 +162,7 @@ public struct GeneralSettings: Codable, Equatable, Sendable {
             launchAtLogin: c.decode(Bool.self, forKey: .launchAtLogin, default: false),
             showDesktopRobot: c.decode(Bool.self, forKey: .showDesktopRobot, default: true),
             desktopURL: c.decode(URL?.self, forKey: .desktopURL, default: nil),
-            previewBeforeEveryRun: c.decode(Bool.self, forKey: .previewBeforeEveryRun, default: true),
+            previewBeforeEveryRun: c.decode(Bool.self, forKey: .previewBeforeEveryRun, default: false),
             hasCompletedFirstPreview: c.decode(Bool.self, forKey: .hasCompletedFirstPreview, default: false)
         )
     }

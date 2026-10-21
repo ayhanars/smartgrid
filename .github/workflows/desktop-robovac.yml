@@ -36,6 +36,32 @@ jobs:
       - name: Assemble app bundle
         run: Scripts/make-app.sh
 
+      - name: Smoke test the overlay (screenshot + window diagnostics)
+        run: |
+          mkdir -p smoke
+          ROBOVAC_SMOKE_TEST=1 ./build/DesktopRobovac.app/Contents/MacOS/DesktopRobovac > smoke/app.log 2>&1 &
+          APP_PID=$!
+          sleep 7
+          screencapture -x -t png smoke/desktop.png || echo "screencapture failed"
+          sleep 10
+          kill $APP_PID 2>/dev/null || true
+          wait $APP_PID 2>/dev/null || true
+          echo "===== app log ====="
+          cat smoke/app.log
+          if [ -f smoke/desktop.png ]; then
+            sips -Z 1100 smoke/desktop.png --out smoke/desktop-small.png >/dev/null
+            echo "===== screenshot base64 begin ====="
+            base64 -b 76 -i smoke/desktop-small.png
+            echo "===== screenshot base64 end ====="
+          fi
+
+      - name: Upload smoke test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test
+          path: desktop-robovac/smoke
+
       - name: Upload app bundle
         uses: actions/upload-artifact@v4
         with:

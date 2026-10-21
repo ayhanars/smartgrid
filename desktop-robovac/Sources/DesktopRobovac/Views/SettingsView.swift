@@ -93,7 +93,7 @@ struct GeneralSettingsTab: View {
 
             Section("Confirmation") {
                 Toggle("Show a preview before every cleaning", isOn: $app.settings.general.previewBeforeEveryRun)
-                Text("The preview is always shown before the very first cleaning.")
+                Text("Off by default: Start Cleaning sends the robot out straight away. The Preview button in the menu is always available.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 

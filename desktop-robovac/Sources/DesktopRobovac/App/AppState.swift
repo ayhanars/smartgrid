@@ -116,7 +116,7 @@ final class AppState: ObservableObject {
     var isCleaning: Bool { phase == .cleaning || phase == .paused || phase == .finishing }
     var isRehearsing: Bool { phase == .rehearsing }
     var isBusy: Bool { isCleaning || isRehearsing || phase == .scanning }
-    var needsPreview: Bool { settings.general.previewBeforeEveryRun || !settings.general.hasCompletedFirstPreview }
+    var needsPreview: Bool { settings.general.previewBeforeEveryRun }
     var lastUndoableSession: CleaningSession? { history.lastUndoableSession }
 
     var cleanlinessDescription: String {
@@ -255,6 +255,47 @@ final class AppState: ObservableObject {
             if self.director === director { self.director = nil }
             if self.phase == .rehearsing { self.phase = .idle }
         }
+    }
+
+    /// Headless check used by CI: deploys the robot, prints what the window server
+    /// knows about the overlay, then quits. Never touches files.
+    func runSmokeTest() {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            self.runTestDrive()
+            try? await Task.sleep(nanoseconds: 3_500_000_000)
+            print(self.overlayDiagnostics())
+            fflush(stdout)
+            try? await Task.sleep(nanoseconds: 12_000_000_000)
+            print(self.overlayDiagnostics())
+            fflush(stdout)
+            NSApplication.shared.terminate(nil)
+        }
+    }
+
+    func overlayDiagnostics() -> String {
+        var lines: [String] = ["ROBOVAC-DIAG begin"]
+        lines.append("phase=\(phase) robotState=\(robotState)")
+        let pose = overlay.scene.pose
+        lines.append("pose position=\(pose.position) heading=\(pose.heading) state=\(pose.state) visible=\(pose.isVisible)")
+        if let screen = overlay.targetScreen {
+            lines.append("screen frame=\(screen.frame) visible=\(screen.visibleFrame) region=\(overlay.desktopRegion(on: screen)) anchor=\(overlay.menuBarAnchor(on: screen))")
+        }
+        for window in NSApp.windows {
+            lines.append("window \(type(of: window)) frame=\(window.frame) level=\(window.level.rawValue) visible=\(window.isVisible) alpha=\(window.alphaValue) occlusionVisible=\(window.occlusionState.contains(.visible)) onActiveSpace=\(window.isOnActiveSpace)")
+        }
+        let pid = ProcessInfo.processInfo.processIdentifier
+        if let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] {
+            for info in list where (info[kCGWindowOwnerPID as String] as? Int32) == pid {
+                let onscreen = info[kCGWindowIsOnscreen as String] as? Bool ?? false
+                let layer = info[kCGWindowLayer as String] as? Int ?? -1
+                let bounds = info[kCGWindowBounds as String] as? [String: Any] ?? [:]
+                let alpha = info[kCGWindowAlpha as String] as? Double ?? -1
+                lines.append("cgwindow id=\(info[kCGWindowNumber as String] ?? 0) onscreen=\(onscreen) layer=\(layer) alpha=\(alpha) bounds=\(bounds)")
+            }
+        }
+        lines.append("ROBOVAC-DIAG end")
+        return lines.joined(separator: "\n")
     }
 
     func stopTestDrive() {
