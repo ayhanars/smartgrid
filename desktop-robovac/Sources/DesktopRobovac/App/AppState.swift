@@ -262,6 +262,10 @@ final class AppState: ObservableObject {
     func runSmokeTest() {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
+            for _ in 0..<40 where self.isBusy {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            print("ROBOVAC-DIAG starting test drive, phase=\(self.phase)")
             self.runTestDrive()
             try? await Task.sleep(nanoseconds: 3_500_000_000)
             print(self.overlayDiagnostics())
