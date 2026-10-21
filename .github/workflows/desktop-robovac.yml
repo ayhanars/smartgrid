@@ -1,0 +1,43 @@
+name: Desktop Robovac
+
+on:
+  push:
+    paths:
+      - "desktop-robovac/**"
+      - ".github/workflows/desktop-robovac.yml"
+  pull_request:
+    paths:
+      - "desktop-robovac/**"
+      - ".github/workflows/desktop-robovac.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and test (macOS)
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: desktop-robovac
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build -v
+
+      - name: Test
+        run: swift test -v
+
+      - name: Assemble app bundle
+        run: Scripts/make-app.sh
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: DesktopRobovac.app
+          path: desktop-robovac/build/DesktopRobovac.app

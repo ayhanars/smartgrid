@@ -523,3 +523,10 @@ The bevel geometry-safety system (clamps top/bottom bevel to what's safe for
 a shape's geometry) is solid for single-region shapes but can still produce
 a broken cap on a multi-region shape with holes packed close together and a
 large bevel. This needs a proper fix here rather than being re-inherited as-is.
+
+## Desktop Robovac
+
+A separate, native macOS menu bar app lives in [`desktop-robovac/`](desktop-robovac/):
+a tiny animated robot vacuum that tidies the files on your Desktop into a folder
+of your choice. It is a standalone Swift package with its own README and CI
+workflow and shares no code with the web app.
