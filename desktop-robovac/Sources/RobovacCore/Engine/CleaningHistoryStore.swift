@@ -185,7 +185,7 @@ public final class CleaningHistoryStore: @unchecked Sendable {
 
     private func persistLocked() {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .secondsSince1970
+        encoder.dateEncodingStrategy = .millisecondsSince1970
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         do {
             let data = try encoder.encode(storage)
@@ -201,7 +201,7 @@ public final class CleaningHistoryStore: @unchecked Sendable {
     private static func load(from url: URL) -> [CleaningSession] {
         guard let data = try? Data(contentsOf: url) else { return [] }
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .secondsSince1970
+        decoder.dateDecodingStrategy = .millisecondsSince1970
         return (try? decoder.decode([CleaningSession].self, from: data)) ?? []
     }
 }

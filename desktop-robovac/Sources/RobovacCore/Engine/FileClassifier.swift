@@ -75,7 +75,10 @@ public struct FileClassifier: Sendable {
         return FileClassifier.nameLooksLikeScreenshot(item.name)
     }
 
-    public static func nameLooksLikeScreenshot(_ name: String) -> Bool {
+    public static func nameLooksLikeScreenshot(_ rawName: String) -> Bool {
+        // File names coming from URLs may be in decomposed form (e + combining accent);
+        // the patterns are precomposed, so normalize before matching.
+        let name = rawName.precomposedStringWithCanonicalMapping
         let range = NSRange(name.startIndex..<name.endIndex, in: name)
         for regex in compiledScreenshotPatterns where regex.firstMatch(in: name, options: [], range: range) != nil {
             return true

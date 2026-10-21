@@ -208,8 +208,12 @@ final class CleaningCoordinatorTests: XCTestCase {
     }
 
     func testHistoryRoundTripsThroughDisk() throws {
-        var session = CleaningSession(mode: .screenshotSweep)
-        session.moves.append(MoveRecord(fileName: "x.png", originalPath: "/a/x.png", destinationPath: "/b/x.png", category: .screenshot))
+        // History stores dates with millisecond precision.
+        var session = CleaningSession(startedAt: Date(timeIntervalSince1970: 1_700_000_000.25), mode: .screenshotSweep)
+        session.moves.append(MoveRecord(
+            fileName: "x.png", originalPath: "/a/x.png", destinationPath: "/b/x.png",
+            category: .screenshot, timestamp: Date(timeIntervalSince1970: 1_700_000_001.5)
+        ))
         session.status = .completed
         history.upsert(session)
         let reloaded = CleaningHistoryStore(fileURL: history.fileURL)
