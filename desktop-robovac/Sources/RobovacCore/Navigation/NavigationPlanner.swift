@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
 
 /// A screen-space location the robot should visit.
 public struct NavigationTarget: Identifiable, Hashable, Sendable {
