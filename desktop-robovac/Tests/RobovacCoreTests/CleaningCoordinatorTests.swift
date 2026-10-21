@@ -12,6 +12,7 @@ class RecordingObserver: CleaningSessionObserver, @unchecked Sendable {
     var holdDuringTravel: ((CleaningTarget) async -> Void)?
 
     func sessionDidStart(_ plan: CleaningPlan) async { started += 1 }
+    func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget? { nil }
     func sessionWillCollect(_ target: CleaningTarget, index: Int, total: Int) async {
         collected.append(target.item.name)
         await holdDuringTravel?(target)
@@ -26,7 +27,7 @@ class RecordingObserver: CleaningSessionObserver, @unchecked Sendable {
 final class ReverseOrderObserver: RecordingObserver {
     var offered: [[String]] = []
 
-    func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget? {
+    override func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget? {
         offered.append(remaining.map { $0.item.name })
         return remaining.max { $0.item.name < $1.item.name }
     }
