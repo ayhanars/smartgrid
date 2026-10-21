@@ -60,21 +60,25 @@ final class TrailRenderer {
         guard style != .none, !samples.isEmpty else { return }
         let fade = max(0.1, fadeDuration)
 
-        var previous: Sample?
-        for sample in samples {
+        // Newest first with destination-over blending: where strokes overlap, the
+        // first (newest) one wins instead of alphas stacking into dark blobs.
+        var layer = context
+        layer.blendMode = .destinationOver
+        var next: Sample?
+        for sample in samples.reversed() {
             let age = now - sample.time
             let life = max(0, 1 - age / fade)
-            let alpha = opacity * life
+            let alpha = opacity * life * life
 
             switch sample.kind {
             case .turn:
-                drawTurnMark(sample, alpha: alpha, in: context)
-                previous = nil
+                drawTurnMark(sample, alpha: alpha, in: layer)
+                next = nil
             case .drive:
-                if let previous, previous.kind == .drive, hypot(sample.position.x - previous.position.x, sample.position.y - previous.position.y) < robotSize * 1.5 {
-                    drawSegment(from: previous, to: sample, alpha: alpha, in: context)
+                if let next, next.kind == .drive, hypot(sample.position.x - next.position.x, sample.position.y - next.position.y) < robotSize * 1.5 {
+                    drawSegment(from: sample, to: next, alpha: alpha, in: layer)
                 }
-                previous = sample
+                next = sample
             }
         }
     }
@@ -88,7 +92,7 @@ final class TrailRenderer {
             context.stroke(
                 path,
                 with: .color(Color(red: 0.55, green: 0.75, blue: 1.0).opacity(alpha)),
-                style: StrokeStyle(lineWidth: robotSize * 0.78, lineCap: .round)
+                style: StrokeStyle(lineWidth: robotSize * 0.62, lineCap: .round)
             )
         case .sheen:
             var path = Path()
