@@ -3,7 +3,7 @@ import XCTest
 
 /// Records observer calls and can hold the robot "in transit" so tests can
 /// pause or cancel mid-run.
-final class RecordingObserver: CleaningSessionObserver, @unchecked Sendable {
+class RecordingObserver: CleaningSessionObserver, @unchecked Sendable {
     var started = 0
     var collected: [String] = []
     var results: [Result<URL, MoveFailure>] = []
