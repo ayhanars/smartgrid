@@ -38,11 +38,18 @@ public struct CleaningSummary: Equatable, Sendable {
 /// happens once `sessionWillCollect` returns. A `nil` observer runs headless.
 public protocol CleaningSessionObserver: AnyObject {
     func sessionDidStart(_ plan: CleaningPlan) async
+    /// Pick which of the remaining targets to collect next. Lets the robot wander
+    /// and grab whichever file it bumps into. Return nil to use the plan's order.
+    func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget?
     /// Drive to the file and play the suction animation. Return when the file may be moved.
     func sessionWillCollect(_ target: CleaningTarget, index: Int, total: Int) async
     func sessionDidCollect(_ target: CleaningTarget, result: Result<URL, MoveFailure>) async
     func sessionDidChangeState(_ state: CleaningCoordinator.State) async
     func sessionDidFinish(_ summary: CleaningSummary) async
+}
+
+public extension CleaningSessionObserver {
+    func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget? { nil }
 }
 
 public enum CleaningError: Error, Equatable {
@@ -136,9 +143,24 @@ public actor CleaningCoordinator {
         await observer?.sessionDidChangeState(state)
 
         let total = plan.targets.count
-        for (index, target) in plan.targets.enumerated() {
+        var remaining = plan.targets
+        var index = 0
+        while !remaining.isEmpty {
             await waitWhilePaused()
             if cancelRequested { break }
+
+            // The observer may wander first; it can take as long as it likes.
+            var target = remaining[0]
+            if let chosen = await observer?.sessionChooseNextTarget(from: remaining),
+               let position = remaining.firstIndex(where: { $0.id == chosen.id }) {
+                target = remaining[position]
+                remaining.remove(at: position)
+            } else {
+                remaining.removeFirst()
+            }
+            await waitWhilePaused()
+            if cancelRequested { break }
+            defer { index += 1 }
 
             progress.currentFileName = target.item.name
             await observer?.sessionWillCollect(target, index: index, total: total)

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Moves the robot along planned paths with acceleration, deceleration and
@@ -10,6 +11,14 @@ final class RobotMotionController {
         case movementBlip
         case arrived(Purpose)
         case vacuumFinished
+        case bumped
+        case wanderEnded(found: Bool)
+    }
+
+    /// Where the robot may roam while bouncing around.
+    struct WanderArea {
+        var bounds: CGRect
+        var obstacles: [CGRect]
     }
 
     enum Purpose: Equatable {
@@ -19,11 +28,23 @@ final class RobotMotionController {
         case exit
     }
 
+    private struct WanderRun {
+        var area: WanderArea
+        var elapsed: TimeInterval = 0
+        var maxDuration: TimeInterval
+        /// Seconds left before the robot makes a spontaneous course change.
+        var segmentRemaining: TimeInterval
+        /// Heading the robot is pivoting towards, if it is mid-turn.
+        var pivotTarget: CGFloat?
+        var shouldStop: (CGPoint) -> Bool
+    }
+
     private enum Command {
         case none
         case travel(waypoints: [CGPoint], index: Int, purpose: Purpose, detour: Bool)
         case vacuum(remaining: TimeInterval, total: TimeInterval)
         case hold(remaining: TimeInterval, state: RobotState)
+        case wander(WanderRun)
     }
 
     var maxSpeed: CGFloat = 260
@@ -43,7 +64,9 @@ final class RobotMotionController {
     private var command: Command = .none
     private var continuation: CheckedContinuation<Void, Never>?
     private var blipClock: TimeInterval = 0
-    private var errorFlashClock: TimeInterval = 0
+    private var random = SplitMix64(seed: UInt64(Date().timeIntervalSince1970 * 1000))
+    /// Robot radius, used to keep the body inside the wander area.
+    var bodyRadius: CGFloat = 32
 
     var isBusy: Bool {
         if case .none = command { return false }
@@ -75,6 +98,35 @@ final class RobotMotionController {
             self.continuation = continuation
             self.command = .hold(remaining: duration, state: state)
         }
+    }
+
+    /// Roams in straight runs, bouncing off the edges and obstacles with a random
+    /// new heading, until `shouldStop` says the robot has found something or
+    /// `maxDuration` runs out. Returns true when stopped by `shouldStop`.
+    @discardableResult
+    func wander(in area: WanderArea, maxDuration: TimeInterval, shouldStop: @escaping (CGPoint) -> Bool) async -> Bool {
+        finishCurrent()
+        wanderFound = false
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            self.command = .wander(WanderRun(
+                area: area,
+                maxDuration: maxDuration,
+                segmentRemaining: nextSegmentDuration(),
+                shouldStop: shouldStop
+            ))
+        }
+        return wanderFound
+    }
+
+    private var wanderFound = false
+
+    private func nextSegmentDuration() -> TimeInterval {
+        1.2 + random.nextUnit() * 2.6
+    }
+
+    private func randomJitter(_ magnitude: CGFloat) -> CGFloat {
+        CGFloat(random.nextUnit() * 2 - 1) * magnitude
     }
 
     /// Cancels whatever is in progress and releases the waiter.
@@ -114,7 +166,7 @@ final class RobotMotionController {
 
         switch command {
         case .none:
-            if pose.state == .paused || pose.state == .turning || pose.state == .driving {
+            if pose.state == .paused || pose.state == .turning || pose.state == .driving || pose.state == .avoiding {
                 pose.state = .idle
             }
             pose.speed = 0
@@ -146,7 +198,113 @@ final class RobotMotionController {
             } else {
                 command = .hold(remaining: left, state: state)
             }
+        case .wander(let run):
+            roam(&pose, run: run, dt: dt)
         }
+    }
+
+    // MARK: Wandering
+
+    private func roam(_ pose: inout RobotPose, run: WanderRun, dt: TimeInterval) {
+        var run = run
+        run.elapsed += dt
+        pose.lidarAngle += CGFloat(dt) * 5
+
+        if run.shouldStop(pose.position) {
+            wanderFound = true
+            pose.state = .approaching
+            finishCurrent()
+            eventHandler?(.wanderEnded(found: true))
+            return
+        }
+        if run.elapsed >= run.maxDuration {
+            finishCurrent()
+            eventHandler?(.wanderEnded(found: false))
+            return
+        }
+
+        // Mid-pivot: rotate in place until aligned, then drive on.
+        if let target = run.pivotTarget {
+            let delta = RobotPose.shortestAngle(from: pose.heading, to: target)
+            let step = min(abs(delta), turnRate * CGFloat(dt))
+            pose.heading += step * (delta > 0 ? 1 : -1)
+            pose.speed = max(0, pose.speed - deceleration * CGFloat(dt))
+            pose.state = .turning
+            if abs(delta) <= step + 0.001 {
+                pose.heading = target
+                run.pivotTarget = nil
+            }
+            command = .wander(run)
+            return
+        }
+
+        // Look a little ahead; bounce when the next stretch would leave the area.
+        let lookAhead = bodyRadius + 10 + pose.speed * 0.12
+        let ahead = CGPoint(x: pose.position.x + cos(pose.heading) * lookAhead, y: pose.position.y + sin(pose.heading) * lookAhead)
+        let inner = run.area.bounds.insetBy(dx: bodyRadius, dy: bodyRadius)
+        var bounceHeading: CGFloat?
+        if ahead.x < inner.minX || ahead.x > inner.maxX {
+            bounceHeading = .pi - pose.heading
+        } else if ahead.y < inner.minY || ahead.y > inner.maxY {
+            bounceHeading = -pose.heading
+        } else if run.area.obstacles.contains(where: { $0.insetBy(dx: -bodyRadius, dy: -bodyRadius).contains(ahead) }) {
+            bounceHeading = pose.heading + .pi
+        }
+
+        if let bounce = bounceHeading {
+            // Already stuck inside? Push back towards the centre instead of oscillating.
+            var heading = bounce + randomJitter(0.6)
+            if !inner.contains(pose.position) {
+                heading = atan2(inner.midY - pose.position.y, inner.midX - pose.position.x) + randomJitter(0.5)
+            }
+            run.pivotTarget = normalized(heading)
+            run.segmentRemaining = nextSegmentDuration()
+            pose.speed = min(pose.speed, minSpeed)
+            eventHandler?(.turnStarted)
+            eventHandler?(.bumped)
+            command = .wander(run)
+            return
+        }
+
+        // Spontaneous course change, like a vacuum probing the room.
+        run.segmentRemaining -= dt
+        if run.segmentRemaining <= 0 {
+            run.pivotTarget = normalized(pose.heading + randomJitter(1.1) + (random.nextUnit() < 0.5 ? 0.5 : -0.5))
+            run.segmentRemaining = nextSegmentDuration()
+            eventHandler?(.turnStarted)
+            command = .wander(run)
+            return
+        }
+
+        // Cruise.
+        let cruise = reducedMotion ? maxSpeed * 1.6 : maxSpeed * 0.85
+        if pose.speed < cruise {
+            pose.speed = min(cruise, pose.speed + acceleration * CGFloat(dt))
+        } else {
+            pose.speed = max(cruise, pose.speed - deceleration * CGFloat(dt))
+        }
+        let step = pose.speed * CGFloat(dt)
+        pose.position.x += cos(pose.heading) * step
+        pose.position.y += sin(pose.heading) * step
+        pose.position.x = min(max(pose.position.x, run.area.bounds.minX), run.area.bounds.maxX)
+        pose.position.y = min(max(pose.position.y, run.area.bounds.minY), run.area.bounds.maxY)
+        pose.state = .driving
+
+        if let interval = blipInterval, pose.speed > minSpeed {
+            blipClock += dt
+            if blipClock >= interval {
+                blipClock = 0
+                eventHandler?(.movementBlip)
+            }
+        }
+        command = .wander(run)
+    }
+
+    private func normalized(_ angle: CGFloat) -> CGFloat {
+        var a = angle.truncatingRemainder(dividingBy: 2 * .pi)
+        if a > .pi { a -= 2 * .pi }
+        if a < -.pi { a += 2 * .pi }
+        return a
     }
 
     private func advance(_ pose: inout RobotPose, waypoints: [CGPoint], index: Int, purpose: Purpose, detour: Bool, dt: TimeInterval) {

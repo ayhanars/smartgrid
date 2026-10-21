@@ -229,6 +229,40 @@ public enum IconArrangement: String, Codable, CaseIterable, Sendable, Identifiab
     }
 }
 
+/// How the robot explores the desktop.
+public enum MovementPattern: String, Codable, CaseIterable, Sendable, Identifiable {
+    /// Straight runs with random bounces off the edges, like a real robot vacuum.
+    case bounce
+    /// Lane-by-lane sweep from the right edge, shortest route between files.
+    case sweep
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .bounce: return "Bounce around (robot vacuum)"
+        case .sweep: return "Systematic sweep"
+        }
+    }
+}
+
+/// Which windows the robot is drawn in front of.
+public enum RobotLayer: String, Codable, CaseIterable, Sendable, Identifiable {
+    /// Above every window but still click-through. Always visible.
+    case aboveWindows
+    /// Above the desktop icons and below application windows.
+    case behindWindows
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .aboveWindows: return "In front of windows"
+        case .behindWindows: return "Behind windows, above desktop icons"
+        }
+    }
+}
+
 public struct AppearanceSettings: Codable, Equatable, Sendable {
     /// Robot diameter in points.
     public var robotSize: Double
@@ -245,6 +279,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
     /// Finder's desktop grid, used for the icon position approximation.
     public var iconGridColumnWidth: Double
     public var iconGridRowHeight: Double
+    public var movementPattern: MovementPattern
+    public var robotLayer: RobotLayer
 
     public init(
         robotSize: Double = 64,
@@ -257,7 +293,9 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         reducedMotion: Bool = false,
         iconArrangement: IconArrangement = .dateAdded,
         iconGridColumnWidth: Double = 96,
-        iconGridRowHeight: Double = 104
+        iconGridRowHeight: Double = 104,
+        movementPattern: MovementPattern = .bounce,
+        robotLayer: RobotLayer = .aboveWindows
     ) {
         self.robotSize = robotSize
         self.movementSpeed = movementSpeed
@@ -270,12 +308,14 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         self.iconArrangement = iconArrangement
         self.iconGridColumnWidth = iconGridColumnWidth
         self.iconGridRowHeight = iconGridRowHeight
+        self.movementPattern = movementPattern
+        self.robotLayer = robotLayer
     }
 
     enum CodingKeys: String, CodingKey {
         case robotSize, movementSpeed, trailStyle, trailOpacity, trailFadeDuration
         case particleEffects, animationIntensity, reducedMotion, iconArrangement
-        case iconGridColumnWidth, iconGridRowHeight
+        case iconGridColumnWidth, iconGridRowHeight, movementPattern, robotLayer
     }
 
     public init(from decoder: Decoder) throws {
@@ -292,7 +332,9 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
             reducedMotion: c.decode(Bool.self, forKey: .reducedMotion, default: d.reducedMotion),
             iconArrangement: c.decode(IconArrangement.self, forKey: .iconArrangement, default: d.iconArrangement),
             iconGridColumnWidth: c.decode(Double.self, forKey: .iconGridColumnWidth, default: d.iconGridColumnWidth),
-            iconGridRowHeight: c.decode(Double.self, forKey: .iconGridRowHeight, default: d.iconGridRowHeight)
+            iconGridRowHeight: c.decode(Double.self, forKey: .iconGridRowHeight, default: d.iconGridRowHeight),
+            movementPattern: c.decode(MovementPattern.self, forKey: .movementPattern, default: d.movementPattern),
+            robotLayer: c.decode(RobotLayer.self, forKey: .robotLayer, default: d.robotLayer)
         )
     }
 }
@@ -331,6 +373,8 @@ public struct SoundSettings: Codable, Equatable, Sendable {
     public var suctionIntensity: Double
     public var completionSound: Bool
     public var enabledEvents: Set<SoundEvent>
+    /// A soft motor hum that runs while the robot drives, louder with speed.
+    public var continuousMotorSound: Bool
 
     public init(
         enabled: Bool = true,
@@ -338,7 +382,8 @@ public struct SoundSettings: Codable, Equatable, Sendable {
         movementSoundFrequency: Double = 0.5,
         suctionIntensity: Double = 0.7,
         completionSound: Bool = true,
-        enabledEvents: Set<SoundEvent> = Set(SoundEvent.allCases)
+        enabledEvents: Set<SoundEvent> = Set(SoundEvent.allCases),
+        continuousMotorSound: Bool = true
     ) {
         self.enabled = enabled
         self.volume = volume
@@ -346,10 +391,12 @@ public struct SoundSettings: Codable, Equatable, Sendable {
         self.suctionIntensity = suctionIntensity
         self.completionSound = completionSound
         self.enabledEvents = enabledEvents
+        self.continuousMotorSound = continuousMotorSound
     }
 
     enum CodingKeys: String, CodingKey {
         case enabled, volume, movementSoundFrequency, suctionIntensity, completionSound, enabledEvents
+        case continuousMotorSound
     }
 
     public init(from decoder: Decoder) throws {
@@ -361,7 +408,8 @@ public struct SoundSettings: Codable, Equatable, Sendable {
             movementSoundFrequency: c.decode(Double.self, forKey: .movementSoundFrequency, default: d.movementSoundFrequency),
             suctionIntensity: c.decode(Double.self, forKey: .suctionIntensity, default: d.suctionIntensity),
             completionSound: c.decode(Bool.self, forKey: .completionSound, default: d.completionSound),
-            enabledEvents: c.decode(Set<SoundEvent>.self, forKey: .enabledEvents, default: d.enabledEvents)
+            enabledEvents: c.decode(Set<SoundEvent>.self, forKey: .enabledEvents, default: d.enabledEvents),
+            continuousMotorSound: c.decode(Bool.self, forKey: .continuousMotorSound, default: d.continuousMotorSound)
         )
     }
 

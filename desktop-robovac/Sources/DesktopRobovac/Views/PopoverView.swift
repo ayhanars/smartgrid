@@ -29,10 +29,10 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            RobotBadgeView(state: app.isCleaning ? app.robotState : .idle, size: 44)
+            RobotBadgeView(state: app.isCleaning || app.isRehearsing ? app.robotState : .idle, size: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Desktop Robovac").font(.headline)
-                Text(app.isCleaning ? app.robotState.displayName : app.phase.displayName)
+                Text(app.isCleaning || app.isRehearsing ? app.robotState.displayName : app.phase.displayName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -173,7 +173,11 @@ struct PopoverView: View {
 
     private var primaryActions: some View {
         HStack(spacing: 8) {
-            if app.isCleaning {
+            if app.isRehearsing {
+                Text("Test drive in progress…").foregroundStyle(.secondary)
+                Spacer()
+                Button("Stop") { app.stopTestDrive() }
+            } else if app.isCleaning {
                 Button(app.phase == .paused ? "Resume" : "Pause") { app.togglePause() }
                     .disabled(app.phase == .finishing)
                 Button("Stop", role: .destructive) { app.stop() }

@@ -19,6 +19,8 @@ final class RobotSceneModel: ObservableObject {
     private var ticker: Timer?
     private var lastTick: CFTimeInterval = 0
     private(set) var now: TimeInterval = 0
+    /// Called after every simulation step with the new pose (used for the motor sound).
+    var onTick: ((RobotPose) -> Void)?
 
     var robotSize: CGFloat { CGFloat(appearance.robotSize) }
 
@@ -32,6 +34,7 @@ final class RobotSceneModel: ObservableObject {
         motion.turnRate = .pi * (gentle ? 1.1 : 1.7)
         motion.reducedMotion = appearance.reducedMotion
         motion.blipInterval = movementBlipInterval
+        motion.bodyRadius = robotSize / 2
         trail.style = appearance.reducedMotion ? .none : appearance.trailStyle
         trail.opacity = appearance.trailOpacity * (gentle ? 0.7 : 1)
         trail.fadeDuration = appearance.trailFadeDuration
@@ -120,5 +123,6 @@ final class RobotSceneModel: ObservableObject {
         trail.record(pose: next, now: current)
         particles.update(dt: dt)
         frame &+= 1
+        onTick?(next)
     }
 }

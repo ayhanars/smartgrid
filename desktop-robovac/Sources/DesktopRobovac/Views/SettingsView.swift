@@ -282,6 +282,16 @@ struct AppearanceSettingsTab: View {
                 HStack {
                     RobotBadgeView(state: .driving, size: CGFloat(min(80, app.settings.appearance.robotSize)))
                     Spacer()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        if app.isRehearsing {
+                            Button("Stop Test Drive") { app.stopTestDrive() }
+                        } else {
+                            Button("Test Drive") { app.runTestDrive() }
+                                .disabled(app.isBusy)
+                        }
+                        Text("Drives the robot around without moving any files.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Slider(value: $app.settings.appearance.robotSize, in: 36...120, step: 4) {
                     Text("Robot size")
@@ -289,6 +299,25 @@ struct AppearanceSettingsTab: View {
                 Slider(value: $app.settings.appearance.movementSpeed, in: 80...600, step: 10) {
                     Text("Movement speed")
                 }
+            }
+
+            Section("Movement") {
+                Picker("Pattern", selection: $app.settings.appearance.movementPattern) {
+                    ForEach(MovementPattern.allCases) { pattern in
+                        Text(pattern.displayName).tag(pattern)
+                    }
+                }
+                Text(app.settings.appearance.movementPattern == .bounce
+                     ? "Straight runs with random turns at the edges, like a real robot vacuum. Files within sensor range get collected; after a while the robot heads for the nearest one so a run always finishes."
+                     : "Lane-by-lane sweep from the right edge with the shortest route between files.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Picker("Robot layer", selection: $app.settings.appearance.robotLayer) {
+                    ForEach(RobotLayer.allCases) { layer in
+                        Text(layer.displayName).tag(layer)
+                    }
+                }
+                Text("The robot never blocks clicks. Behind-windows mode sits just above the desktop icons, so open windows hide it.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Trail") {
@@ -342,7 +371,8 @@ struct SoundSettingsTab: View {
                     .disabled(!app.settings.sound.enabled)
             }
             Section("Character") {
-                Slider(value: $app.settings.sound.movementSoundFrequency, in: 0...1) { Text("Motor sound frequency") }
+                Toggle("Continuous motor hum while driving", isOn: $app.settings.sound.continuousMotorSound)
+                Slider(value: $app.settings.sound.movementSoundFrequency, in: 0...1) { Text("Wheel squeak frequency") }
                 Slider(value: $app.settings.sound.suctionIntensity, in: 0...1) { Text("Suction intensity") }
                 Toggle("Play a sound when cleaning completes", isOn: $app.settings.sound.completionSound)
             }

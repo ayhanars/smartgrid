@@ -1,4 +1,5 @@
 import AppKit
+import RobovacCore
 import SwiftUI
 
 /// A borderless, transparent, click-through window that sits just above the
@@ -33,8 +34,37 @@ final class RobotOverlayController {
 
     var isShowing: Bool { window != nil }
 
-    func show(on screen: NSScreen) {
+    /// Where the app's menu bar icon sits, in overlay coordinates: the point just
+    /// below the icon, so the robot can drop out of the menu bar like leaving a dock.
+    /// Falls back to the right end of the menu bar when the item cannot be found.
+    func menuBarAnchor(on screen: NSScreen) -> CGPoint {
+        let region = desktopRegion(on: screen)
+        var anchorX = region.maxX - 140
+        for window in NSApp.windows {
+            let className = String(describing: type(of: window))
+            guard className.contains("StatusBarWindow") || window.level == .statusBar else { continue }
+            let frame = window.frame
+            guard frame.height <= 44, frame.width <= 120, screen.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) else { continue }
+            anchorX = frame.midX - screen.frame.minX
+            break
+        }
+        return CGPoint(x: min(max(anchorX, region.minX + 40), region.maxX - 40), y: region.minY)
+    }
+
+    static func windowLevel(for layer: RobotLayer) -> NSWindow.Level {
+        switch layer {
+        case .aboveWindows:
+            // Above normal and floating windows, below the menu bar and the Dock.
+            return NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.floatingWindow)) + 1)
+        case .behindWindows:
+            // Just above the desktop icons, below every ordinary window.
+            return NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+        }
+    }
+
+    func show(on screen: NSScreen, layer: RobotLayer) {
         if let window, self.screen == screen {
+            window.level = RobotOverlayController.windowLevel(for: layer)
             window.setFrame(screen.frame, display: true)
             window.orderFrontRegardless()
             return
@@ -56,8 +86,7 @@ final class RobotOverlayController {
         window.hidesOnDeactivate = false
         window.isExcludedFromWindowsMenu = true
         window.animationBehavior = .none
-        // Just above the desktop icons, below every ordinary window.
-        window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+        window.level = RobotOverlayController.windowLevel(for: layer)
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
 
         let host = NSHostingView(rootView: RobotAnimationView(scene: scene))

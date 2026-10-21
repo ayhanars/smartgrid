@@ -13,6 +13,7 @@ final class AppState: ObservableObject {
         case cleaning
         case paused
         case finishing
+        case rehearsing
 
         var displayName: String {
             switch self {
@@ -21,6 +22,7 @@ final class AppState: ObservableObject {
             case .cleaning: return "Cleaning"
             case .paused: return "Paused"
             case .finishing: return "Finishing up"
+            case .rehearsing: return "Test drive"
             }
         }
     }
@@ -112,7 +114,8 @@ final class AppState: ObservableObject {
     var desktopURL: URL { settings.general.desktopURL ?? DesktopScanner.defaultDesktopURL }
     var eligibleCount: Int { plan?.targets.count ?? 0 }
     var isCleaning: Bool { phase == .cleaning || phase == .paused || phase == .finishing }
-    var isBusy: Bool { isCleaning || phase == .scanning }
+    var isRehearsing: Bool { phase == .rehearsing }
+    var isBusy: Bool { isCleaning || isRehearsing || phase == .scanning }
     var needsPreview: Bool { settings.general.previewBeforeEveryRun || !settings.general.hasCompletedFirstPreview }
     var lastUndoableSession: CleaningSession? { history.lastUndoableSession }
 
@@ -238,6 +241,27 @@ final class AppState: ObservableObject {
         phase = .idle
         reloadHistory()
         await refreshPlan()
+    }
+
+    /// Shows the robot and lets it drive around without moving any files.
+    func runTestDrive() {
+        guard !isBusy else { return }
+        phase = .rehearsing
+        let director = RobotSessionDirector(appState: self, overlay: overlay, sound: sound, settings: settings)
+        self.director = director
+        runTask = Task { [weak self] in
+            await director.rehearse()
+            guard let self else { return }
+            if self.director === director { self.director = nil }
+            if self.phase == .rehearsing { self.phase = .idle }
+        }
+    }
+
+    func stopTestDrive() {
+        guard isRehearsing else { return }
+        director?.tearDown()
+        director = nil
+        phase = .idle
     }
 
     func pause() {

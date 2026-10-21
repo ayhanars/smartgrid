@@ -21,6 +21,17 @@ final class RecordingObserver: CleaningSessionObserver, @unchecked Sendable {
     func sessionDidFinish(_ summary: CleaningSummary) async { finished = summary }
 }
 
+/// Picks targets in reverse alphabetical order, the way a wandering robot
+/// might bump into files in any order.
+final class ReverseOrderObserver: RecordingObserver {
+    var offered: [[String]] = []
+
+    func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget? {
+        offered.append(remaining.map { $0.item.name })
+        return remaining.max { $0.item.name < $1.item.name }
+    }
+}
+
 final class CleaningCoordinatorTests: XCTestCase {
     var desktop: TemporaryDesktop!
     var history: CleaningHistoryStore!
@@ -96,6 +107,20 @@ final class CleaningCoordinatorTests: XCTestCase {
         XCTAssertEqual(observer.results.count, 2)
         XCTAssertEqual(observer.finished?.movedCount, 2)
         XCTAssertEqual(summary.movedCount, 2)
+    }
+
+    func testObserverCanChooseTheOrderOfTargets() async throws {
+        try desktop.makeFile("a.txt")
+        try desktop.makeFile("b.txt")
+        try desktop.makeFile("c.txt")
+        let plan = try CleaningPlanner(configuration: configuration()).makePlan()
+        let observer = ReverseOrderObserver()
+        let coordinator = CleaningCoordinator(history: history, observer: observer)
+        let summary = try await coordinator.run(plan: plan)
+        XCTAssertEqual(observer.collected, ["c.txt", "b.txt", "a.txt"])
+        XCTAssertEqual(observer.offered, [["a.txt", "b.txt", "c.txt"], ["a.txt", "b.txt"], ["a.txt"]])
+        XCTAssertEqual(summary.movedCount, 3)
+        XCTAssertEqual(summary.session.moves.map { $0.fileName }, ["c.txt", "b.txt", "a.txt"])
     }
 
     func testFileRemovedDuringRunIsSkippedNotFailed() async throws {

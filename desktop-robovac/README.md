@@ -102,12 +102,26 @@ desktop (date added by default, configurable in Settings › Appearance together
 with the grid spacing). The robot drives to those approximate cells. This is an
 approximation by design, and the settings say so.
 
-`NavigationPlanner` orders targets into a lane-by-lane sweep from the right
-edge, alternating direction, and routes each leg on a grid with breadth-first
-search plus line-of-sight simplification whenever an excluded folder's icon is
-in the way. `RobotMotionController` adds acceleration, braking, pivot turns,
-an approach phase and the suction animation; it runs on a 60 Hz timer only
-while the overlay is visible, so idle CPU is nil.
+The robot lives in the menu bar: it drops out from under its menu bar icon
+when a run starts and slips back up behind the menu bar when it is done.
+By default the overlay sits in front of other windows (still click-through);
+Settings › Appearance can move it behind windows, just above the desktop icons.
+"Test Drive" in the same tab drives the robot around without touching a file,
+which is the quickest way to check the overlay on a new machine.
+
+Two movement patterns are available. **Bounce** (the default) behaves like a
+real robot vacuum: straight runs, a random new heading whenever it meets an
+edge or an excluded folder, occasional spontaneous turns, and it collects
+whichever file comes within sensor range; after a few seconds without finding
+one it heads for the nearest file so a run always finishes. The engine supports
+this through `sessionChooseNextTarget`, which lets the observer pick the next
+file instead of following the plan's order. **Sweep** orders targets into a
+lane-by-lane pass from the right edge with `NavigationPlanner`, which also
+routes detours on a grid (breadth-first search plus line-of-sight
+simplification) around excluded folders. `RobotMotionController` adds
+acceleration, braking, pivot turns, an approach phase and the suction
+animation; it runs on a 60 Hz timer only while the overlay is visible, so idle
+CPU is nil.
 
 Trails (damp, sheen, tire marks, plus turning marks), dust, suction swirls
 and the completion burst are drawn in one SwiftUI `Canvas` and expire after
@@ -116,6 +130,9 @@ animation.
 
 Sounds are synthesized at first use (`ProceduralSoundSynth`), so there are no
 audio assets; each event can be toggled individually and nothing plays at launch.
+A seamless motor hum loops while the robot drives and follows its speed, and
+the suction effect layers an air rush, a turbine spinning up, the rattle of the
+file going in and a final thump.
 
 ## Dock integration
 
