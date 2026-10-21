@@ -12,6 +12,16 @@ public struct NavigationTarget: Identifiable, Hashable, Sendable {
         self.id = id
         self.position = position
     }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(position.x)
+        hasher.combine(position.y)
+    }
+
+    public static func == (lhs: NavigationTarget, rhs: NavigationTarget) -> Bool {
+        lhs.id == rhs.id && lhs.position == rhs.position
+    }
 }
 
 /// One stretch of the route.
