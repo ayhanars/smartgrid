@@ -17,6 +17,26 @@ public enum ExclusionReason: Equatable, Codable, Sendable {
     case recentlyModified
     case unreadable
 
+    /// Short plural noun for counts, e.g. "3 folders".
+    public var shortLabel: String {
+        switch self {
+        case .outsideDesktop: return "outside the Desktop"
+        case .excludedFile: return "excluded files"
+        case .symbolicLink: return "symlinks"
+        case .alias: return "aliases"
+        case .directory: return "folders"
+        case .package: return "packages"
+        case .insideExcludedFolder: return "in excluded folders"
+        case .excludedExtension: return "excluded extensions"
+        case .excludedCategory: return "disabled categories"
+        case .namePattern: return "name patterns"
+        case .notInMode: return "outside this mode"
+        case .downloadInProgress: return "downloading"
+        case .recentlyModified: return "still being written"
+        case .unreadable: return "unreadable"
+        }
+    }
+
     public var description: String {
         switch self {
         case .outsideDesktop: return "Not on the Desktop"

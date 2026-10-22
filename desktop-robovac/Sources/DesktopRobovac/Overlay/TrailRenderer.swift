@@ -74,15 +74,31 @@ final class TrailRenderer {
 
     // MARK: Drawing
 
-    /// One flat slice of the band between two consecutive samples.
+    /// One flat slice of the band between two consecutive samples. The band may
+    /// be a little wider on one side than the other (mop wetness is never even),
+    /// so each end carries a separate vector for its left and right edge.
     private struct Slice {
-        var outline: Path
         var life: Double
-        /// Centre line of the slice, used for the highlight streak and the edges.
         var from: CGPoint
         var to: CGPoint
-        var normalFrom: CGPoint
-        var normalTo: CGPoint
+        var plusFrom: CGPoint
+        var minusFrom: CGPoint
+        var plusTo: CGPoint
+        var minusTo: CGPoint
+        /// Arc length at the start, for lengthwise texture.
+        var distance: CGFloat
+    }
+
+    /// A pivot: the mop pad swept a wedge of the floor while the robot turned in place.
+    private struct Corner {
+        var center: CGPoint
+        var life: Double
+        /// Angle of the outer edge where the incoming slice ends.
+        var startAngle: CGFloat
+        /// Signed sweep to the outer edge where the outgoing slice starts.
+        var sweep: CGFloat
+        /// +1 when the outer side is the "plus" side of the band.
+        var outerSign: CGFloat
     }
 
     func draw(in context: GraphicsContext, now: TimeInterval) {
@@ -120,40 +136,71 @@ final class TrailRenderer {
         let width = robotSize * 0.88
         let half = width / 2
 
-        // Build the slices as a strip: each sample gets one shared normal, so
-        // neighbouring slices meet on exactly the same edge with no gap, no cap.
         var slices: [Slice] = []
-        var corners: [(center: CGPoint, life: Double)] = []
+        var corners: [Corner] = []
         for run in runs.reversed() {
             let points = run.map { $0.position }
-            var normals: [CGPoint] = []
-            for i in 0..<points.count {
+            let count = points.count
+            var directionsIn: [CGPoint] = []   // direction arriving at point i
+            var directionsOut: [CGPoint] = []  // direction leaving point i
+            var distances: [CGFloat] = [0]
+            for i in 0..<count {
                 let before = i > 0 ? TrailRenderer.direction(points[i - 1], points[i]) : TrailRenderer.direction(points[i], points[i + 1])
-                let after = i < points.count - 1 ? TrailRenderer.direction(points[i], points[i + 1]) : before
-                var sum = CGPoint(x: before.x + after.x, y: before.y + after.y)
-                let length = hypot(sum.x, sum.y)
-                if length < 0.001 { sum = after } else { sum = CGPoint(x: sum.x / length, y: sum.y / length) }
-                // Perpendicular, scaled so the band keeps its width through the bend (mitre, clamped).
-                let cosHalf = max(0.5, before.x * sum.x + before.y * sum.y)
-                normals.append(CGPoint(x: -sum.y * half / cosHalf, y: sum.x * half / cosHalf))
-                // Real corners (a pivot) get a round joint so the outside is smooth.
-                let turn = before.x * after.x + before.y * after.y
-                if i > 0, i < points.count - 1, turn < 0.94 {
-                    let life = max(0, 1 - (now - run[i].time) / fade)
-                    corners.append((points[i], life))
-                }
+                let after = i < count - 1 ? TrailRenderer.direction(points[i], points[i + 1]) : before
+                directionsIn.append(before)
+                directionsOut.append(after)
+                if i > 0 { distances.append(distances[i - 1] + hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)) }
             }
-            for i in stride(from: points.count - 2, through: 0, by: -1) {
-                let a = points[i], b = points[i + 1]
-                let na = normals[i], nb = normals[i + 1]
-                var outline = Path()
-                outline.move(to: CGPoint(x: a.x + na.x, y: a.y + na.y))
-                outline.addLine(to: CGPoint(x: b.x + nb.x, y: b.y + nb.y))
-                outline.addLine(to: CGPoint(x: b.x - nb.x, y: b.y - nb.y))
-                outline.addLine(to: CGPoint(x: a.x - na.x, y: a.y - na.y))
-                outline.closeSubpath()
-                let life = max(0, 1 - (now - run[i + 1].time) / fade)
-                slices.append(Slice(outline: outline, life: life, from: a, to: b, normalFrom: na, normalTo: nb))
+            // A real pivot: the heading changes by more than ~20° at this sample.
+            var isCorner = [Bool](repeating: false, count: count)
+            for i in 1..<(count - 1) where directionsIn[i].x * directionsOut[i].x + directionsIn[i].y * directionsOut[i].y < 0.94 {
+                isCorner[i] = true
+                let before = directionsIn[i], after = directionsOut[i]
+                let cross = before.x * after.y - before.y * after.x
+                let dot = before.x * after.x + before.y * after.y
+                let turn = atan2(cross, dot)
+                // Outer side is opposite to the direction of the turn.
+                let outerSign: CGFloat = cross > 0 ? -1 : 1
+                let outerIn = CGPoint(x: -before.y * outerSign, y: before.x * outerSign)
+                corners.append(Corner(
+                    center: points[i],
+                    life: max(0, 1 - (now - run[i].time) / fade),
+                    startAngle: atan2(outerIn.y, outerIn.x),
+                    sweep: turn,
+                    outerSign: outerSign
+                ))
+            }
+
+            // Edge vectors per sample: at a pivot the slice ends square to its own
+            // direction (the wedge fills the corner); elsewhere a clamped mitre
+            // keeps the width through gentle steering.
+            func edges(at i: Int, using direction: CGPoint) -> (plus: CGPoint, minus: CGPoint) {
+                let s = distances[i]
+                let wobblePlus = 1 + 0.045 * sin(s * 0.041 + 1.3) + 0.025 * sin(s * 0.097 + 0.4)
+                let wobbleMinus = 1 + 0.045 * sin(s * 0.037 + 4.1) + 0.025 * sin(s * 0.089 + 2.2)
+                let n = CGPoint(x: -direction.y * half, y: direction.x * half)
+                return (CGPoint(x: n.x * wobblePlus, y: n.y * wobblePlus), CGPoint(x: -n.x * wobbleMinus, y: -n.y * wobbleMinus))
+            }
+            func mitreDirection(at i: Int) -> CGPoint {
+                let sum = CGPoint(x: directionsIn[i].x + directionsOut[i].x, y: directionsIn[i].y + directionsOut[i].y)
+                let length = hypot(sum.x, sum.y)
+                guard length > 0.001 else { return directionsOut[i] }
+                let unit = CGPoint(x: sum.x / length, y: sum.y / length)
+                let cosHalf = max(0.7, directionsIn[i].x * unit.x + directionsIn[i].y * unit.y)
+                return CGPoint(x: unit.x / cosHalf, y: unit.y / cosHalf)
+            }
+
+            for i in stride(from: count - 2, through: 0, by: -1) {
+                let dir = TrailRenderer.direction(points[i], points[i + 1])
+                let start = isCorner[i] ? edges(at: i, using: dir) : edges(at: i, using: mitreDirection(at: i))
+                let finish = isCorner[i + 1] ? edges(at: i + 1, using: dir) : edges(at: i + 1, using: mitreDirection(at: i + 1))
+                slices.append(Slice(
+                    life: max(0, 1 - (now - run[i + 1].time) / fade),
+                    from: points[i], to: points[i + 1],
+                    plusFrom: start.plus, minusFrom: start.minus,
+                    plusTo: finish.plus, minusTo: finish.minus,
+                    distance: distances[i]
+                ))
             }
         }
 
@@ -161,32 +208,56 @@ final class TrailRenderer {
         case .damp:
             let tint = Color(red: 0.72, green: 0.77, blue: 0.84)
             let highlight = Color(red: 0.96, green: 0.97, blue: 0.99)
-            // 1. Highlight streak: a soft strip offset to one side, the first thing to dry.
-            for (streakOffset, streakWidth, strength) in [(0.26, 0.10, 0.5), (0.26, 0.22, 0.22)] {
+            let edgeColor = Color(red: 0.55, green: 0.6, blue: 0.68)
+
+            // 1. Highlight streak, offset to one side; its brightness breathes a
+            //    little along the length so it does not read as a ruled line.
+            for (offset, streakWidth, strength) in [(0.28, 0.10, 0.5), (0.28, 0.24, 0.2)] {
                 for slice in slices {
                     let g = gloss(life: slice.life)
                     guard g > 0.01 else { continue }
-                    layer.fill(TrailRenderer.strip(slice, offset: streakOffset, width: streakWidth), with: .color(highlight.opacity(opacity * strength * g)))
+                    let breathe = 0.75 + 0.25 * sin(slice.distance * 0.03 + 0.9)
+                    layer.fill(TrailRenderer.strip(slice, offset: offset, width: streakWidth), with: .color(highlight.opacity(opacity * strength * g * breathe)))
+                }
+                for corner in corners where corner.outerSign > 0 {
+                    let g = gloss(life: corner.life)
+                    guard g > 0.01 else { continue }
+                    layer.fill(TrailRenderer.sector(corner, inner: half * (offset - streakWidth / 2), outer: half * (offset + streakWidth / 2)), with: .color(highlight.opacity(opacity * strength * g * 0.85)))
                 }
             }
-            // 2. Crisp edges.
+            // 2. Faint lengthwise mop streaks inside the band.
+            for (offset, streakWidth, phase) in [(-0.55, 0.07, 0.0), (-0.12, 0.05, 2.1), (0.62, 0.08, 4.0)] {
+                for slice in slices {
+                    let w = wetness(life: slice.life)
+                    guard w > 0.01 else { continue }
+                    let presence = max(0, sin(slice.distance * 0.02 + phase))
+                    guard presence > 0.05 else { continue }
+                    layer.fill(TrailRenderer.strip(slice, offset: offset, width: streakWidth), with: .color(highlight.opacity(opacity * 0.12 * w * presence)))
+                }
+            }
+            // 3. Crisp edges, following the slightly uneven outline.
             for slice in slices {
                 let w = wetness(life: slice.life)
                 guard w > 0.01 else { continue }
                 for edge in [TrailRenderer.strip(slice, offset: 0.98, width: 0.04), TrailRenderer.strip(slice, offset: -0.98, width: 0.04)] {
-                    layer.fill(edge, with: .color(Color(red: 0.55, green: 0.6, blue: 0.68).opacity(opacity * 0.35 * w)))
+                    layer.fill(edge, with: .color(edgeColor.opacity(opacity * 0.35 * w)))
                 }
-            }
-            // 3. The damp band itself.
-            for slice in slices {
-                let w = wetness(life: slice.life)
-                guard w > 0.01 else { continue }
-                layer.fill(slice.outline, with: .color(tint.opacity(opacity * 0.46 * w)))
             }
             for corner in corners {
                 let w = wetness(life: corner.life)
                 guard w > 0.01 else { continue }
-                layer.fill(Path(ellipseIn: CGRect(x: corner.center.x - half, y: corner.center.y - half, width: width, height: width)), with: .color(tint.opacity(opacity * 0.46 * w)))
+                layer.fill(TrailRenderer.sector(corner, inner: half * 0.96, outer: half), with: .color(edgeColor.opacity(opacity * 0.35 * w)))
+            }
+            // 4. The damp band and the wedges that round each pivot.
+            for slice in slices {
+                let w = wetness(life: slice.life)
+                guard w > 0.01 else { continue }
+                layer.fill(TrailRenderer.outline(slice), with: .color(tint.opacity(opacity * 0.46 * w)))
+            }
+            for corner in corners {
+                let w = wetness(life: corner.life)
+                guard w > 0.01 else { continue }
+                layer.fill(TrailRenderer.sector(corner, inner: 0, outer: half), with: .color(tint.opacity(opacity * 0.46 * w)))
             }
         case .sheen:
             for slice in slices {
@@ -197,7 +268,12 @@ final class TrailRenderer {
             for slice in slices {
                 let w = wetness(life: slice.life)
                 guard w > 0.01 else { continue }
-                layer.fill(slice.outline, with: .color(Color.white.opacity(opacity * 0.25 * w)))
+                layer.fill(TrailRenderer.outline(slice), with: .color(Color.white.opacity(opacity * 0.25 * w)))
+            }
+            for corner in corners {
+                let w = wetness(life: corner.life)
+                guard w > 0.01 else { continue }
+                layer.fill(TrailRenderer.sector(corner, inner: 0, outer: half), with: .color(Color.white.opacity(opacity * 0.25 * w)))
             }
         case .tireMarks:
             for slice in slices {
@@ -218,15 +294,46 @@ final class TrailRenderer {
         return CGPoint(x: dx / length, y: dy / length)
     }
 
-    /// A sub-strip of a slice: `offset` and `width` are fractions of the half width
-    /// (offset -1…1 across the band).
+    /// Point across the band at `offset` (-1…1) from the centre line.
+    private static func across(_ p: CGPoint, plus: CGPoint, minus: CGPoint, offset: CGFloat) -> CGPoint {
+        if offset >= 0 {
+            return CGPoint(x: p.x + plus.x * offset, y: p.y + plus.y * offset)
+        }
+        return CGPoint(x: p.x + minus.x * -offset, y: p.y + minus.y * -offset)
+    }
+
+    private static func outline(_ slice: Slice) -> Path {
+        strip(slice, offset: 0, width: 2)
+    }
+
+    /// A sub-strip of a slice: `offset` and `width` are fractions of the half width.
     private static func strip(_ slice: Slice, offset: CGFloat, width: CGFloat) -> Path {
         let lo = offset - width / 2, hi = offset + width / 2
         var path = Path()
-        path.move(to: CGPoint(x: slice.from.x + slice.normalFrom.x * hi, y: slice.from.y + slice.normalFrom.y * hi))
-        path.addLine(to: CGPoint(x: slice.to.x + slice.normalTo.x * hi, y: slice.to.y + slice.normalTo.y * hi))
-        path.addLine(to: CGPoint(x: slice.to.x + slice.normalTo.x * lo, y: slice.to.y + slice.normalTo.y * lo))
-        path.addLine(to: CGPoint(x: slice.from.x + slice.normalFrom.x * lo, y: slice.from.y + slice.normalFrom.y * lo))
+        path.move(to: across(slice.from, plus: slice.plusFrom, minus: slice.minusFrom, offset: hi))
+        path.addLine(to: across(slice.to, plus: slice.plusTo, minus: slice.minusTo, offset: hi))
+        path.addLine(to: across(slice.to, plus: slice.plusTo, minus: slice.minusTo, offset: lo))
+        path.addLine(to: across(slice.from, plus: slice.plusFrom, minus: slice.minusFrom, offset: lo))
+        path.closeSubpath()
+        return path
+    }
+
+    /// Annular sector on the outer side of a pivot, built from straight segments
+    /// so the sweep direction is unambiguous. `inner` of 0 gives a pie wedge.
+    private static func sector(_ corner: Corner, inner: CGFloat, outer: CGFloat) -> Path {
+        let steps = max(3, Int((abs(corner.sweep) / 0.2).rounded(.up)))
+        var path = Path()
+        func point(_ radius: CGFloat, _ step: Int) -> CGPoint {
+            let angle = corner.startAngle + corner.sweep * CGFloat(step) / CGFloat(steps)
+            return CGPoint(x: corner.center.x + cos(angle) * radius, y: corner.center.y + sin(angle) * radius)
+        }
+        path.move(to: point(outer, 0))
+        for step in 1...steps { path.addLine(to: point(outer, step)) }
+        if inner <= 0.5 {
+            path.addLine(to: corner.center)
+        } else {
+            for step in stride(from: steps, through: 0, by: -1) { path.addLine(to: point(inner, step)) }
+        }
         path.closeSubpath()
         return path
     }

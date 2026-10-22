@@ -24,7 +24,10 @@ struct PopoverView: View {
             if let problem = app.scanProblem { notice(problem.message, symbol: "exclamationmark.triangle.fill", tint: .orange) { problemActions(problem) } }
             if let interrupted = app.interruptedSession { interruptedSection(interrupted) }
             if let report = app.lastUndoReport, !report.isComplete { undoConflictSection(report) }
-            if let summary = app.lastSummary, !app.isCleaning { summaryLine(summary) }
+            if let summary = app.lastSummary, !app.isCleaning {
+                summaryLine(summary)
+                if let plan = app.plan, !plan.excluded.isEmpty { leftAloneLine(plan) }
+            }
             modePicker
             primaryActions
             footer
@@ -195,6 +198,26 @@ struct PopoverView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
+        }
+    }
+
+    /// Files the rules keep on the Desktop, so a "missed" file is never a mystery.
+    private func leftAloneLine(_ plan: CleaningPlan) -> some View {
+        var counts: [String: Int] = [:]
+        for decision in plan.excluded {
+            counts[decision.exclusionReason?.shortLabel ?? "excluded", default: 0] += 1
+        }
+        let parts = counts.sorted { $0.value > $1.value }.prefix(3).map { "\($0.value) \($0.key)" }
+        return HStack(spacing: 6) {
+            Image(systemName: "hand.raised").foregroundStyle(.secondary)
+            Text("Left alone by your rules: \(parts.joined(separator: ", "))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer()
+            Button("Why?") { showPreview() }
+                .controlSize(.mini)
+                .help("See every item and the rule that keeps it on the Desktop")
         }
     }
 
