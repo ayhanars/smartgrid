@@ -169,7 +169,9 @@ public actor CleaningCoordinator {
             await waitWhilePaused()
             if cancelRequested { break }
 
-            let result = fileOperations.move(item: target.item, toDirectory: target.destinationDirectory)
+            let result = target.sendToTrash
+                ? fileOperations.trash(item: target.item)
+                : fileOperations.move(item: target.item, toDirectory: target.destinationDirectory)
             switch result {
             case .success(let destination):
                 session.moves.append(MoveRecord(

@@ -92,7 +92,7 @@ public struct CleaningPolicy: Sendable {
         mode: CleaningMode,
         desktopURL: URL,
         classifier: FileClassifier = FileClassifier(),
-        recentModificationGrace: TimeInterval = 2,
+        recentModificationGrace: TimeInterval = 1,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.rules = rules

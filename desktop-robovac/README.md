@@ -85,6 +85,13 @@ Opening the package in Xcode (`open Package.swift`) works too: run the
    immediately, so a session cut short by a crash or quit is marked
    "interrupted" at next launch and still undoable.
 
+Collected files can go to the Trash instead of a folder, either always
+(Settings › Cleaning, or the switch in the menu) or for one run with the
+menu's "Move All to Trash" button. That uses `FileManager.trashItem`, not a
+delete, and the history records where each file landed so Undo brings it back
+until the Trash is emptied. A run also rescans when it finishes and makes up to
+two more passes if files landed while the robot was out.
+
 Pause stops the robot and holds the next file operation; Stop ends the session
 after the current animation. Undo puts files back and refuses to overwrite
 anything; on a collision you can choose to restore under a new name.
@@ -110,7 +117,8 @@ While a file is vacuumed its real Finder icon is drawn on the overlay: it
 shivers, lifts, gets pulled along a curve into the intake and crumples as it
 goes in (`SuctionSpritePainter`; a paper sheet stands in during Test Drive).
 
-The robot lives in the menu bar: it drops out from under its menu bar icon
+The robot comes in white or graphite (Settings › Appearance). It lives in the
+menu bar: it drops out from under its menu bar icon
 when a run starts and slips back up behind the menu bar when it is done.
 By default the overlay sits behind application windows, just above the desktop
 icons, so the robot only shows on the desktop; Settings › Appearance can put it
@@ -118,17 +126,19 @@ in front of every window instead (still click-through).
 "Test Drive" in the same tab drives the robot around without touching a file,
 which is the quickest way to check the overlay on a new machine.
 
-Three route patterns are available in Settings › Appearance › Movement, with
-a slider for how long the robot may explore before heading for a file.
-**Explore and bounce** (the default) behaves like a
+Five route patterns are available from the menu's Route control (and in
+Settings › Appearance › Movement). **Quick**, **Standard** (the default) and
+**Deep** drive serpentine lanes across the whole desktop at increasing
+density, collecting any file that comes within reach of the mop and resuming
+the lane where they left off; once the desktop is covered they go straight
+for whatever is left. **Explore** behaves like a
 real robot vacuum: straight runs, a random new heading whenever it meets an
 edge or an excluded folder, occasional spontaneous turns, and it collects
 whichever file comes within sensor range; after a few seconds without finding
 one it heads for the nearest file so a run always finishes. The engine supports
 this through `sessionChooseNextTarget`, which lets the observer pick the next
-file instead of following the plan's order. **Nearest file first** always
-picks the closest remaining file. **Lane by lane** orders targets into a
-lane-by-lane pass from the right edge with `NavigationPlanner`, which also
+file instead of following the plan's order. **Direct** always picks the
+closest remaining file. `NavigationPlanner` still orders the plan and
 routes detours on a grid (breadth-first search plus line-of-sight
 simplification) around excluded folders. `RobotMotionController` adds
 acceleration, braking, pivot turns, an approach phase and the suction

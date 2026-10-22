@@ -176,22 +176,26 @@ public struct CleaningSettings: Codable, Equatable, Sendable {
     public var autoCleanNewFiles: Bool
     /// Seconds to wait after the last change before an automatic run starts.
     public var autoCleanDelay: Double
+    /// Put collected files in the Trash instead of a folder. Still undoable until the Trash is emptied.
+    public var sendToTrash: Bool
 
     public init(
         mode: CleaningMode = .smartClean,
         rules: ExclusionRules = ExclusionRules(),
         destinations: DestinationRules = DestinationRules(),
         autoCleanNewFiles: Bool = false,
-        autoCleanDelay: Double = 10
+        autoCleanDelay: Double = 10,
+        sendToTrash: Bool = false
     ) {
         self.mode = mode
         self.rules = rules
         self.destinations = destinations
         self.autoCleanNewFiles = autoCleanNewFiles
         self.autoCleanDelay = autoCleanDelay
+        self.sendToTrash = sendToTrash
     }
 
-    enum CodingKeys: String, CodingKey { case mode, rules, destinations, autoCleanNewFiles, autoCleanDelay }
+    enum CodingKeys: String, CodingKey { case mode, rules, destinations, autoCleanNewFiles, autoCleanDelay, sendToTrash }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -200,7 +204,8 @@ public struct CleaningSettings: Codable, Equatable, Sendable {
             rules: c.decode(ExclusionRules.self, forKey: .rules, default: ExclusionRules()),
             destinations: c.decode(DestinationRules.self, forKey: .destinations, default: DestinationRules()),
             autoCleanNewFiles: c.decode(Bool.self, forKey: .autoCleanNewFiles, default: false),
-            autoCleanDelay: c.decode(Double.self, forKey: .autoCleanDelay, default: 10)
+            autoCleanDelay: c.decode(Double.self, forKey: .autoCleanDelay, default: 10),
+            sendToTrash: c.decode(Bool.self, forKey: .sendToTrash, default: false)
         )
     }
 }
@@ -243,12 +248,16 @@ public enum IconArrangement: String, Codable, CaseIterable, Sendable, Identifiab
     }
 }
 
-/// How the robot explores the desktop.
+/// How the robot works the desktop.
 public enum MovementPattern: String, Codable, CaseIterable, Sendable, Identifiable {
-    /// Straight runs with random bounces off the edges, like a real robot vacuum.
+    /// Wide serpentine passes: fewest lanes, quickest.
+    case quick
+    /// Serpentine passes one mop width apart: full coverage.
+    case standard
+    /// Overlapping serpentine passes: every spot twice.
+    case deep
+    /// Straight runs with random bounces off the edges, like an older robot vacuum.
     case bounce
-    /// Lane-by-lane sweep from the right edge, the way the icons are arranged.
-    case sweep
     /// Always the nearest file next, no exploring.
     case direct
 
@@ -256,17 +265,54 @@ public enum MovementPattern: String, Codable, CaseIterable, Sendable, Identifiab
 
     public var displayName: String {
         switch self {
-        case .bounce: return "Explore and bounce"
-        case .sweep: return "Lane by lane"
-        case .direct: return "Nearest file first"
+        case .quick: return "Quick"
+        case .standard: return "Standard"
+        case .deep: return "Deep"
+        case .bounce: return "Explore"
+        case .direct: return "Direct"
         }
     }
 
     public var summary: String {
         switch self {
-        case .bounce: return "Straight runs with a new heading at every edge, like a real robot vacuum. Files within sensor range get collected; after the exploring time it heads for the nearest one."
-        case .sweep: return "Works the desktop in vertical lanes from the right edge, top to bottom then bottom to top, visiting files in that order."
-        case .direct: return "Drives straight to the nearest remaining file every time. Quickest, most predictable."
+        case .quick: return "Wide serpentine lanes across the desktop, collecting files as it passes. Fewest passes."
+        case .standard: return "Serpentine lanes one mop width apart, so every part of the desktop gets a pass."
+        case .deep: return "Overlapping serpentine lanes; every spot is covered twice. Longest run."
+        case .bounce: return "Straight runs with a new heading at every edge, like a classic robot vacuum. After the exploring time it heads for the nearest file."
+        case .direct: return "Drives straight to the nearest remaining file every time. Quickest and most predictable."
+        }
+    }
+
+    /// Lane spacing as a multiple of the mop width, for the serpentine patterns.
+    public var laneSpacingFactor: Double? {
+        switch self {
+        case .quick: return 1.7
+        case .standard: return 1.0
+        case .deep: return 0.6
+        case .bounce, .direct: return nil
+        }
+    }
+
+    public var isCoverage: Bool { laneSpacingFactor != nil }
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        if raw == "sweep" { self = .standard; return }
+        self = MovementPattern(rawValue: raw) ?? .standard
+    }
+}
+
+/// The robot's colour scheme.
+public enum RobotSkin: String, Codable, CaseIterable, Sendable, Identifiable {
+    case light
+    case dark
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .light: return "White"
+        case .dark: return "Graphite"
         }
     }
 }
@@ -310,6 +356,7 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
     public var useFinderIconPositions: Bool
     /// Seconds the robot explores before giving up and heading for a file (bounce pattern).
     public var wanderSeconds: Double
+    public var robotSkin: RobotSkin
 
     public init(
         robotSize: Double = 64,
@@ -323,10 +370,11 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         iconArrangement: IconArrangement = .dateAdded,
         iconGridColumnWidth: Double = 96,
         iconGridRowHeight: Double = 104,
-        movementPattern: MovementPattern = .bounce,
+        movementPattern: MovementPattern = .standard,
         robotLayer: RobotLayer = .behindWindows,
         useFinderIconPositions: Bool = true,
-        wanderSeconds: Double = 5
+        wanderSeconds: Double = 5,
+        robotSkin: RobotSkin = .light
     ) {
         self.robotSize = robotSize
         self.movementSpeed = movementSpeed
@@ -343,12 +391,13 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         self.robotLayer = robotLayer
         self.useFinderIconPositions = useFinderIconPositions
         self.wanderSeconds = wanderSeconds
+        self.robotSkin = robotSkin
     }
 
     enum CodingKeys: String, CodingKey {
         case robotSize, movementSpeed, trailStyle, trailOpacity, trailFadeDuration
         case particleEffects, animationIntensity, reducedMotion, iconArrangement
-        case iconGridColumnWidth, iconGridRowHeight, movementPattern, robotLayer, useFinderIconPositions, wanderSeconds
+        case iconGridColumnWidth, iconGridRowHeight, movementPattern, robotLayer, useFinderIconPositions, wanderSeconds, robotSkin
     }
 
     public init(from decoder: Decoder) throws {
@@ -369,7 +418,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
             movementPattern: c.decode(MovementPattern.self, forKey: .movementPattern, default: d.movementPattern),
             robotLayer: c.decode(RobotLayer.self, forKey: .robotLayer, default: d.robotLayer),
             useFinderIconPositions: c.decode(Bool.self, forKey: .useFinderIconPositions, default: d.useFinderIconPositions),
-            wanderSeconds: c.decode(Double.self, forKey: .wanderSeconds, default: d.wanderSeconds)
+            wanderSeconds: c.decode(Double.self, forKey: .wanderSeconds, default: d.wanderSeconds),
+            robotSkin: c.decode(RobotSkin.self, forKey: .robotSkin, default: d.robotSkin)
         )
     }
 }

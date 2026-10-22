@@ -6,6 +6,7 @@ import RobovacCore
 struct PopoverView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.openWindow) private var openWindow
+    @State private var confirmTrash = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -33,14 +34,14 @@ struct PopoverView: View {
             footer
         }
         .padding(14)
-        .frame(width: 330)
+        .frame(width: 340)
     }
 
     // MARK: Hero
 
     private var heroCard: some View {
         HStack(spacing: 14) {
-            RobotBadgeView(state: app.isCleaning || app.isRehearsing ? app.robotState : .idle, size: 54)
+            RobotBadgeView(state: app.isCleaning || app.isRehearsing ? app.robotState : .idle, size: 54, skin: app.settings.appearance.robotSkin)
                 .padding(4)
                 .background(Circle().fill(.white.opacity(0.14)))
             VStack(alignment: .leading, spacing: 3) {
@@ -232,44 +233,65 @@ struct PopoverView: View {
     // MARK: Actions
 
     private var modePicker: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("MODE").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
-                Spacer()
-                Text(app.settings.appearance.movementPattern.displayName)
-                    .font(.caption2).foregroundStyle(.tertiary)
-                    .help("Route pattern, set in Settings › Appearance › Movement")
-            }
-            Picker("Mode", selection: $app.settings.cleaning.mode) {
-                ForEach(CleaningMode.allCases) { mode in
-                    Label(modeShortName(mode), systemImage: modeSymbol(mode)).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .disabled(app.isCleaning)
+        VStack(alignment: .leading, spacing: 10) {
+            TabStrip(items: CleaningMode.allCases, title: { $0.displayName }, selection: $app.settings.cleaning.mode, disabled: app.isCleaning)
             Text(app.settings.cleaning.mode.summary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 2)
+
+            ControlHeader(title: "Route", value: app.settings.appearance.movementPattern.displayName)
+            PillPicker(options: MovementPattern.allCases, selection: $app.settings.appearance.movementPattern, disabled: app.isCleaning) { pattern in
+                RouteGlyph(pattern: pattern).help(pattern.summary)
+            }
+
+            ControlHeader(title: "Mop trail", value: trailLevel.displayName)
+            PillPicker(options: TrailLevel.allCases, selection: trailBinding, disabled: false) { level in
+                TrailGlyph(level: level).help(level.displayName)
+            }
+
+            ControlHeader(title: "Destination", value: app.settings.cleaning.sendToTrash ? "Trash" : app.settings.cleaning.destinations.defaultDestination.lastPathComponent)
+            HStack(spacing: 8) {
+                Toggle("Always send to Trash", isOn: $app.settings.cleaning.sendToTrash)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .font(.caption)
+                Spacer()
+                Button {
+                    confirmTrash = true
+                } label: {
+                    Label("Move All to Trash", systemImage: "trash")
+                        .font(.caption)
+                }
+                .controlSize(.small)
+                .disabled(app.isBusy || app.eligibleCount == 0)
+                .help("Send every eligible file to the Trash now, whatever the destination setting")
+            }
+        }
+        .confirmationDialog("Move \(app.eligibleCount) item\(app.eligibleCount == 1 ? "" : "s") to the Trash?", isPresented: $confirmTrash, titleVisibility: .visible) {
+            Button("Move to Trash") { app.startCleaning(toTrash: true) }
+        } message: {
+            Text("The robot collects every eligible file and puts it in the Trash. You can still undo from the menu until the Trash is emptied.")
         }
     }
 
-    private func modeShortName(_ mode: CleaningMode) -> String {
-        switch mode {
-        case .smartClean: return "Smart"
-        case .screenshotSweep: return "Screenshots"
-        case .gentleClean: return "Gentle"
-        }
-    }
+    private var trailLevel: TrailLevel { TrailLevel.closest(to: app.settings.appearance) }
 
-    private func modeSymbol(_ mode: CleaningMode) -> String {
-        switch mode {
-        case .smartClean: return "sparkles"
-        case .screenshotSweep: return "camera.viewfinder"
-        case .gentleClean: return "leaf"
-        }
+    private var trailBinding: Binding<TrailLevel> {
+        Binding(
+            get: { trailLevel },
+            set: { level in
+                if level == .off {
+                    app.settings.appearance.trailStyle = .none
+                } else {
+                    if app.settings.appearance.trailStyle == .none { app.settings.appearance.trailStyle = .damp }
+                    app.settings.appearance.trailOpacity = level.opacity
+                }
+            }
+        )
     }
 
     private var primaryActions: some View {

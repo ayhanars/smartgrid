@@ -225,6 +225,26 @@ final class CleaningCoordinatorTests: XCTestCase {
         XCTAssertNil(history.lastUndoableSession)
     }
 
+    #if os(macOS)
+    func testTrashRunPutsFilesInTheTrashAndUndoBringsThemBack() async throws {
+        try desktop.makeFile("bin-me.txt", contents: "bye")
+        var config = configuration()
+        config.sendToTrash = true
+        let plan = try CleaningPlanner(configuration: config).makePlan()
+        XCTAssertTrue(plan.targets.allSatisfy { $0.sendToTrash })
+        let summary = try await CleaningCoordinator(history: history).run(plan: plan)
+        XCTAssertEqual(summary.movedCount, 1)
+        let record = try XCTUnwrap(summary.session.moves.first)
+        XCTAssertTrue(record.destinationPath.contains(".Trash") || record.destinationPath.contains("Trash"), record.destinationPath)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: desktop.desktop.appendingPathComponent("bin-me.txt").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: record.destinationPath))
+
+        let report = UndoService(history: history).undo(session: summary.session)
+        XCTAssertTrue(report.isComplete)
+        XCTAssertEqual(try String(contentsOf: desktop.desktop.appendingPathComponent("bin-me.txt"), encoding: .utf8), "bye")
+    }
+    #endif
+
     func testInterruptedSessionsAreMarkedOnNextLaunch() throws {
         history.upsert(CleaningSession(mode: .smartClean, status: .running))
         let reloaded = CleaningHistoryStore(fileURL: history.fileURL)

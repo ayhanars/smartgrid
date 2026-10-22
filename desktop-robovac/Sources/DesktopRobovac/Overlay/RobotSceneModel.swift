@@ -27,6 +27,7 @@ final class RobotSceneModel: ObservableObject {
 
     private(set) var appearance = AppearanceSettings()
     private(set) var isGentle = false
+    var skin: RobotSkin = .light
     private var ticker: Timer?
     private var lastTick: CFTimeInterval = 0
     private(set) var now: TimeInterval = 0

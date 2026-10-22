@@ -13,7 +13,7 @@ struct RobotAnimationView: View {
                 SuctionSpritePainter.draw(sprite, mouth: scene.mouthPosition, now: now, in: context)
             }
             if scene.pose.isVisible {
-                RobotPainter.draw(pose: scene.pose, size: scene.robotSize, in: context)
+                RobotPainter.draw(pose: scene.pose, size: scene.robotSize, skin: scene.skin, in: context)
             }
         }
         .allowsHitTesting(false)
@@ -26,8 +26,44 @@ struct RobotAnimationView: View {
 /// front, a seam across the top plate, a central brushed-metal lidar with a
 /// glowing ring, a small ring button and two spinning side brushes at the front.
 enum RobotPainter {
-    static func draw(pose: RobotPose, size: CGFloat, in context: GraphicsContext) {
+    struct Palette {
+        var body: [Color]
+        var rim: Color
+        var bumper: Color
+        var seam: Color
+        var highlight: Double
+        var metal: [Color]
+        var bristle: Color
+    }
+
+    static func palette(for skin: RobotSkin) -> Palette {
+        switch skin {
+        case .light:
+            return Palette(
+                body: [Color(white: 0.995), Color(white: 0.96), Color(red: 0.8, green: 0.81, blue: 0.84)],
+                rim: Color(white: 0.45).opacity(0.7),
+                bumper: Color(red: 0.12, green: 0.13, blue: 0.15),
+                seam: Color(white: 0.7).opacity(0.8),
+                highlight: 0.55,
+                metal: [Color(white: 0.95), Color(white: 0.78), Color(white: 0.6), Color(white: 0.82)],
+                bristle: Color(white: 0.78)
+            )
+        case .dark:
+            return Palette(
+                body: [Color(red: 0.36, green: 0.37, blue: 0.41), Color(red: 0.22, green: 0.23, blue: 0.26), Color(red: 0.1, green: 0.11, blue: 0.13)],
+                rim: Color(white: 0.75).opacity(0.5),
+                bumper: Color(red: 0.03, green: 0.03, blue: 0.04),
+                seam: Color(white: 0.55).opacity(0.5),
+                highlight: 0.22,
+                metal: [Color(white: 0.6), Color(white: 0.42), Color(white: 0.25), Color(white: 0.5)],
+                bristle: Color(white: 0.55)
+            )
+        }
+    }
+
+    static func draw(pose: RobotPose, size: CGFloat, skin: RobotSkin = .light, in context: GraphicsContext) {
         let r = size / 2
+        let palette = palette(for: skin)
         context.drawLayer { layer in
             layer.translateBy(x: pose.position.x, y: pose.position.y)
             layer.rotate(by: Angle(radians: Double(pose.heading)))
@@ -54,7 +90,7 @@ enum RobotPainter {
                         bristle.move(to: brushCenter)
                         let length = r * (spread == 0 ? 0.34 : 0.3)
                         bristle.addLine(to: CGPoint(x: brushCenter.x + cos(angle + spread) * length, y: brushCenter.y + sin(angle + spread) * length))
-                        layer.stroke(bristle, with: .color(Color(white: 0.78).opacity(0.85)), style: StrokeStyle(lineWidth: max(0.8, r * 0.035), lineCap: .round))
+                        layer.stroke(bristle, with: .color(palette.bristle.opacity(0.85)), style: StrokeStyle(lineWidth: max(0.8, r * 0.035), lineCap: .round))
                     }
                 }
                 layer.fill(Path(ellipseIn: CGRect(x: brushCenter.x - r * 0.05, y: brushCenter.y - r * 0.05, width: r * 0.1, height: r * 0.1)), with: .color(Color(white: 0.3)))
@@ -62,25 +98,21 @@ enum RobotPainter {
 
             // Body: white with soft shading towards the edge.
             let body = Path(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r))
-            let bodyGradient = Gradient(colors: [
-                Color(white: 0.995),
-                Color(white: 0.96),
-                Color(red: 0.8, green: 0.81, blue: 0.84),
-            ])
+            let bodyGradient = Gradient(colors: palette.body)
             layer.fill(body, with: .radialGradient(bodyGradient, center: CGPoint(x: -r * 0.3, y: -r * 0.35), startRadius: r * 0.2, endRadius: r * 1.35))
-            layer.stroke(body, with: .color(Color(white: 0.45).opacity(0.7)), lineWidth: max(1, r * 0.035))
+            layer.stroke(body, with: .color(palette.rim), lineWidth: max(1, r * 0.035))
 
             // Dark bumper segments across the front rim, with small gaps.
             for (from, to) in [(-70.0, -38.0), (-30.0, 30.0), (38.0, 70.0)] {
                 var segment = Path()
                 segment.addArc(center: .zero, radius: r - r * 0.045, startAngle: .degrees(from), endAngle: .degrees(to), clockwise: false)
-                layer.stroke(segment, with: .color(Color(red: 0.12, green: 0.13, blue: 0.15)), style: StrokeStyle(lineWidth: r * 0.09, lineCap: .round))
+                layer.stroke(segment, with: .color(palette.bumper), style: StrokeStyle(lineWidth: r * 0.09, lineCap: .round))
             }
             // Rear rim sensor tabs
             for angle in [150.0, 210.0] {
                 var tab = Path()
                 tab.addArc(center: .zero, radius: r - r * 0.045, startAngle: .degrees(angle - 6), endAngle: .degrees(angle + 6), clockwise: false)
-                layer.stroke(tab, with: .color(Color(red: 0.12, green: 0.13, blue: 0.15)), style: StrokeStyle(lineWidth: r * 0.09, lineCap: .round))
+                layer.stroke(tab, with: .color(palette.bumper), style: StrokeStyle(lineWidth: r * 0.09, lineCap: .round))
             }
 
             // Seam across the top plate (perpendicular to travel), broken by the lidar.
@@ -88,14 +120,14 @@ enum RobotPainter {
                 var seam = Path()
                 seam.move(to: CGPoint(x: -r * 0.05, y: side * r * 0.36))
                 seam.addLine(to: CGPoint(x: -r * 0.05, y: side * r * 0.95))
-                layer.stroke(seam, with: .color(Color(white: 0.7).opacity(0.8)), lineWidth: max(1, r * 0.02))
+                layer.stroke(seam, with: .color(palette.seam), lineWidth: max(1, r * 0.02))
             }
 
             // Glossy highlight
             var highlight = layer
             highlight.clip(to: body)
             highlight.addFilter(.blur(radius: r * 0.12))
-            highlight.fill(Path(ellipseIn: CGRect(x: -r * 1.0, y: -r * 1.0, width: r * 1.2, height: r * 0.8)), with: .color(.white.opacity(0.55)))
+            highlight.fill(Path(ellipseIn: CGRect(x: -r * 1.0, y: -r * 1.0, width: r * 1.2, height: r * 0.8)), with: .color(.white.opacity(palette.highlight)))
 
             // Error tint
             if pose.errorFlash > 0 {
@@ -113,7 +145,7 @@ enum RobotPainter {
             glow.addFilter(.blur(radius: r * 0.08))
             glow.stroke(Path(ellipseIn: CGRect(x: turretCenter.x - turretRadius, y: turretCenter.y - turretRadius, width: turretRadius * 2, height: turretRadius * 2)), with: .color(ringColor.opacity(0.9)), lineWidth: r * 0.09)
             let turret = Path(ellipseIn: CGRect(x: turretCenter.x - turretRadius, y: turretCenter.y - turretRadius, width: turretRadius * 2, height: turretRadius * 2))
-            let metal = Gradient(colors: [Color(white: 0.95), Color(white: 0.78), Color(white: 0.6), Color(white: 0.82)])
+            let metal = Gradient(colors: palette.metal)
             layer.fill(turret, with: .linearGradient(metal, startPoint: CGPoint(x: turretCenter.x - turretRadius, y: turretCenter.y - turretRadius), endPoint: CGPoint(x: turretCenter.x + turretRadius, y: turretCenter.y + turretRadius)))
             layer.stroke(turret, with: .color(ringColor.opacity(0.95)), lineWidth: max(1.5, r * 0.045))
             // Brushed-metal rings
@@ -132,7 +164,7 @@ enum RobotPainter {
             let buttonCenter = CGPoint(x: r * 0.5, y: -r * 0.08)
             let buttonRadius = r * 0.1
             layer.stroke(Path(ellipseIn: CGRect(x: buttonCenter.x - buttonRadius, y: buttonCenter.y - buttonRadius, width: buttonRadius * 2, height: buttonRadius * 2)), with: .color(ringColor.opacity(0.85)), lineWidth: max(1.2, r * 0.035))
-            layer.fill(Path(ellipseIn: CGRect(x: buttonCenter.x - buttonRadius * 0.55, y: buttonCenter.y - buttonRadius * 0.55, width: buttonRadius * 1.1, height: buttonRadius * 1.1)), with: .color(Color(white: 0.9)))
+            layer.fill(Path(ellipseIn: CGRect(x: buttonCenter.x - buttonRadius * 0.55, y: buttonCenter.y - buttonRadius * 0.55, width: buttonRadius * 1.1, height: buttonRadius * 1.1)), with: .color(skin == .dark ? Color(white: 0.3) : Color(white: 0.9)))
 
             // Suction intake glow at the front when vacuuming
             if pose.state == .vacuuming {
@@ -233,6 +265,7 @@ enum SuctionSpritePainter {
 struct RobotBadgeView: View {
     var state: RobotState
     var size: CGFloat = 56
+    var skin: RobotSkin = .light
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { timeline in
@@ -246,7 +279,7 @@ struct RobotBadgeView: View {
                 if state == .vacuuming {
                     pose.suctionProgress = CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1))
                 }
-                RobotPainter.draw(pose: pose, size: size, in: context)
+                RobotPainter.draw(pose: pose, size: size, skin: skin, in: context)
             }
         }
         .frame(width: size + 12, height: size + 12)

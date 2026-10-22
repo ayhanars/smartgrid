@@ -125,6 +125,12 @@ struct CleaningSettingsTab: View {
                 Text(app.settings.cleaning.mode.summary).font(.caption).foregroundStyle(.secondary)
             }
 
+            Section("Destination") {
+                Toggle("Send collected files to the Trash instead of a folder", isOn: $app.settings.cleaning.sendToTrash)
+                Text("Files in the Trash can still be undone from the menu until you empty the Trash. The menu also has a one-off “Move All to Trash” button.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Automatic cleaning") {
                 Toggle("Clean automatically when new files land on the Desktop", isOn: $app.settings.cleaning.autoCleanNewFiles)
                 Slider(value: $app.settings.cleaning.autoCleanDelay, in: 3...60, step: 1) {
@@ -290,7 +296,7 @@ struct AppearanceSettingsTab: View {
         Form {
             Section("Robot") {
                 HStack {
-                    RobotBadgeView(state: .driving, size: CGFloat(min(80, app.settings.appearance.robotSize)))
+                    RobotBadgeView(state: .driving, size: CGFloat(min(80, app.settings.appearance.robotSize)), skin: app.settings.appearance.robotSkin)
                     Spacer()
                     VStack(alignment: .trailing, spacing: 4) {
                         if app.isRehearsing {
@@ -307,6 +313,12 @@ struct AppearanceSettingsTab: View {
                             .font(.caption2).foregroundStyle(.tertiary)
                     }
                 }
+                Picker("Colour", selection: $app.settings.appearance.robotSkin) {
+                    ForEach(RobotSkin.allCases) { skin in
+                        Text(skin.displayName).tag(skin)
+                    }
+                }
+                .pickerStyle(.segmented)
                 Slider(value: $app.settings.appearance.robotSize, in: 36...120, step: 4) {
                     Text("Robot size")
                 }

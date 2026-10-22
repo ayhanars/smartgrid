@@ -13,6 +13,7 @@ final class RobotMotionController {
         case vacuumFinished
         case bumped
         case wanderEnded(found: Bool)
+        case patrolStopped
     }
 
     /// Where the robot may roam while bouncing around.
@@ -41,7 +42,7 @@ final class RobotMotionController {
 
     private enum Command {
         case none
-        case travel(waypoints: [CGPoint], index: Int, purpose: Purpose, detour: Bool)
+        case travel(waypoints: [CGPoint], index: Int, purpose: Purpose, detour: Bool, stopWhen: ((CGPoint) -> Bool)?)
         case vacuum(remaining: TimeInterval, total: TimeInterval)
         case hold(remaining: TimeInterval, state: RobotState)
         case wander(WanderRun)
@@ -75,14 +76,22 @@ final class RobotMotionController {
 
     // MARK: Commands
 
-    func travel(along waypoints: [CGPoint], purpose: Purpose) async {
-        guard waypoints.count >= 2 else { return }
+    /// Drives along `waypoints`. With `stopWhen`, the trip ends early as soon as the
+    /// predicate is true for the robot's position (a patrol that found a file).
+    /// Returns true when the whole path was driven, false when stopped or aborted.
+    @discardableResult
+    func travel(along waypoints: [CGPoint], purpose: Purpose, stopWhen: ((CGPoint) -> Bool)? = nil) async -> Bool {
+        guard waypoints.count >= 2 else { return true }
         finishCurrent()
+        travelCompleted = false
         await withCheckedContinuation { continuation in
             self.continuation = continuation
-            self.command = .travel(waypoints: waypoints, index: 1, purpose: purpose, detour: waypoints.count > 2)
+            self.command = .travel(waypoints: waypoints, index: 1, purpose: purpose, detour: waypoints.count > 2, stopWhen: stopWhen)
         }
+        return travelCompleted
     }
+
+    private var travelCompleted = false
 
     func vacuum(duration: TimeInterval) async {
         finishCurrent()
@@ -171,8 +180,14 @@ final class RobotMotionController {
             }
             pose.speed = 0
             pose.lidarAngle += CGFloat(dt) * 0.8
-        case .travel(let waypoints, let index, let purpose, let detour):
-            advance(&pose, waypoints: waypoints, index: index, purpose: purpose, detour: detour, dt: dt)
+        case .travel(let waypoints, let index, let purpose, let detour, let stopWhen):
+            if let stopWhen, stopWhen(pose.position) {
+                pose.state = .approaching
+                finishCurrent()
+                eventHandler?(.patrolStopped)
+                return
+            }
+            advance(&pose, waypoints: waypoints, index: index, purpose: purpose, detour: detour, stopWhen: stopWhen, dt: dt)
         case .vacuum(let remaining, let total):
             pose.state = .vacuuming
             pose.speed = 0
@@ -307,8 +322,9 @@ final class RobotMotionController {
         return a
     }
 
-    private func advance(_ pose: inout RobotPose, waypoints: [CGPoint], index: Int, purpose: Purpose, detour: Bool, dt: TimeInterval) {
+    private func advance(_ pose: inout RobotPose, waypoints: [CGPoint], index: Int, purpose: Purpose, detour: Bool, stopWhen: ((CGPoint) -> Bool)?, dt: TimeInterval) {
         guard index < waypoints.count else {
+            travelCompleted = true
             arrive(&pose, purpose: purpose)
             return
         }
@@ -328,14 +344,14 @@ final class RobotMotionController {
             pose.state = stateWhileDriving(purpose: purpose, detour: detour, remaining: distance)
             if distance - step < 1 {
                 pose.position = target
-                stepWaypoint(waypoints: waypoints, index: index, purpose: purpose, detour: detour, pose: &pose)
+                stepWaypoint(waypoints: waypoints, index: index, purpose: purpose, detour: detour, stopWhen: stopWhen, pose: &pose)
             }
             return
         }
 
         if distance < 1.5 {
             pose.position = target
-            stepWaypoint(waypoints: waypoints, index: index, purpose: purpose, detour: detour, pose: &pose)
+            stepWaypoint(waypoints: waypoints, index: index, purpose: purpose, detour: detour, stopWhen: stopWhen, pose: &pose)
             return
         }
 
@@ -399,7 +415,7 @@ final class RobotMotionController {
 
         if distance - step < 1 {
             pose.position = target
-            stepWaypoint(waypoints: waypoints, index: index, purpose: purpose, detour: detour, pose: &pose)
+            stepWaypoint(waypoints: waypoints, index: index, purpose: purpose, detour: detour, stopWhen: stopWhen, pose: &pose)
         }
     }
 
@@ -413,12 +429,13 @@ final class RobotMotionController {
         }
     }
 
-    private func stepWaypoint(waypoints: [CGPoint], index: Int, purpose: Purpose, detour: Bool, pose: inout RobotPose) {
+    private func stepWaypoint(waypoints: [CGPoint], index: Int, purpose: Purpose, detour: Bool, stopWhen: ((CGPoint) -> Bool)?, pose: inout RobotPose) {
         let next = index + 1
         if next >= waypoints.count {
+            travelCompleted = true
             arrive(&pose, purpose: purpose)
         } else {
-            command = .travel(waypoints: waypoints, index: next, purpose: purpose, detour: detour)
+            command = .travel(waypoints: waypoints, index: next, purpose: purpose, detour: detour, stopWhen: stopWhen)
         }
     }
 

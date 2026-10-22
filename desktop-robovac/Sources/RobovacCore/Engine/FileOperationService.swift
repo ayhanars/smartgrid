@@ -92,6 +92,35 @@ public struct FileOperationService: Sendable {
         return .success(destination)
     }
 
+    /// Moves `item` to the Trash (not a delete: it stays recoverable until the Trash
+    /// is emptied) and returns where it landed, so undo can bring it back.
+    public func trash(item: DesktopItem) -> Result<URL, MoveFailure> {
+        let source = item.url.standardizedFileURL
+        guard fileManager.fileExists(atPath: source.path) || isSymbolicLink(source) else {
+            return .failure(.sourceMissing)
+        }
+        guard let current = DesktopScanner.identity(of: source) else {
+            return .failure(.sourceMissing)
+        }
+        guard current.matches(item.identity) else {
+            return .failure(.identityChanged)
+        }
+        #if os(macOS)
+        var resulting: NSURL?
+        do {
+            try fileManager.trashItem(at: source, resultingItemURL: &resulting)
+        } catch {
+            return .failure(classifyMoveError(error))
+        }
+        if let landed = resulting.map({ $0 as URL }) {
+            return .success(landed.standardizedFileURL)
+        }
+        return .failure(.underlying("The Trash did not report where the file went."))
+        #else
+        return .failure(.destinationUnavailable("Trash is only available on macOS."))
+        #endif
+    }
+
     /// Restores a moved file to its original location. Refuses to overwrite.
     public func restore(from destination: URL, to original: URL, renameIfOccupied: Bool) -> Result<URL, RestoreFailure> {
         let destination = destination.standardizedFileURL

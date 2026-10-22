@@ -241,19 +241,37 @@ final class AppState: ObservableObject {
     // MARK: Cleaning
 
     /// Starts a run with a fresh scan. The preview decision is made by the caller.
-    func startCleaning() {
+    /// `toTrash` forces this run to send files to the Trash regardless of the setting.
+    func startCleaning(toTrash: Bool? = nil) {
         guard !isBusy else { return }
         phase = .scanning
         lastSummary = nil
         lastUndoReport = nil
         runTask = Task { [weak self] in
             guard let self else { return }
-            await self.performRun()
+            // Files that land while the robot is out are picked up by another pass,
+            // so a run ends with a clear desktop rather than a stale list.
+            var passes = 0
+            var movedTotal = 0
+            var combined: CleaningSummary?
+            repeat {
+                passes += 1
+                guard let summary = await self.performRun(toTrash: toTrash, firstPass: passes == 1) else { break }
+                movedTotal += summary.movedCount
+                combined = summary
+                if summary.status != .completed || passes >= 3 { break }
+                await self.refreshPlan()
+            } while self.eligibleCount > 0
+            if let combined, passes > 1 {
+                self.lastSummary = combined
+                self.progress.moved = movedTotal
+            }
         }
     }
 
-    private func performRun() async {
-        let configuration = CleaningConfiguration(settings: settings)
+    @discardableResult
+    private func performRun(toTrash: Bool?, firstPass: Bool) async -> CleaningSummary? {
+        let configuration = CleaningConfiguration(settings: settings, sendToTrash: toTrash)
         let planner = CleaningPlanner(configuration: configuration)
         let result: Result<CleaningPlan, Error> = await Task.detached(priority: .userInitiated) {
             Result { try planner.makePlan() }
@@ -267,12 +285,12 @@ final class AppState: ObservableObject {
         case .failure(let error):
             scanProblem = AppState.describe(error)
             phase = .idle
-            return
+            return nil
         }
         self.plan = freshPlan
         guard !freshPlan.targets.isEmpty else {
             phase = .idle
-            return
+            return nil
         }
 
         let coordinator = CleaningCoordinator(history: history)
@@ -285,9 +303,11 @@ final class AppState: ObservableObject {
         progress = CleaningProgress(total: orderedPlan.targets.count)
         phase = .cleaning
 
+        var result: CleaningSummary?
         do {
             let summary = try await coordinator.run(plan: orderedPlan)
             lastSummary = summary
+            result = summary
         } catch {
             // Only thrown when a run is already active, which the UI prevents.
         }
@@ -299,6 +319,7 @@ final class AppState: ObservableObject {
         phase = .idle
         reloadHistory()
         await refreshPlan()
+        return result
     }
 
     /// Shows the robot and lets it drive around without moving any files.

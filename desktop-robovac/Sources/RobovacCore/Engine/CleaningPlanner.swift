@@ -6,20 +6,24 @@ public struct CleaningConfiguration: Sendable {
     public var mode: CleaningMode
     public var rules: ExclusionRules
     public var destinations: DestinationRules
+    /// Send collected files to the Trash instead of the destination folders.
+    public var sendToTrash: Bool
 
-    public init(desktopURL: URL, mode: CleaningMode, rules: ExclusionRules, destinations: DestinationRules) {
+    public init(desktopURL: URL, mode: CleaningMode, rules: ExclusionRules, destinations: DestinationRules, sendToTrash: Bool = false) {
         self.desktopURL = desktopURL
         self.mode = mode
         self.rules = rules
         self.destinations = destinations
+        self.sendToTrash = sendToTrash
     }
 
-    public init(settings: RobovacSettings) {
+    public init(settings: RobovacSettings, sendToTrash: Bool? = nil) {
         self.init(
             desktopURL: settings.general.desktopURL ?? DesktopScanner.defaultDesktopURL,
             mode: settings.cleaning.mode,
             rules: settings.cleaning.rules,
-            destinations: settings.cleaning.destinations
+            destinations: settings.cleaning.destinations,
+            sendToTrash: sendToTrash ?? settings.cleaning.sendToTrash
         )
     }
 }
@@ -29,13 +33,16 @@ public struct CleaningTarget: Identifiable, Hashable, Sendable {
     public let item: DesktopItem
     public let category: FileCategory
     public let destinationDirectory: URL
+    /// When true the file goes to the Trash and `destinationDirectory` is informational only.
+    public let sendToTrash: Bool
 
     public var id: UUID { item.id }
 
-    public init(item: DesktopItem, category: FileCategory, destinationDirectory: URL) {
+    public init(item: DesktopItem, category: FileCategory, destinationDirectory: URL, sendToTrash: Bool = false) {
         self.item = item
         self.category = category
         self.destinationDirectory = destinationDirectory
+        self.sendToTrash = sendToTrash
     }
 }
 
@@ -129,7 +136,8 @@ public struct CleaningPlanner: Sendable {
                 targets.append(CleaningTarget(
                     item: decision.item,
                     category: decision.category,
-                    destinationDirectory: router.destinationDirectory(for: decision.category)
+                    destinationDirectory: router.destinationDirectory(for: decision.category),
+                    sendToTrash: configuration.sendToTrash
                 ))
             } else {
                 excluded.append(decision)

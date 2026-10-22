@@ -16,6 +16,8 @@ final class SoundManager {
     private var motorLevel: Double = 0
     private var motorTargetLevel: Double = 0
     private var motorRamp: Timer?
+    /// Change in level per 1/30 s tick; set from the requested ramp time.
+    private var motorRampStep: Double = 0.08
     private var cache: [SoundEvent: AVAudioPCMBuffer] = [:]
     private let sampleRate: Double = 44_100
     private lazy var format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
@@ -43,8 +45,9 @@ final class SoundManager {
 
     /// Sets how loud the continuous motor hum should be (0 = silent). The level
     /// is smoothed so speed changes sound like a motor spinning up and down.
-    func setMotorLevel(_ level: Double) {
+    func setMotorLevel(_ level: Double, ramp seconds: TimeInterval = 0.4) {
         let clamped = min(max(level, 0), 1)
+        motorRampStep = max(0.005, 1.0 / (max(0.05, seconds) * 30))
         guard settings.enabled, settings.continuousMotorSound, settings.isEnabled(.movement), settings.volume > 0 else {
             if motorTargetLevel != 0 || motorLevel != 0 { stopMotor() }
             return
@@ -77,11 +80,11 @@ final class SoundManager {
     }
 
     private func rampMotor() {
-        let step = 0.08
+        let step = motorRampStep
         if motorLevel < motorTargetLevel {
             motorLevel = min(motorTargetLevel, motorLevel + step)
         } else if motorLevel > motorTargetLevel {
-            motorLevel = max(motorTargetLevel, motorLevel - step * 1.5)
+            motorLevel = max(motorTargetLevel, motorLevel - step)
         }
         motorPlayer?.volume = Float(settings.volume) * Float(motorLevel) * 0.8
         if motorLevel == 0, motorTargetLevel == 0 {
