@@ -94,18 +94,24 @@ It ignores mouse events, never becomes key, joins every Space and stays out of
 full-screen apps. One window covers the display that holds the menu bar, which
 is the one Finder puts desktop icons on.
 
-macOS has no supported API for reading where Finder draws each icon, and the
-PRD rules out private Finder APIs and AppleScript as the primary mechanism.
-`DesktopIconLayout` therefore reproduces Finder's default grid: columns filled
-from the top-right corner, top to bottom, ordered the way Finder sorts the
-desktop (date added by default, configurable in Settings › Appearance together
-with the grid spacing). The robot drives to those approximate cells. This is an
-approximation by design, and the settings say so.
+Icon positions come from Finder itself: `FinderIconPositions` sends one Apple
+event (`desktop position of every item of desktop`, public Finder scripting,
+no private API) and gets the centre of every icon. macOS asks the user once
+whether the app may control Finder; the app only reads positions. The CI smoke
+test confirms the coordinates match where Finder draws the icon. If the
+permission is declined or Finder does not answer, `DesktopIconLayout` falls
+back to a reproduction of Finder's default grid (columns from the top-right,
+ordered by the configured sort), and the settings say so.
+
+While a file is vacuumed its real Finder icon is drawn on the overlay: it
+shivers, lifts, gets pulled along a curve into the intake and crumples as it
+goes in (`SuctionSpritePainter`; a paper sheet stands in during Test Drive).
 
 The robot lives in the menu bar: it drops out from under its menu bar icon
 when a run starts and slips back up behind the menu bar when it is done.
-By default the overlay sits in front of other windows (still click-through);
-Settings › Appearance can move it behind windows, just above the desktop icons.
+By default the overlay sits behind application windows, just above the desktop
+icons, so the robot only shows on the desktop; Settings › Appearance can put it
+in front of every window instead (still click-through).
 "Test Drive" in the same tab drives the robot around without touching a file,
 which is the quickest way to check the overlay on a new machine.
 
