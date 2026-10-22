@@ -40,6 +40,10 @@ final class AppState: ObservableObject {
             if settings.cleaning != oldValue.cleaning || settings.general.desktopURL != oldValue.general.desktopURL {
                 scheduleRefresh()
             }
+            if settings.general.desktopURL != oldValue.general.desktopURL {
+                startWatchingDesktop()
+            }
+            if !settings.cleaning.autoCleanNewFiles { cancelAutoClean() }
         }
     }
     @Published private(set) var plan: CleaningPlan?
@@ -64,7 +68,10 @@ final class AppState: ObservableObject {
     private var director: RobotSessionDirector?
     private var runTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
+    private var autoCleanTask: Task<Void, Never>?
     private var robotStateCancellable: AnyCancellable?
+    private var watcher: DesktopWatcher?
+    @Published private(set) var autoCleanCountdown: Int?
 
     init(
         settingsStore: SettingsStore = SettingsStore(),
@@ -96,9 +103,60 @@ final class AppState: ObservableObject {
         }
         reloadHistory()
         scheduleRefresh()
+        startWatchingDesktop()
+    }
+
+    /// Keeps the counts live: any change on the Desktop triggers a rescan, and
+    /// optionally an automatic run.
+    func startWatchingDesktop() {
+        let watcher = DesktopWatcher { [weak self] in
+            guard let self else { return }
+            self.desktopDidChange()
+        }
+        watcher.start(watching: desktopURL)
+        self.watcher = watcher
+    }
+
+    private func desktopDidChange() {
+        guard !isCleaning else { return }
+        scheduleRefresh()
+        scheduleAutoCleanIfNeeded()
+    }
+
+    private func scheduleAutoCleanIfNeeded() {
+        autoCleanTask?.cancel()
+        autoCleanCountdown = nil
+        guard settings.cleaning.autoCleanNewFiles else { return }
+        let delay = max(2, Int(settings.cleaning.autoCleanDelay.rounded()))
+        autoCleanTask = Task { [weak self] in
+            // Let the rescan land first, then count down so the user can cancel.
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard let self, !Task.isCancelled, self.eligibleCount > 0, !self.isBusy else {
+                await MainActor.run { self?.autoCleanCountdown = nil }
+                return
+            }
+            for remaining in stride(from: delay, to: 0, by: -1) {
+                self.autoCleanCountdown = remaining
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled || self.isBusy || self.eligibleCount == 0 {
+                    self.autoCleanCountdown = nil
+                    return
+                }
+            }
+            self.autoCleanCountdown = nil
+            self.startCleaning()
+        }
+    }
+
+    func cancelAutoClean() {
+        autoCleanTask?.cancel()
+        autoCleanTask = nil
+        autoCleanCountdown = nil
     }
 
     func shutdown() {
+        watcher?.stop()
+        autoCleanTask?.cancel()
         runTask?.cancel()
         director?.tearDown()
         overlay.hide()

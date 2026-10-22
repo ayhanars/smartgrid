@@ -71,8 +71,7 @@ final class RobotSceneModel: ObservableObject {
     func beginSuction(at target: CGPoint, icon: NSImage?, duration: TimeInterval) {
         pose.suctionTarget = target
         particles.attractor = mouthPosition
-        particles.spawnDust(at: target, radius: robotSize * 0.6)
-        particles.spawnSuction(at: target, radius: robotSize * 0.9)
+        particles.spawnDust(at: target, radius: robotSize * 0.5)
         sprite = SuctionSprite(icon: icon, origin: target, startTime: now, duration: max(0.2, duration), size: robotSize * 0.95)
     }
 

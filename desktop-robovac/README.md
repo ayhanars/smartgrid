@@ -78,7 +78,10 @@ Opening the package in Xcode (`open Package.swift`) works too: run the
    modification date) and moves it, choosing a free name if the destination is
    taken. The move is authoritative: the desktop icon disappears when Finder
    sees the move, never before.
-6. Every move is written to `~/Library/Application Support/Desktop Robovac/history.json`
+6. The Desktop folder is watched live (a dispatch source on the directory), so
+   the counts in the menu update as files land, and an optional auto-clean
+   sends the robot out by itself after a countdown you can cancel.
+7. Every move is written to `~/Library/Application Support/Desktop Robovac/history.json`
    immediately, so a session cut short by a crash or quit is marked
    "interrupted" at next launch and still undoable.
 
@@ -129,9 +132,11 @@ acceleration, braking, pivot turns, an approach phase and the suction
 animation; it runs on a 60 Hz timer only while the overlay is visible, so idle
 CPU is nil.
 
-Trails (damp, sheen, tire marks, plus turning marks), dust, suction swirls
-and the completion burst are drawn in one SwiftUI `Canvas` and expire after
-the configured fade time. Reduced motion disables them and shortens the
+The damp trail is a continuous wet-mop ribbon: samples behind the robot are
+joined into a Catmull-Rom spline and stroked as a soft band with a glossy
+sheen, droplets are scattered along its sides, and chunks are drawn newest
+first with destination-over blending so overlaps never stack. Sheen and tire
+marks are alternatives. Everything expires after the configured fade time. Reduced motion disables them and shortens the
 animation.
 
 Sounds are synthesized at first use (`ProceduralSoundSynth`), so there are no

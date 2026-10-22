@@ -172,21 +172,35 @@ public struct CleaningSettings: Codable, Equatable, Sendable {
     public var mode: CleaningMode
     public var rules: ExclusionRules
     public var destinations: DestinationRules
+    /// Send the robot out by itself when new eligible files appear on the Desktop.
+    public var autoCleanNewFiles: Bool
+    /// Seconds to wait after the last change before an automatic run starts.
+    public var autoCleanDelay: Double
 
-    public init(mode: CleaningMode = .smartClean, rules: ExclusionRules = ExclusionRules(), destinations: DestinationRules = DestinationRules()) {
+    public init(
+        mode: CleaningMode = .smartClean,
+        rules: ExclusionRules = ExclusionRules(),
+        destinations: DestinationRules = DestinationRules(),
+        autoCleanNewFiles: Bool = false,
+        autoCleanDelay: Double = 10
+    ) {
         self.mode = mode
         self.rules = rules
         self.destinations = destinations
+        self.autoCleanNewFiles = autoCleanNewFiles
+        self.autoCleanDelay = autoCleanDelay
     }
 
-    enum CodingKeys: String, CodingKey { case mode, rules, destinations }
+    enum CodingKeys: String, CodingKey { case mode, rules, destinations, autoCleanNewFiles, autoCleanDelay }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             mode: c.decode(CleaningMode.self, forKey: .mode, default: .smartClean),
             rules: c.decode(ExclusionRules.self, forKey: .rules, default: ExclusionRules()),
-            destinations: c.decode(DestinationRules.self, forKey: .destinations, default: DestinationRules())
+            destinations: c.decode(DestinationRules.self, forKey: .destinations, default: DestinationRules()),
+            autoCleanNewFiles: c.decode(Bool.self, forKey: .autoCleanNewFiles, default: false),
+            autoCleanDelay: c.decode(Double.self, forKey: .autoCleanDelay, default: 10)
         )
     }
 }
@@ -288,8 +302,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         robotSize: Double = 64,
         movementSpeed: Double = 260,
         trailStyle: TrailStyle = .damp,
-        trailOpacity: Double = 0.22,
-        trailFadeDuration: Double = 2.0,
+        trailOpacity: Double = 0.4,
+        trailFadeDuration: Double = 3.5,
         particleEffects: Bool = true,
         animationIntensity: Double = 1.0,
         reducedMotion: Bool = false,

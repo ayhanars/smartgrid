@@ -125,6 +125,16 @@ struct CleaningSettingsTab: View {
                 Text(app.settings.cleaning.mode.summary).font(.caption).foregroundStyle(.secondary)
             }
 
+            Section("Automatic cleaning") {
+                Toggle("Clean automatically when new files land on the Desktop", isOn: $app.settings.cleaning.autoCleanNewFiles)
+                Slider(value: $app.settings.cleaning.autoCleanDelay, in: 3...60, step: 1) {
+                    Text("Wait \(Int(app.settings.cleaning.autoCleanDelay)) s before starting")
+                }
+                .disabled(!app.settings.cleaning.autoCleanNewFiles)
+                Text("The Desktop is watched live either way, so the count in the menu is always current. With this on, a new screenshot sends the robot out by itself after the delay; the menu shows a countdown you can cancel.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("File categories") {
                 ForEach(FileCategory.allCases) { category in
                     categoryRow(category)

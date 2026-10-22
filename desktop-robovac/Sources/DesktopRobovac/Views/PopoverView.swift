@@ -12,6 +12,15 @@ struct PopoverView: View {
             heroCard
             statTiles
             if app.isCleaning { progressSection }
+            if let countdown = app.autoCleanCountdown {
+                notice("New files spotted. Auto-cleaning in \(countdown)s…", symbol: "timer", tint: .blue) {
+                    HStack {
+                        Button("Clean Now") { app.cancelAutoClean(); app.startCleaning() }
+                        Button("Not Now") { app.cancelAutoClean() }
+                    }
+                    .controlSize(.small)
+                }
+            }
             if let problem = app.scanProblem { notice(problem.message, symbol: "exclamationmark.triangle.fill", tint: .orange) { problemActions(problem) } }
             if let interrupted = app.interruptedSession { interruptedSection(interrupted) }
             if let report = app.lastUndoReport, !report.isComplete { undoConflictSection(report) }
