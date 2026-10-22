@@ -25,6 +25,8 @@ final class RobotMotionController {
     enum Purpose: Equatable {
         case deploy
         case collect
+        /// A coverage lane: plain driving, never shown as a detour.
+        case patrol
         case returnHome
         case exit
     }
@@ -423,6 +425,7 @@ final class RobotMotionController {
         switch purpose {
         case .deploy: return .deploying
         case .exit, .returnHome: return .returning
+        case .patrol: return .driving
         case .collect:
             if remaining < approachDistance { return .approaching }
             return detour ? .avoiding : .driving
@@ -443,6 +446,7 @@ final class RobotMotionController {
         pose.speed = 0
         switch purpose {
         case .collect: pose.state = .approaching
+        case .patrol: pose.state = .driving
         case .deploy: pose.state = .idle
         case .returnHome: pose.state = .completed
         case .exit: pose.state = .idle

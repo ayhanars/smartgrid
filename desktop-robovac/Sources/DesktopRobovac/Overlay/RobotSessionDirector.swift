@@ -399,7 +399,7 @@ final class RobotSessionDirector: CleaningSessionObserver {
         if found(scene.pose.position) { return }
         let remaining = Array(patrolRoute[patrolIndex...])
         let waypoints = [scene.pose.position] + remaining
-        let completed = await scene.motion.travel(along: waypoints, purpose: .collect, stopWhen: found)
+        let completed = await scene.motion.travel(along: waypoints, purpose: .patrol, stopWhen: found)
         if completed {
             patrolIndex = patrolRoute.count
         } else {
