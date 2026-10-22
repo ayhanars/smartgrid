@@ -242,14 +242,21 @@ struct PopoverView: View {
 
     private var modeTabs: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TabStrip(items: CleaningMode.allCases, title: { modeTabName($0) }, selection: $app.settings.cleaning.mode, disabled: app.isCleaning)
+            DSSectionHeader(title: "Mode", value: app.settings.cleaning.mode.displayName)
+            PillPicker(options: CleaningMode.allCases, selection: $app.settings.cleaning.mode, disabled: app.isCleaning) { mode in
+                Text(modeTabName(mode))
+                    .font(DS.smallMedium)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .help(modeDescription(mode))
+            }
             Text(modeDescription(app.settings.cleaning.mode))
                 .font(DS.small)
                 .foregroundStyle(DS.secondary60)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 2)
         }
-        .padding(.horizontal, 2)
     }
 
     /// Short enough that all three fit side by side without scrolling.
