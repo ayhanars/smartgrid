@@ -163,21 +163,28 @@ final class RobotSessionDirector: CleaningSessionObserver {
     }
 
     func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget? {
-        guard isActive, !cancelled, bounces, let area = roamArea else { return nil }
+        guard isActive, !cancelled, let area = roamArea else { return nil }
+        let pattern = settings.appearance.movementPattern
+        guard pattern != .sweep else { return nil }   // lane order comes from the plan
         let candidates: [(CleaningTarget, CGPoint)] = remaining.compactMap { target in
             guard let position = positions[target.id] else { return nil }
             return (target, position)
         }
         guard !candidates.isEmpty else { return nil }
 
-        // Roam until a file comes within sensor range; after a while give up and
-        // head for the nearest one so a run always finishes.
-        let sensorRange = robotSize * 1.4
-        let budget: TimeInterval = settings.appearance.reducedMotion ? 2 : (4 + Double(random.nextUnit()) * 5)
-        await scene.motion.wander(in: area, maxDuration: budget) { point in
-            candidates.contains { hypot($0.1.x - point.x, $0.1.y - point.y) < sensorRange }
+        if pattern == .bounce {
+            // Roam until a file comes within sensor range; after the exploring time
+            // give up and head for the nearest one so a run always finishes.
+            let sensorRange = robotSize * 1.4
+            let configured = max(0, settings.appearance.wanderSeconds)
+            let budget: TimeInterval = settings.appearance.reducedMotion ? min(2, configured) : configured * (0.7 + Double(random.nextUnit()) * 0.6)
+            if budget > 0.2 {
+                await scene.motion.wander(in: area, maxDuration: budget) { point in
+                    candidates.contains { hypot($0.1.x - point.x, $0.1.y - point.y) < sensorRange }
+                }
+            }
+            guard !cancelled else { return nil }
         }
-        guard !cancelled else { return nil }
 
         let here = scene.pose.position
         let nearest = candidates.min { a, b in
@@ -269,6 +276,7 @@ final class RobotSessionDirector: CleaningSessionObserver {
         await deploy()
 
         let inner = area.bounds.insetBy(dx: robotSize, dy: robotSize)
+        let wanderBudget = min(5, max(0, settings.appearance.wanderSeconds))
         for _ in 0..<3 {
             guard !cancelled else { break }
             let target = CGPoint(
@@ -276,8 +284,8 @@ final class RobotSessionDirector: CleaningSessionObserver {
                 y: inner.minY + CGFloat(random.nextUnit()) * inner.height
             )
             let sensorRange = robotSize * 1.4
-            if bounces {
-                await scene.motion.wander(in: area, maxDuration: 5) { point in
+            if bounces, wanderBudget > 0.2 {
+                await scene.motion.wander(in: area, maxDuration: wanderBudget) { point in
                     hypot(target.x - point.x, target.y - point.y) < sensorRange
                 }
             }

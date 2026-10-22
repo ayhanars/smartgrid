@@ -174,16 +174,19 @@ final class SoundManager {
         case .suction:
             return synth.vacuumSuction(intensity: Float(settings.suctionIntensity))
         case .collect:
+            // A soft clunk of the file landing in the bin and a short, quiet chime.
             return synth.mix([
-                synth.sweep(from: 900, to: 260, duration: 0.07, amplitude: 0.5, attack: 0.002, release: 0.04),
-                synth.delayed(synth.sweep(from: 1_320, to: 1_320, duration: 0.28, amplitude: 0.3, attack: 0.004, release: 0.22), by: 0.06),
+                synth.sweep(from: 260, to: 110, duration: 0.09, amplitude: 0.45, attack: 0.002, release: 0.06),
+                synth.delayed(synth.sweep(from: 1_046, to: 1_046, duration: 0.16, amplitude: 0.14, attack: 0.004, release: 0.12), by: 0.05),
             ])
         case .turn:
-            return synth.sweep(from: 640, to: 440, duration: 0.1, amplitude: 0.3, attack: 0.005, release: 0.05)
+            // A soft servo whir: filtered noise swelling briefly, no tone.
+            return synth.noise(duration: 0.22, amplitude: 0.16, cutoffStart: 500, cutoffEnd: 900, attack: 0.06, release: 0.12)
         case .avoid:
+            // A muted thud as the bumper meets an edge.
             return synth.mix([
-                synth.sweep(from: 520, to: 520, duration: 0.09, amplitude: 0.35, attack: 0.005, release: 0.04),
-                synth.delayed(synth.sweep(from: 400, to: 400, duration: 0.12, amplitude: 0.35, attack: 0.005, release: 0.06), by: 0.11),
+                synth.sweep(from: 120, to: 70, duration: 0.14, amplitude: 0.35, attack: 0.002, release: 0.1),
+                synth.noise(duration: 0.05, amplitude: 0.12, cutoffStart: 600, cutoffEnd: 200, attack: 0.001, release: 0.04),
             ])
         case .complete:
             let notes: [Double] = [523.25, 659.25, 783.99, 1_046.5]

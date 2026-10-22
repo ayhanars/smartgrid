@@ -52,12 +52,12 @@ enum RobotPainter {
                     for spread: CGFloat in [-0.16, 0, 0.16] {
                         var bristle = Path()
                         bristle.move(to: brushCenter)
-                        let length = r * (spread == 0 ? 0.5 : 0.44)
+                        let length = r * (spread == 0 ? 0.34 : 0.3)
                         bristle.addLine(to: CGPoint(x: brushCenter.x + cos(angle + spread) * length, y: brushCenter.y + sin(angle + spread) * length))
-                        layer.stroke(bristle, with: .color(Color(white: 0.78).opacity(0.9)), style: StrokeStyle(lineWidth: max(1, r * 0.045), lineCap: .round))
+                        layer.stroke(bristle, with: .color(Color(white: 0.78).opacity(0.85)), style: StrokeStyle(lineWidth: max(0.8, r * 0.035), lineCap: .round))
                     }
                 }
-                layer.fill(Path(ellipseIn: CGRect(x: brushCenter.x - r * 0.07, y: brushCenter.y - r * 0.07, width: r * 0.14, height: r * 0.14)), with: .color(Color(white: 0.3)))
+                layer.fill(Path(ellipseIn: CGRect(x: brushCenter.x - r * 0.05, y: brushCenter.y - r * 0.05, width: r * 0.1, height: r * 0.1)), with: .color(Color(white: 0.3)))
             }
 
             // Body: white with soft shading towards the edge.

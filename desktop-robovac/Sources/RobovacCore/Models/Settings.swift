@@ -247,15 +247,26 @@ public enum IconArrangement: String, Codable, CaseIterable, Sendable, Identifiab
 public enum MovementPattern: String, Codable, CaseIterable, Sendable, Identifiable {
     /// Straight runs with random bounces off the edges, like a real robot vacuum.
     case bounce
-    /// Lane-by-lane sweep from the right edge, shortest route between files.
+    /// Lane-by-lane sweep from the right edge, the way the icons are arranged.
     case sweep
+    /// Always the nearest file next, no exploring.
+    case direct
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
-        case .bounce: return "Bounce around (robot vacuum)"
-        case .sweep: return "Systematic sweep"
+        case .bounce: return "Explore and bounce"
+        case .sweep: return "Lane by lane"
+        case .direct: return "Nearest file first"
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .bounce: return "Straight runs with a new heading at every edge, like a real robot vacuum. Files within sensor range get collected; after the exploring time it heads for the nearest one."
+        case .sweep: return "Works the desktop in vertical lanes from the right edge, top to bottom then bottom to top, visiting files in that order."
+        case .direct: return "Drives straight to the nearest remaining file every time. Quickest, most predictable."
         }
     }
 }
@@ -297,6 +308,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
     public var robotLayer: RobotLayer
     /// Ask Finder for the exact icon positions (needs the Automation permission once).
     public var useFinderIconPositions: Bool
+    /// Seconds the robot explores before giving up and heading for a file (bounce pattern).
+    public var wanderSeconds: Double
 
     public init(
         robotSize: Double = 64,
@@ -312,7 +325,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         iconGridRowHeight: Double = 104,
         movementPattern: MovementPattern = .bounce,
         robotLayer: RobotLayer = .behindWindows,
-        useFinderIconPositions: Bool = true
+        useFinderIconPositions: Bool = true,
+        wanderSeconds: Double = 5
     ) {
         self.robotSize = robotSize
         self.movementSpeed = movementSpeed
@@ -328,12 +342,13 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         self.movementPattern = movementPattern
         self.robotLayer = robotLayer
         self.useFinderIconPositions = useFinderIconPositions
+        self.wanderSeconds = wanderSeconds
     }
 
     enum CodingKeys: String, CodingKey {
         case robotSize, movementSpeed, trailStyle, trailOpacity, trailFadeDuration
         case particleEffects, animationIntensity, reducedMotion, iconArrangement
-        case iconGridColumnWidth, iconGridRowHeight, movementPattern, robotLayer, useFinderIconPositions
+        case iconGridColumnWidth, iconGridRowHeight, movementPattern, robotLayer, useFinderIconPositions, wanderSeconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -353,7 +368,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
             iconGridRowHeight: c.decode(Double.self, forKey: .iconGridRowHeight, default: d.iconGridRowHeight),
             movementPattern: c.decode(MovementPattern.self, forKey: .movementPattern, default: d.movementPattern),
             robotLayer: c.decode(RobotLayer.self, forKey: .robotLayer, default: d.robotLayer),
-            useFinderIconPositions: c.decode(Bool.self, forKey: .useFinderIconPositions, default: d.useFinderIconPositions)
+            useFinderIconPositions: c.decode(Bool.self, forKey: .useFinderIconPositions, default: d.useFinderIconPositions),
+            wanderSeconds: c.decode(Double.self, forKey: .wanderSeconds, default: d.wanderSeconds)
         )
     }
 }
@@ -376,8 +392,8 @@ public enum SoundEvent: String, Codable, CaseIterable, Sendable, Identifiable {
         case .movement: return "Motor and wheels"
         case .suction: return "Vacuum suction"
         case .collect: return "File collected"
-        case .turn: return "Turning"
-        case .avoid: return "Avoiding an excluded area"
+        case .turn: return "Turning (soft whir)"
+        case .avoid: return "Bumping an edge (muted thud)"
         case .complete: return "Cleaning complete"
         case .error: return "Error or blocked"
         }
@@ -394,15 +410,22 @@ public struct SoundSettings: Codable, Equatable, Sendable {
     public var enabledEvents: Set<SoundEvent>
     /// A soft motor hum that runs while the robot drives, louder with speed.
     public var continuousMotorSound: Bool
+    /// Bumped when the default sound set changes, so saved settings adopt the new set once.
+    public var defaultsVersion: Int
+
+    /// Motor hum, suction, pickups and the completion chime; no turn or bump blips.
+    public static let defaultEvents: Set<SoundEvent> = [.start, .movement, .suction, .collect, .complete, .error]
+    public static let currentDefaultsVersion = 2
 
     public init(
         enabled: Bool = true,
         volume: Double = 0.6,
-        movementSoundFrequency: Double = 0.5,
+        movementSoundFrequency: Double = 0,
         suctionIntensity: Double = 0.7,
         completionSound: Bool = true,
-        enabledEvents: Set<SoundEvent> = Set(SoundEvent.allCases),
-        continuousMotorSound: Bool = true
+        enabledEvents: Set<SoundEvent> = SoundSettings.defaultEvents,
+        continuousMotorSound: Bool = true,
+        defaultsVersion: Int = SoundSettings.currentDefaultsVersion
     ) {
         self.enabled = enabled
         self.volume = volume
@@ -411,24 +434,28 @@ public struct SoundSettings: Codable, Equatable, Sendable {
         self.completionSound = completionSound
         self.enabledEvents = enabledEvents
         self.continuousMotorSound = continuousMotorSound
+        self.defaultsVersion = defaultsVersion
     }
 
     enum CodingKeys: String, CodingKey {
         case enabled, volume, movementSoundFrequency, suctionIntensity, completionSound, enabledEvents
-        case continuousMotorSound
+        case continuousMotorSound, defaultsVersion
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = SoundSettings()
+        let version = c.decode(Int.self, forKey: .defaultsVersion, default: 1)
+        let upgraded = version < SoundSettings.currentDefaultsVersion
         self.init(
             enabled: c.decode(Bool.self, forKey: .enabled, default: d.enabled),
             volume: c.decode(Double.self, forKey: .volume, default: d.volume),
-            movementSoundFrequency: c.decode(Double.self, forKey: .movementSoundFrequency, default: d.movementSoundFrequency),
+            movementSoundFrequency: upgraded ? d.movementSoundFrequency : c.decode(Double.self, forKey: .movementSoundFrequency, default: d.movementSoundFrequency),
             suctionIntensity: c.decode(Double.self, forKey: .suctionIntensity, default: d.suctionIntensity),
             completionSound: c.decode(Bool.self, forKey: .completionSound, default: d.completionSound),
-            enabledEvents: c.decode(Set<SoundEvent>.self, forKey: .enabledEvents, default: d.enabledEvents),
-            continuousMotorSound: c.decode(Bool.self, forKey: .continuousMotorSound, default: d.continuousMotorSound)
+            enabledEvents: upgraded ? d.enabledEvents : c.decode(Set<SoundEvent>.self, forKey: .enabledEvents, default: d.enabledEvents),
+            continuousMotorSound: c.decode(Bool.self, forKey: .continuousMotorSound, default: d.continuousMotorSound),
+            defaultsVersion: SoundSettings.currentDefaultsVersion
         )
     }
 

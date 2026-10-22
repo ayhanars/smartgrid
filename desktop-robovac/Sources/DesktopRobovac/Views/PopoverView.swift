@@ -232,15 +232,44 @@ struct PopoverView: View {
     // MARK: Actions
 
     private var modePicker: some View {
-        Picker("Mode", selection: $app.settings.cleaning.mode) {
-            ForEach(CleaningMode.allCases) { mode in
-                Text(mode.displayName).tag(mode)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("MODE").font(.caption2.weight(.semibold)).foregroundStyle(.tertiary)
+                Spacer()
+                Text(app.settings.appearance.movementPattern.displayName)
+                    .font(.caption2).foregroundStyle(.tertiary)
+                    .help("Route pattern, set in Settings › Appearance › Movement")
             }
+            Picker("Mode", selection: $app.settings.cleaning.mode) {
+                ForEach(CleaningMode.allCases) { mode in
+                    Label(modeShortName(mode), systemImage: modeSymbol(mode)).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .disabled(app.isCleaning)
+            Text(app.settings.cleaning.mode.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .disabled(app.isCleaning)
-        .help(app.settings.cleaning.mode.summary)
+    }
+
+    private func modeShortName(_ mode: CleaningMode) -> String {
+        switch mode {
+        case .smartClean: return "Smart"
+        case .screenshotSweep: return "Screenshots"
+        case .gentleClean: return "Gentle"
+        }
+    }
+
+    private func modeSymbol(_ mode: CleaningMode) -> String {
+        switch mode {
+        case .smartClean: return "sparkles"
+        case .screenshotSweep: return "camera.viewfinder"
+        case .gentleClean: return "leaf"
+        }
     }
 
     private var primaryActions: some View {

@@ -118,13 +118,16 @@ in front of every window instead (still click-through).
 "Test Drive" in the same tab drives the robot around without touching a file,
 which is the quickest way to check the overlay on a new machine.
 
-Two movement patterns are available. **Bounce** (the default) behaves like a
+Three route patterns are available in Settings › Appearance › Movement, with
+a slider for how long the robot may explore before heading for a file.
+**Explore and bounce** (the default) behaves like a
 real robot vacuum: straight runs, a random new heading whenever it meets an
 edge or an excluded folder, occasional spontaneous turns, and it collects
 whichever file comes within sensor range; after a few seconds without finding
 one it heads for the nearest file so a run always finishes. The engine supports
 this through `sessionChooseNextTarget`, which lets the observer pick the next
-file instead of following the plan's order. **Sweep** orders targets into a
+file instead of following the plan's order. **Nearest file first** always
+picks the closest remaining file. **Lane by lane** orders targets into a
 lane-by-lane pass from the right edge with `NavigationPlanner`, which also
 routes detours on a grid (breadth-first search plus line-of-sight
 simplification) around excluded folders. `RobotMotionController` adds
@@ -146,7 +149,8 @@ Sounds are synthesized at first use (`ProceduralSoundSynth`), so there are no
 audio assets; each event can be toggled individually and nothing plays at launch.
 A seamless motor hum loops while the robot drives and follows its speed, and
 the suction effect layers an air rush, a turbine spinning up, the rattle of the
-file going in and a final thump.
+file going in and a final thump. Turn and bump sounds exist (a soft whir and a
+muted thud) but are off by default to keep the robot from sounding cartoonish.
 
 ## Dock integration
 

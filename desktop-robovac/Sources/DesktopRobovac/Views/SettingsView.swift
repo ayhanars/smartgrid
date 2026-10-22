@@ -316,15 +316,18 @@ struct AppearanceSettingsTab: View {
             }
 
             Section("Movement") {
-                Picker("Pattern", selection: $app.settings.appearance.movementPattern) {
+                Picker("Route", selection: $app.settings.appearance.movementPattern) {
                     ForEach(MovementPattern.allCases) { pattern in
                         Text(pattern.displayName).tag(pattern)
                     }
                 }
-                Text(app.settings.appearance.movementPattern == .bounce
-                     ? "Straight runs with random turns at the edges, like a real robot vacuum. Files within sensor range get collected; after a while the robot heads for the nearest one so a run always finishes."
-                     : "Lane-by-lane sweep from the right edge with the shortest route between files.")
+                .pickerStyle(.radioGroup)
+                Text(app.settings.appearance.movementPattern.summary)
                     .font(.caption).foregroundStyle(.secondary)
+                Slider(value: $app.settings.appearance.wanderSeconds, in: 0...15, step: 1) {
+                    Text(app.settings.appearance.wanderSeconds == 0 ? "No exploring" : "Explore up to \(Int(app.settings.appearance.wanderSeconds)) s per file")
+                }
+                .disabled(app.settings.appearance.movementPattern != .bounce)
                 Picker("Robot layer", selection: $app.settings.appearance.robotLayer) {
                     ForEach(RobotLayer.allCases) { layer in
                         Text(layer.displayName).tag(layer)
@@ -392,7 +395,7 @@ struct SoundSettingsTab: View {
             }
             Section("Character") {
                 Toggle("Continuous motor hum while driving", isOn: $app.settings.sound.continuousMotorSound)
-                Slider(value: $app.settings.sound.movementSoundFrequency, in: 0...1) { Text("Wheel squeak frequency") }
+                Slider(value: $app.settings.sound.movementSoundFrequency, in: 0...1) { Text("Occasional wheel noise") }
                 Slider(value: $app.settings.sound.suctionIntensity, in: 0...1) { Text("Suction intensity") }
                 Toggle("Play a sound when cleaning completes", isOn: $app.settings.sound.completionSound)
             }
