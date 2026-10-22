@@ -1,16 +1,13 @@
 import SwiftUI
 import RobovacCore
 
-/// Transient surface effects behind the robot. The damp style is a continuous
-/// wet-mop ribbon: a smooth band with a glossy sheen, soft edges and droplets
-/// scattered along its sides, fading away after the configured time.
+/// Transient surface effects behind the robot. The damp style is a narrow,
+/// slightly glossy footprint left on a smooth floor: it follows the robot's
+/// exact path (straight runs, rounded corners) and dries section by section,
+/// losing its gloss first and then its opacity until nothing is left.
 final class TrailRenderer {
     struct Sample {
-        enum Kind {
-            case drive
-            case turn
-            case droplet(size: CGFloat, side: CGFloat)
-        }
+        enum Kind { case drive, turn }
         var position: CGPoint
         var heading: CGFloat
         var time: TimeInterval
@@ -18,21 +15,18 @@ final class TrailRenderer {
     }
 
     var style: TrailStyle = .damp
-    var opacity: Double = 0.35
-    var fadeDuration: TimeInterval = 3.5
+    var opacity: Double = 0.4
+    var fadeDuration: TimeInterval = 4.5
     var robotSize: CGFloat = 64
     var enabled = true
 
     private(set) var samples: [Sample] = []
     private var lastSamplePosition: CGPoint?
     private var lastTurnSampleTime: TimeInterval = 0
-    private var distanceSinceDroplet: CGFloat = 0
-    private var random = SplitMix64(seed: 0xD20B)
 
     func reset() {
         samples.removeAll()
         lastSamplePosition = nil
-        distanceSinceDroplet = 0
     }
 
     func record(pose: RobotPose, now: TimeInterval) {
@@ -41,38 +35,18 @@ final class TrailRenderer {
 
         switch pose.state {
         case .driving, .approaching, .avoiding, .returning, .deploying:
-            let moved = lastSamplePosition.map { hypot(pose.position.x - $0.x, pose.position.y - $0.y) } ?? .greatestFiniteMagnitude
-            if moved < 5 { return }
+            if let last = lastSamplePosition, hypot(pose.position.x - last.x, pose.position.y - last.y) < 4 {
+                return
+            }
             samples.append(Sample(position: pose.position, heading: pose.heading, time: now, kind: .drive))
             lastSamplePosition = pose.position
-
-            if style == .damp, moved.isFinite {
-                distanceSinceDroplet += moved
-                if distanceSinceDroplet > 28 {
-                    distanceSinceDroplet = 0
-                    let count = random.nextUnit() < 0.35 ? 2 : 1
-                    for _ in 0..<count {
-                        let side: CGFloat = random.nextUnit() < 0.5 ? -1 : 1
-                        let offset = robotSize * (0.42 + CGFloat(random.nextUnit()) * 0.35)
-                        let back = CGFloat(random.nextUnit()) * robotSize * 0.4
-                        let nx = -sin(pose.heading)
-                        let ny = cos(pose.heading)
-                        let position = CGPoint(
-                            x: pose.position.x + nx * side * offset - cos(pose.heading) * back,
-                            y: pose.position.y + ny * side * offset - sin(pose.heading) * back
-                        )
-                        let size = 2 + CGFloat(random.nextUnit() * random.nextUnit()) * robotSize * 0.14
-                        samples.append(Sample(position: position, heading: pose.heading, time: now, kind: .droplet(size: size, side: side)))
-                    }
-                }
-            }
         case .turning:
             if now - lastTurnSampleTime > 0.08 {
                 samples.append(Sample(position: pose.position, heading: pose.heading, time: now, kind: .turn))
                 lastTurnSampleTime = now
             }
         default:
-            // Break the ribbon so the next drive starts a fresh one.
+            // Break the footprint so the next drive starts a fresh one.
             lastSamplePosition = nil
         }
     }
@@ -83,6 +57,21 @@ final class TrailRenderer {
         samples.removeAll { $0.time < cutoff }
     }
 
+    // MARK: Drying
+
+    /// How much of the wet look is left: 1 fresh, 0 dry.
+    private func wetness(life: Double) -> Double {
+        // Holds briefly behind the robot, then dries evenly.
+        let eased = min(1, life * 1.12)
+        return eased * eased * (3 - 2 * eased)
+    }
+
+    /// Gloss dries off well before the damp patch itself disappears.
+    private func gloss(life: Double) -> Double {
+        let g = max(0, (life - 0.4) / 0.6)
+        return g * g
+    }
+
     // MARK: Drawing
 
     func draw(in context: GraphicsContext, now: TimeInterval) {
@@ -90,31 +79,22 @@ final class TrailRenderer {
         let fade = max(0.1, fadeDuration)
 
         // Newest first with destination-over blending: where strokes overlap, the
-        // newest wins instead of alphas stacking into dark blobs. Because later
-        // draws land *behind* earlier ones, each element is drawn top layer first.
+        // newest wins instead of alphas stacking. Because later draws land
+        // *behind* earlier ones, each layer is drawn top layer first.
         var layer = context
         layer.blendMode = .destinationOver
 
-        // Droplets and turn marks sit on top of the band.
-        for sample in samples.reversed() {
+        for sample in samples.reversed() where sample.kind == .turn {
             let life = max(0, 1 - (now - sample.time) / fade)
-            let alpha = opacity * fadeCurve(life)
-            switch sample.kind {
-            case .droplet(let size, _):
-                drawDroplet(at: sample.position, size: size, alpha: alpha, in: layer)
-            case .turn:
-                drawTurnMark(sample, alpha: alpha, in: layer)
-            case .drive:
-                break
-            }
+            drawTurnMark(sample, alpha: opacity * 0.5 * wetness(life: life), in: layer)
         }
 
-        // The band, as smooth runs split into short chunks so each chunk can fade.
-        var run: [Sample] = []
+        // Split the drive samples into continuous runs, then into short sections
+        // that each dry on their own schedule.
         var runs: [[Sample]] = []
+        var run: [Sample] = []
         var previous: Sample?
-        for sample in samples {
-            guard case .drive = sample.kind else { continue }
+        for sample in samples where sample.kind == .drive {
             if let previous, hypot(sample.position.x - previous.position.x, sample.position.y - previous.position.y) > robotSize * 1.5 {
                 if run.count > 1 { runs.append(run) }
                 run = []
@@ -124,76 +104,82 @@ final class TrailRenderer {
         }
         if run.count > 1 { runs.append(run) }
 
-        // Collect the chunks (newest first), then stroke each band layer across
-        // every chunk before the next layer, so the layers nest along the whole
-        // ribbon instead of per chunk.
-        var chunks: [(path: Path, alpha: Double)] = []
+        struct Section {
+            var path: Path
+            var life: Double
+        }
+        var sections: [Section] = []
         for run in runs.reversed() {
-            let chunkSize = 5
+            let sectionSize = 4
             var end = run.count - 1
             while end > 0 {
-                let start = max(0, end - chunkSize)
-                // One sample of overlap on each side keeps the curve continuous.
-                let slice = Array(run[max(0, start - 1)...min(run.count - 1, end + 1)])
+                let start = max(0, end - sectionSize)
+                var path = Path()
+                path.move(to: run[start].position)
+                for index in (start + 1)...end {
+                    path.addLine(to: run[index].position)
+                }
                 let life = max(0, 1 - (now - run[end].time) / fade)
-                chunks.append((TrailRenderer.smoothPath(through: slice.map { $0.position }), opacity * fadeCurve(life)))
+                sections.append(Section(path: path, life: life))
                 end = start
             }
         }
-        for bandLayer in bandLayers() {
-            for chunk in chunks {
-                layer.stroke(chunk.path, with: .color(bandLayer.color.opacity(chunk.alpha * bandLayer.alpha)), style: StrokeStyle(lineWidth: bandLayer.width, lineCap: .round, lineJoin: .round, dash: bandLayer.dash))
-            }
-        }
-    }
+        guard !sections.isEmpty else { return }
 
-    private struct BandLayer {
-        var color: Color
-        var alpha: Double
-        var width: CGFloat
-        var dash: [CGFloat] = []
-    }
-
-    /// Top layer first (it is drawn first under destination-over blending).
-    private func bandLayers() -> [BandLayer] {
-        let width = robotSize * 0.92
+        let baseWidth = robotSize * 0.6
         switch style {
         case .damp:
-            return [
-                BandLayer(color: .white, alpha: 0.55, width: width * 0.16),
-                BandLayer(color: Color(red: 0.8, green: 0.9, blue: 1.0), alpha: 0.75, width: width * 0.62),
-                BandLayer(color: Color(red: 0.6, green: 0.78, blue: 1.0), alpha: 0.6, width: width),
-                BandLayer(color: Color(red: 0.55, green: 0.74, blue: 1.0), alpha: 0.25, width: width * 1.18),
-            ]
+            let tint = Color(red: 0.70, green: 0.76, blue: 0.84)
+            let highlight = Color(red: 0.93, green: 0.95, blue: 0.98)
+            // Top: a thin soft gloss that disappears first.
+            for section in sections {
+                let g = gloss(life: section.life)
+                guard g > 0.01 else { continue }
+                layer.stroke(section.path, with: .color(highlight.opacity(opacity * 0.4 * g)),
+                             style: StrokeStyle(lineWidth: baseWidth * 0.22, lineCap: .round, lineJoin: .round))
+            }
+            // Middle: the damp patch, shrinking slightly from the edges as it dries.
+            for section in sections {
+                let w = wetness(life: section.life)
+                guard w > 0.01 else { continue }
+                layer.stroke(section.path, with: .color(tint.opacity(opacity * 0.42 * w)),
+                             style: StrokeStyle(lineWidth: baseWidth * (0.8 + 0.2 * w), lineCap: .round, lineJoin: .round))
+            }
+            // Bottom: a faint soft edge.
+            for section in sections {
+                let w = wetness(life: section.life)
+                guard w > 0.01 else { continue }
+                layer.stroke(section.path, with: .color(tint.opacity(opacity * 0.14 * w)),
+                             style: StrokeStyle(lineWidth: baseWidth * (1.05 + 0.15 * w), lineCap: .round, lineJoin: .round))
+            }
         case .sheen:
-            return [
-                BandLayer(color: .white, alpha: 0.9, width: width * 0.2),
-                BandLayer(color: .white, alpha: 0.35, width: width * 0.7),
-            ]
+            for section in sections {
+                let g = gloss(life: section.life)
+                guard g > 0.01 else { continue }
+                layer.stroke(section.path, with: .color(Color.white.opacity(opacity * 0.6 * g)),
+                             style: StrokeStyle(lineWidth: baseWidth * 0.3, lineCap: .round, lineJoin: .round))
+            }
+            for section in sections {
+                let w = wetness(life: section.life)
+                guard w > 0.01 else { continue }
+                layer.stroke(section.path, with: .color(Color.white.opacity(opacity * 0.25 * w)),
+                             style: StrokeStyle(lineWidth: baseWidth, lineCap: .round, lineJoin: .round))
+            }
         case .tireMarks:
-            return [BandLayer(color: .black, alpha: 0.75, width: width, dash: [3, 6])]
+            for section in sections {
+                let w = wetness(life: section.life)
+                guard w > 0.01 else { continue }
+                layer.stroke(section.path, with: .color(Color.black.opacity(opacity * 0.6 * w)),
+                             style: StrokeStyle(lineWidth: baseWidth * 1.2, lineCap: .butt, lineJoin: .round, dash: [3, 6]))
+            }
         case .none:
-            return []
+            break
         }
-    }
-
-    /// Holds at full strength for the first third, then fades out.
-    private func fadeCurve(_ life: Double) -> Double {
-        min(1, life * 1.5)
-    }
-
-    private func drawDroplet(at point: CGPoint, size: CGFloat, alpha: Double, in layer: GraphicsContext) {
-        guard style == .damp else { return }
-        let rect = CGRect(x: point.x - size / 2, y: point.y - size * 0.4, width: size, height: size * 0.8)
-        // Highlight first (it ends up on top), then the body.
-        layer.fill(Path(ellipseIn: CGRect(x: rect.minX + size * 0.18, y: rect.minY + size * 0.12, width: size * 0.3, height: size * 0.22)), with: .color(Color.white.opacity(alpha * 0.9)))
-        layer.fill(Path(ellipseIn: rect), with: .color(Color(red: 0.7, green: 0.85, blue: 1.0).opacity(alpha * 0.85)))
-        layer.stroke(Path(ellipseIn: rect), with: .color(Color(red: 0.45, green: 0.65, blue: 0.95).opacity(alpha * 0.5)), lineWidth: 0.8)
     }
 
     private func drawTurnMark(_ sample: Sample, alpha: Double, in layer: GraphicsContext) {
-        let offset = robotSize * 0.34
-        let color: Color = style == .tireMarks ? .black : Color(red: 0.6, green: 0.78, blue: 1.0)
+        let offset = robotSize * 0.3
+        let color: Color = style == .tireMarks ? .black : Color(red: 0.70, green: 0.76, blue: 0.84)
         for side: CGFloat in [-1, 1] {
             let nx = -sin(sample.heading) * side * offset
             let ny = cos(sample.heading) * side * offset
@@ -201,34 +187,12 @@ final class TrailRenderer {
             var path = Path()
             path.addArc(
                 center: center,
-                radius: robotSize * 0.1,
-                startAngle: Angle(radians: Double(sample.heading) - 0.9),
-                endAngle: Angle(radians: Double(sample.heading) + 0.9),
+                radius: robotSize * 0.08,
+                startAngle: Angle(radians: Double(sample.heading) - 0.8),
+                endAngle: Angle(radians: Double(sample.heading) + 0.8),
                 clockwise: false
             )
-            layer.stroke(path, with: .color(color.opacity(alpha * 0.6)), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            layer.stroke(path, with: .color(color.opacity(alpha)), style: StrokeStyle(lineWidth: 2, lineCap: .round))
         }
-    }
-
-    /// Catmull-Rom spline through the points, as cubic Béziers.
-    static func smoothPath(through points: [CGPoint]) -> Path {
-        var path = Path()
-        guard let first = points.first else { return path }
-        path.move(to: first)
-        guard points.count > 1 else { return path }
-        if points.count == 2 {
-            path.addLine(to: points[1])
-            return path
-        }
-        for i in 0..<(points.count - 1) {
-            let p0 = i > 0 ? points[i - 1] : points[i]
-            let p1 = points[i]
-            let p2 = points[i + 1]
-            let p3 = i + 2 < points.count ? points[i + 2] : points[i + 1]
-            let c1 = CGPoint(x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6)
-            let c2 = CGPoint(x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6)
-            path.addCurve(to: p2, control1: c1, control2: c2)
-        }
-        return path
     }
 }

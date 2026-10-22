@@ -132,11 +132,12 @@ acceleration, braking, pivot turns, an approach phase and the suction
 animation; it runs on a 60 Hz timer only while the overlay is visible, so idle
 CPU is nil.
 
-The damp trail is a continuous wet-mop ribbon: samples behind the robot are
-joined into a Catmull-Rom spline and stroked as a soft band with a glossy
-sheen, droplets are scattered along its sides, and chunks are drawn newest
-first with destination-over blending so overlaps never stack. Sheen and tire
-marks are alternatives. Everything expires after the configured fade time. Reduced motion disables them and shortens the
+The damp trail is a narrow, slightly glossy footprint that follows the robot's
+exact path (straight runs, rounded corners) in a cool gray-blue tint. It dries
+section by section: the gloss goes first, then the patch loses opacity and
+shrinks a little from the edges, until it is gone after the configured fade
+time (4.5 s by default). Sections are drawn newest first with destination-over
+blending so overlaps never stack. Sheen and tire marks are alternatives. Reduced motion disables them and shortens the
 animation.
 
 Sounds are synthesized at first use (`ProceduralSoundSynth`), so there are no
