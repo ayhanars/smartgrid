@@ -124,6 +124,10 @@ final class TrailRenderer {
         }
         if run.count > 1 { runs.append(run) }
 
+        // Collect the chunks (newest first), then stroke each band layer across
+        // every chunk before the next layer, so the layers nest along the whole
+        // ribbon instead of per chunk.
+        var chunks: [(path: Path, alpha: Double)] = []
         for run in runs.reversed() {
             let chunkSize = 5
             var end = run.count - 1
@@ -131,39 +135,51 @@ final class TrailRenderer {
                 let start = max(0, end - chunkSize)
                 // One sample of overlap on each side keeps the curve continuous.
                 let slice = Array(run[max(0, start - 1)...min(run.count - 1, end + 1)])
-                let newest = run[end].time
-                let life = max(0, 1 - (now - newest) / fade)
-                let alpha = opacity * fadeCurve(life)
-                let path = TrailRenderer.smoothPath(through: slice.map { $0.position })
-                drawBand(path, alpha: alpha, in: layer)
+                let life = max(0, 1 - (now - run[end].time) / fade)
+                chunks.append((TrailRenderer.smoothPath(through: slice.map { $0.position }), opacity * fadeCurve(life)))
                 end = start
             }
+        }
+        for bandLayer in bandLayers() {
+            for chunk in chunks {
+                layer.stroke(chunk.path, with: .color(bandLayer.color.opacity(chunk.alpha * bandLayer.alpha)), style: StrokeStyle(lineWidth: bandLayer.width, lineCap: .round, lineJoin: .round, dash: bandLayer.dash))
+            }
+        }
+    }
+
+    private struct BandLayer {
+        var color: Color
+        var alpha: Double
+        var width: CGFloat
+        var dash: [CGFloat] = []
+    }
+
+    /// Top layer first (it is drawn first under destination-over blending).
+    private func bandLayers() -> [BandLayer] {
+        let width = robotSize * 0.92
+        switch style {
+        case .damp:
+            return [
+                BandLayer(color: .white, alpha: 0.55, width: width * 0.16),
+                BandLayer(color: Color(red: 0.8, green: 0.9, blue: 1.0), alpha: 0.75, width: width * 0.62),
+                BandLayer(color: Color(red: 0.6, green: 0.78, blue: 1.0), alpha: 0.6, width: width),
+                BandLayer(color: Color(red: 0.55, green: 0.74, blue: 1.0), alpha: 0.25, width: width * 1.18),
+            ]
+        case .sheen:
+            return [
+                BandLayer(color: .white, alpha: 0.9, width: width * 0.2),
+                BandLayer(color: .white, alpha: 0.35, width: width * 0.7),
+            ]
+        case .tireMarks:
+            return [BandLayer(color: .black, alpha: 0.75, width: width, dash: [3, 6])]
+        case .none:
+            return []
         }
     }
 
     /// Holds at full strength for the first third, then fades out.
     private func fadeCurve(_ life: Double) -> Double {
         min(1, life * 1.5)
-    }
-
-    private func drawBand(_ path: Path, alpha: Double, in layer: GraphicsContext) {
-        let width = robotSize * 0.92
-        switch style {
-        case .damp:
-            // Top to bottom: sheen highlight, bright core, wide soft band.
-            layer.stroke(path, with: .color(Color.white.opacity(alpha * 0.55)), style: StrokeStyle(lineWidth: width * 0.16, lineCap: .round, lineJoin: .round))
-            layer.stroke(path, with: .color(Color(red: 0.8, green: 0.9, blue: 1.0).opacity(alpha * 0.75)), style: StrokeStyle(lineWidth: width * 0.62, lineCap: .round, lineJoin: .round))
-            layer.stroke(path, with: .color(Color(red: 0.6, green: 0.78, blue: 1.0).opacity(alpha * 0.6)), style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
-            layer.stroke(path, with: .color(Color(red: 0.55, green: 0.74, blue: 1.0).opacity(alpha * 0.25)), style: StrokeStyle(lineWidth: width * 1.18, lineCap: .round, lineJoin: .round))
-        case .sheen:
-            layer.stroke(path, with: .color(Color.white.opacity(alpha * 0.9)), style: StrokeStyle(lineWidth: width * 0.2, lineCap: .round, lineJoin: .round))
-            layer.stroke(path, with: .color(Color.white.opacity(alpha * 0.35)), style: StrokeStyle(lineWidth: width * 0.7, lineCap: .round, lineJoin: .round))
-        case .tireMarks:
-            // Two parallel tracks; approximated by stroking the centre path twice with a dashed pattern.
-            layer.stroke(path, with: .color(Color.black.opacity(alpha * 0.75)), style: StrokeStyle(lineWidth: width, lineCap: .butt, lineJoin: .round, dash: [3, 6]))
-        case .none:
-            break
-        }
     }
 
     private func drawDroplet(at point: CGPoint, size: CGFloat, alpha: Double, in layer: GraphicsContext) {
