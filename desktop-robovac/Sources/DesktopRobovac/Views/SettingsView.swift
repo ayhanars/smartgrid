@@ -291,6 +291,10 @@ struct AppearanceSettingsTab: View {
                         }
                         Text("Drives the robot around without moving any files.")
                             .font(.caption).foregroundStyle(.secondary)
+                        Button("Copy Diagnostics") { app.copyDiagnosticsToClipboard() }
+                            .controlSize(.small)
+                        Text("Build \(BuildInfo.label)")
+                            .font(.caption2).foregroundStyle(.tertiary)
                     }
                 }
                 Slider(value: $app.settings.appearance.robotSize, in: 36...120, step: 4) {

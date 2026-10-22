@@ -17,9 +17,14 @@ final class RobotOverlayController {
     private var window: OverlayWindow?
     private(set) var screen: NSScreen?
 
-    /// The display Finder uses for the desktop: the one holding the menu bar.
+    /// The display the user is working on: the one under the mouse pointer (where
+    /// they just clicked the menu bar icon), falling back to the main display.
     var targetScreen: NSScreen? {
-        NSScreen.screens.first ?? NSScreen.main
+        let mouse = NSEvent.mouseLocation
+        if let underMouse = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) {
+            return underMouse
+        }
+        return NSScreen.main ?? NSScreen.screens.first
     }
 
     /// Desktop area in overlay coordinates (origin top-left, y downwards):
@@ -87,7 +92,7 @@ final class RobotOverlayController {
         window.isExcludedFromWindowsMenu = true
         window.animationBehavior = .none
         window.level = RobotOverlayController.windowLevel(for: layer)
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
+        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
 
         let host = NSHostingView(rootView: RobotAnimationView(scene: scene))
         host.frame = NSRect(origin: .zero, size: screen.frame.size)
@@ -97,6 +102,7 @@ final class RobotOverlayController {
         window.orderFrontRegardless()
         self.window = window
         scene.startClock()
+        print("Robovac overlay shown: screen=\(screen.frame) level=\(window.level.rawValue) visible=\(window.isVisible) screens=\(NSScreen.screens.count)")
     }
 
     func hide() {

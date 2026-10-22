@@ -44,7 +44,14 @@ final class RobotSessionDirector: CleaningSessionObserver {
     /// Lays out the virtual desktop grid, plans the sweep and shows the overlay.
     /// Returns the plan with targets in driving order.
     func prepare(plan: CleaningPlan) -> CleaningPlan {
-        guard showsRobot, let screen = overlay.targetScreen else { return plan }
+        guard showsRobot else {
+            print("Robovac: desktop robot is disabled in Settings › General")
+            return plan
+        }
+        guard let screen = overlay.targetScreen else {
+            print("Robovac: no display found for the overlay")
+            return plan
+        }
 
         region = overlay.desktopRegion(on: screen)
         let layout = DesktopIconLayout(

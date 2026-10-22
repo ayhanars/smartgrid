@@ -31,7 +31,10 @@ struct PopoverView: View {
         HStack(spacing: 10) {
             RobotBadgeView(state: app.isCleaning || app.isRehearsing ? app.robotState : .idle, size: 44)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Desktop Robovac").font(.headline)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("Desktop Robovac").font(.headline)
+                    Text(BuildInfo.label).font(.caption2).foregroundStyle(.tertiary)
+                }
                 Text(app.isCleaning || app.isRehearsing ? app.robotState.displayName : app.phase.displayName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

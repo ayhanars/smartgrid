@@ -279,6 +279,9 @@ final class AppState: ObservableObject {
 
     func overlayDiagnostics() -> String {
         var lines: [String] = ["ROBOVAC-DIAG begin"]
+        lines.append("build=\(BuildInfo.label) macOS=\(ProcessInfo.processInfo.operatingSystemVersionString) bundle=\(Bundle.main.bundleURL.lastPathComponent)")
+        lines.append("settings showRobot=\(settings.general.showDesktopRobot) layer=\(settings.appearance.robotLayer) pattern=\(settings.appearance.movementPattern) size=\(settings.appearance.robotSize) reducedMotion=\(settings.appearance.reducedMotion) sound=\(settings.sound.enabled) motor=\(settings.sound.continuousMotorSound)")
+        lines.append("mouse=\(NSEvent.mouseLocation) screens=\(NSScreen.screens.map { $0.frame })")
         lines.append("phase=\(phase) robotState=\(robotState)")
         let pose = overlay.scene.pose
         lines.append("pose position=\(pose.position) heading=\(pose.heading) state=\(pose.state) visible=\(pose.isVisible)")
@@ -300,6 +303,12 @@ final class AppState: ObservableObject {
         }
         lines.append("ROBOVAC-DIAG end")
         return lines.joined(separator: "\n")
+    }
+
+    func copyDiagnosticsToClipboard() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(overlayDiagnostics(), forType: .string)
     }
 
     func stopTestDrive() {
