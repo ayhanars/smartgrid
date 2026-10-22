@@ -1,85 +1,46 @@
 import SwiftUI
 import RobovacCore
 
-/// The menu bar popover: a hero status card, three stat tiles, the mode picker
-/// and one big action.
+/// The menu bar popover, laid out after the Claude Design handoff: hero card,
+/// stat tiles, progress, notices, result, mode tabs, route and trail pills,
+/// destination card, main actions and a labelled footer.
 struct PopoverView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.openWindow) private var openWindow
     @State private var confirmTrash = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            heroCard
-            statTiles
-            if app.isCleaning { progressSection }
-            if let countdown = app.autoCleanCountdown {
-                notice("New files spotted. Auto-cleaning in \(countdown)s…", symbol: "timer", tint: .blue) {
-                    HStack {
-                        Button("Clean Now") { app.cancelAutoClean(); app.startCleaning() }
-                        Button("Not Now") { app.cancelAutoClean() }
-                    }
-                    .controlSize(.small)
-                }
-            }
-            if let problem = app.scanProblem { notice(problem.message, symbol: "exclamationmark.triangle.fill", tint: .orange) { problemActions(problem) } }
-            if let interrupted = app.interruptedSession { interruptedSection(interrupted) }
-            if let report = app.lastUndoReport, !report.isComplete { undoConflictSection(report) }
-            if let summary = app.lastSummary, !app.isCleaning {
-                summaryLine(summary)
-                if let plan = app.plan, !plan.excluded.isEmpty { leftAloneLine(plan) }
-            }
-            modePicker
+        VStack(alignment: .leading, spacing: 10) {
+            hero
+            stats
+            if app.isCleaning { progressCard }
+            notices
+            if let summary = app.lastSummary, !app.isCleaning, !app.isRehearsing { resultCard(summary) }
+            modeTabs
+            routeSection
+            trailSection
+            destinationSection
             primaryActions
             footer
         }
-        .padding(14)
+        .padding(12)
         .frame(width: 340)
+        .font(DS.body)
+        .foregroundStyle(DS.text)
     }
 
     // MARK: Hero
 
-    private var heroCard: some View {
-        HStack(spacing: 14) {
-            RobotBadgeView(state: app.isCleaning || app.isRehearsing ? app.robotState : .idle, size: 54, skin: app.settings.appearance.robotSkin)
-                .padding(4)
-                .background(Circle().fill(.white.opacity(0.14)))
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Desktop Robovac")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                Text(heroStatus)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(2)
-                Text(BuildInfo.label)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.45))
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(LinearGradient(colors: heroColors, startPoint: .topLeading, endPoint: .bottomTrailing))
-        )
-    }
-
-    private var heroColors: [Color] {
-        if app.isCleaning || app.isRehearsing {
-            return [Color(red: 0.12, green: 0.45, blue: 0.95), Color(red: 0.05, green: 0.68, blue: 0.82)]
-        }
-        if app.scanProblem != nil {
-            return [Color(red: 0.55, green: 0.35, blue: 0.2), Color(red: 0.8, green: 0.5, blue: 0.2)]
-        }
-        if app.eligibleCount == 0, app.plan != nil {
-            return [Color(red: 0.1, green: 0.55, blue: 0.4), Color(red: 0.2, green: 0.7, blue: 0.5)]
-        }
-        return [Color(red: 0.22, green: 0.24, blue: 0.32), Color(red: 0.4, green: 0.42, blue: 0.52)]
+    private var heroTint: DS.Tint {
+        if app.isCleaning || app.isRehearsing { return .blue }
+        if app.scanProblem != nil { return .orange }
+        if let plan = app.plan, plan.targets.isEmpty { return .green }
+        return .grey
     }
 
     private var heroStatus: String {
         if app.isRehearsing { return "Test drive: \(app.robotState.displayName.lowercased())" }
+        if app.phase == .paused { return "Paused · \(app.progress.processed) of \(app.progress.total) collected" }
         if app.isCleaning {
             if let name = app.currentFileName { return "\(app.robotState.displayName) · \(name)" }
             return app.robotState.displayName
@@ -92,134 +53,173 @@ struct PopoverView: View {
         return "\(count) item\(count == 1 ? "" : "s") waiting · \(app.cleanlinessDescription.lowercased())"
     }
 
+    private var hero: some View {
+        HStack(spacing: 12) {
+            RobotBadgeView(state: app.isCleaning || app.isRehearsing ? app.robotState : .idle, size: 48, skin: app.settings.appearance.robotSkin)
+                .frame(width: 54, height: 54)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Desktop Robovac").font(DS.title).tracking(-0.15)
+                Text(heroStatus)
+                    .font(DS.body)
+                    .foregroundStyle(heroTint.foreground)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(heroTint.background))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(DS.hairline, lineWidth: 0.5))
+        .overlay(alignment: .topTrailing) {
+            Text(BuildInfo.label)
+                .font(DS.micro)
+                .monospacedDigit()
+                .foregroundStyle(DS.tertiary)
+                .padding(.top, 8)
+                .padding(.trailing, 11)
+        }
+    }
+
     // MARK: Stats
 
-    private var statTiles: some View {
+    private var stats: some View {
         HStack(spacing: 8) {
-            statTile(value: app.plan.map { "\($0.targets.count)" } ?? "–", label: "To clean", symbol: "tray.full")
-            statTile(value: app.isCleaning || app.lastSummary != nil ? "\(app.progress.moved)" : "–", label: "Cleaned", symbol: "checkmark.circle")
-            statTile(value: "\(app.sessions.count)", label: "Sessions", symbol: "clock.arrow.circlepath")
+            statTile(value: app.plan.map { "\($0.targets.count)" } ?? (app.scanProblem == nil ? "–" : "–"), label: "To clean")
+            statTile(value: app.isCleaning || app.lastSummary != nil ? "\(app.progress.moved)" : "0", label: "Cleaned")
+            statTile(value: "\(app.sessions.count)", label: "Sessions")
         }
     }
 
-    private func statTile(value: String, label: String, symbol: String) -> some View {
+    private func statTile(value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Image(systemName: symbol).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title3.weight(.semibold)).monospacedDigit()
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            Text(value).font(DS.stat).tracking(-0.4).monospacedDigit()
+            Text(label).font(DS.caption).foregroundStyle(DS.secondary60)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.quaternary.opacity(0.6)))
+        .padding(EdgeInsets(top: 9, leading: 12, bottom: 9, trailing: 12))
+        .dsCard()
     }
 
-    // MARK: Progress and notices
+    // MARK: Progress
 
-    private var progressSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ProgressView(value: app.progress.fraction)
-            HStack {
-                Text(app.currentFileName.map { "Collecting \($0)" } ?? "Working…")
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+    private var progressCard: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(DS.progressTrack)
+                    Capsule().fill(DS.accent).frame(width: max(6, proxy.size.width * app.progress.fraction))
+                }
+            }
+            .frame(height: 6)
+            .animation(.easeOut(duration: 0.3), value: app.progress.fraction)
+            HStack(spacing: 10) {
+                Text(app.phase == .paused ? "Paused · \(app.currentFileName ?? "")" : "Collecting \(app.currentFileName ?? "…")")
+                    .lineLimit(1).truncationMode(.middle)
                 Spacer()
-                Text("\(app.progress.processed)/\(app.progress.total)")
-                    .monospacedDigit()
+                Text("\(app.progress.processed)/\(app.progress.total)").monospacedDigit()
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(DS.caption)
+            .foregroundStyle(DS.secondary60)
         }
+        .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+        .dsCard()
     }
 
-    private func notice<Actions: View>(_ message: String, symbol: String, tint: Color, @ViewBuilder actions: () -> Actions) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(message, systemImage: symbol)
-                .font(.callout)
-                .foregroundStyle(tint)
-            actions()
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(tint.opacity(0.1)))
-    }
+    // MARK: Notices
 
-    private func problemActions(_ problem: AppState.ScanProblem) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if problem.isPermissionProblem {
-                Text("Allow Desktop Robovac under System Settings › Privacy & Security › Files and Folders.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            HStack {
+    @ViewBuilder private var notices: some View {
+        if let problem = app.scanProblem {
+            notice(.warn, title: "Can’t read the Desktop",
+                   body: problem.isPermissionProblem ? "Robovac needs permission to see the files on your Desktop." : problem.message) {
                 if problem.isPermissionProblem {
                     Button("Open Privacy Settings") { SystemLinks.openFilesAndFoldersPrivacy() }
+                        .buttonStyle(DSSmallButtonStyle(kind: .primary))
                 }
                 Button("Try Again") { Task { await app.refreshPlan() } }
+                    .buttonStyle(DSSmallButtonStyle())
             }
-            .controlSize(.small)
         }
-    }
-
-    private func interruptedSection(_ session: CleaningSession) -> some View {
-        notice("The last cleaning was interrupted after moving \(session.moves.count) file\(session.moves.count == 1 ? "" : "s").", symbol: "bolt.slash.fill", tint: .orange) {
-            HStack {
+        if let session = app.interruptedSession {
+            notice(.neutral, title: "The last cleaning was interrupted",
+                   body: "It stopped after moving \(session.moves.count) file\(session.moves.count == 1 ? "" : "s"). You can put them back.") {
                 Button("Undo It") { Task { await app.undo(session: session) } }
+                    .buttonStyle(DSSmallButtonStyle(kind: .primary))
                     .disabled(app.undoInProgress)
                 Button("Dismiss") { app.interruptedSession = nil }
+                    .buttonStyle(DSSmallButtonStyle())
             }
-            .controlSize(.small)
+        }
+        if let report = app.lastUndoReport, !report.isComplete {
+            let occupied = report.conflicts.contains { $0.failure == .originalOccupied }
+            notice(.warn, title: "\(report.restored.count) restored, \(report.conflicts.count) could not go back",
+                   body: occupied ? "Files with the same name are already on the Desktop." : (report.conflicts.first?.failure.message ?? ""),
+                   lines: report.conflicts.prefix(3).map { $0.record.fileName }) {
+                if occupied {
+                    Button("Restore With New Names") { Task { await app.undoLastCleaning(resolution: .restoreWithUniqueName) } }
+                        .buttonStyle(DSSmallButtonStyle(kind: .primary))
+                        .disabled(app.undoInProgress)
+                }
+                Button("Dismiss") { app.lastUndoReport = nil }
+                    .buttonStyle(DSSmallButtonStyle())
+            }
+        }
+        if let countdown = app.autoCleanCountdown {
+            notice(.info, title: "New files spotted", body: "Auto-cleaning in \(countdown) s…") {
+                Button("Clean Now") { app.cancelAutoClean(); app.startCleaning() }
+                    .buttonStyle(DSSmallButtonStyle(kind: .primary))
+                Button("Not Now") { app.cancelAutoClean() }
+                    .buttonStyle(DSSmallButtonStyle())
+            }
         }
     }
 
-    private func undoConflictSection(_ report: UndoReport) -> some View {
-        notice("\(report.restored.count) restored, \(report.conflicts.count) could not go back.", symbol: "arrow.uturn.backward.circle.fill", tint: .blue) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(report.conflicts.prefix(3)) { conflict in
-                    Text("\(conflict.record.fileName): \(conflict.failure.message)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-                if report.conflicts.contains(where: { $0.failure == .originalOccupied }) {
-                    Button("Restore With New Names") {
-                        Task { await app.undoLastCleaning(resolution: .restoreWithUniqueName) }
+    private func notice<Actions: View>(_ kind: DS.NoticeKind, title: String, body: String, lines: [String] = [], @ViewBuilder actions: () -> Actions) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Circle().fill(kind.dot).frame(width: 8, height: 8).padding(.top, 5)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(DS.bodySemibold)
+                    if !body.isEmpty {
+                        Text(body).font(DS.small).foregroundStyle(DS.secondary70).fixedSize(horizontal: false, vertical: true)
                     }
-                    .controlSize(.small)
-                    .disabled(app.undoInProgress)
+                    ForEach(lines, id: \.self) { line in
+                        Text(line).font(DS.caption).monospacedDigit().foregroundStyle(DS.secondary70).lineLimit(1).truncationMode(.middle)
+                    }
                 }
             }
+            HStack(spacing: 6) { actions() }
+                .padding(.leading, 16)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+        .dsCard(fill: kind.background, ring: kind.ring)
     }
 
-    private func summaryLine(_ summary: CleaningSummary) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: summary.status == .completed ? "checkmark.seal.fill" : "stop.circle")
-                .foregroundStyle(summary.status == .completed ? Color.green : Color.secondary)
-            Text(summaryText(summary))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-    }
+    // MARK: Result
 
-    /// Files the rules keep on the Desktop, so a "missed" file is never a mystery.
-    private func leftAloneLine(_ plan: CleaningPlan) -> some View {
-        var counts: [String: Int] = [:]
-        for decision in plan.excluded {
-            counts[decision.exclusionReason?.shortLabel ?? "excluded", default: 0] += 1
+    private func resultCard(_ summary: CleaningSummary) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 7) {
+                CheckGlyph().stroke(DS.success, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .frame(width: 12, height: 10)
+                Text(summaryText(summary)).font(DS.bodySemibold)
+            }
+            if let plan = app.plan, !plan.excluded.isEmpty {
+                HStack(spacing: 8) {
+                    Text("Left alone by your rules: \(leftAloneText(plan))")
+                        .font(DS.small).foregroundStyle(DS.secondary70).lineLimit(1).truncationMode(.tail)
+                    Spacer()
+                    Button("Why?") { showPreview() }
+                        .buttonStyle(.plain)
+                        .font(DS.smallMedium)
+                        .foregroundStyle(DS.accent)
+                }
+                .padding(.leading, 19)
+            }
         }
-        let parts = counts.sorted { $0.value > $1.value }.prefix(3).map { "\($0.value) \($0.key)" }
-        return HStack(spacing: 6) {
-            Image(systemName: "hand.raised").foregroundStyle(.secondary)
-            Text("Left alone by your rules: \(parts.joined(separator: ", "))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            Spacer()
-            Button("Why?") { showPreview() }
-                .controlSize(.mini)
-                .help("See every item and the rule that keeps it on the Desktop")
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+        .dsCard()
     }
 
     private func summaryText(_ summary: CleaningSummary) -> String {
@@ -230,51 +230,42 @@ struct PopoverView: View {
         return "\(prefix): " + parts.joined(separator: ", ")
     }
 
-    // MARK: Actions
+    private func leftAloneText(_ plan: CleaningPlan) -> String {
+        var counts: [String: Int] = [:]
+        for decision in plan.excluded {
+            counts[decision.exclusionReason?.shortLabel ?? "excluded", default: 0] += 1
+        }
+        return counts.sorted { $0.value > $1.value }.prefix(3).map { "\($0.value) \($0.key)" }.joined(separator: ", ")
+    }
 
-    private var modePicker: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    // MARK: Mode, route, trail
+
+    private var modeTabs: some View {
+        VStack(alignment: .leading, spacing: 6) {
             TabStrip(items: CleaningMode.allCases, title: { $0.displayName }, selection: $app.settings.cleaning.mode, disabled: app.isCleaning)
-            Text(app.settings.cleaning.mode.summary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(modeDescription(app.settings.cleaning.mode))
+                .font(DS.small)
+                .foregroundStyle(DS.secondary60)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 2)
+    }
 
-            Divider().padding(.vertical, 2)
+    private func modeDescription(_ mode: CleaningMode) -> String {
+        switch mode {
+        case .smartClean: return "Sorts every file by type into its own folder."
+        case .screenshotSweep: return "Collects only screenshots and leaves the rest."
+        case .gentleClean: return "Same files as Smart Clean, at a calmer pace with softer effects."
+        }
+    }
 
-            ControlHeader(title: "Route", value: app.settings.appearance.movementPattern.displayName)
+    private var routeSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            DSSectionHeader(title: "Route", value: app.settings.appearance.movementPattern.displayName)
             PillPicker(options: MovementPattern.allCases, selection: $app.settings.appearance.movementPattern, disabled: app.isCleaning) { pattern in
                 RouteGlyph(pattern: pattern).help(pattern.summary)
             }
-
-            ControlHeader(title: "Mop trail", value: trailLevel.displayName)
-            PillPicker(options: TrailLevel.allCases, selection: trailBinding, disabled: false) { level in
-                TrailGlyph(level: level).help(level.displayName)
-            }
-
-            ControlHeader(title: "Destination", value: app.settings.cleaning.sendToTrash ? "Trash" : app.settings.cleaning.destinations.defaultDestination.lastPathComponent)
-            HStack(spacing: 8) {
-                Toggle("Always send to Trash", isOn: $app.settings.cleaning.sendToTrash)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-                    .font(.caption)
-                Spacer()
-                Button {
-                    confirmTrash = true
-                } label: {
-                    Label("Move All to Trash", systemImage: "trash")
-                        .font(.caption)
-                }
-                .controlSize(.small)
-                .disabled(app.isBusy || app.eligibleCount == 0)
-                .help("Send every eligible file to the Trash now, whatever the destination setting")
-            }
-        }
-        .confirmationDialog("Move \(app.eligibleCount) item\(app.eligibleCount == 1 ? "" : "s") to the Trash?", isPresented: $confirmTrash, titleVisibility: .visible) {
-            Button("Move to Trash") { app.startCleaning(toTrash: true) }
-        } message: {
-            Text("The robot collects every eligible file and puts it in the Trash. You can still undo from the menu until the Trash is emptied.")
         }
     }
 
@@ -294,92 +285,121 @@ struct PopoverView: View {
         )
     }
 
-    private var primaryActions: some View {
-        HStack(spacing: 8) {
-            if app.isRehearsing {
-                Button {
-                    app.stopTestDrive()
-                } label: {
-                    Label("Stop Test Drive", systemImage: "stop.fill").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-            } else if app.isCleaning {
-                Button {
-                    app.togglePause()
-                } label: {
-                    Label(app.phase == .paused ? "Resume" : "Pause", systemImage: app.phase == .paused ? "play.fill" : "pause.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(app.phase == .finishing)
-                Button(role: .destructive) {
-                    app.stop()
-                } label: {
-                    Label("Stop", systemImage: "stop.fill")
-                }
-                .controlSize(.large)
-                .disabled(app.phase == .finishing)
-            } else {
-                Button {
-                    if app.needsPreview { showPreview() } else { app.startCleaning() }
-                } label: {
-                    Label("Start Cleaning", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .keyboardShortcut(.defaultAction)
-                .disabled(app.isBusy || app.eligibleCount == 0)
-
-                Button {
-                    showPreview()
-                } label: {
-                    Label("Preview", systemImage: "list.bullet.rectangle")
-                }
-                .controlSize(.large)
-                .disabled(app.isBusy)
-                .help("See what will move before starting")
+    private var trailSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            DSSectionHeader(title: "Mop trail", value: trailLevel.displayName)
+            PillPicker(options: TrailLevel.allCases, selection: trailBinding) { level in
+                TrailGlyph(level: level).help(level.displayName)
             }
         }
     }
 
-    private var footer: some View {
-        HStack(spacing: 4) {
-            if let session = app.lastUndoableSession, !app.isCleaning {
-                Button {
-                    Task { await app.undo(session: session) }
-                } label: {
-                    Label("Undo Last Cleaning", systemImage: "arrow.uturn.backward")
+    // MARK: Destination
+
+    private var destinationSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            DSSectionHeader(title: "Destination", value: app.settings.cleaning.sendToTrash ? "Trash" : app.settings.cleaning.destinations.defaultDestination.lastPathComponent)
+            VStack(spacing: 0) {
+                Toggle(isOn: $app.settings.cleaning.sendToTrash) { Text("Always send to Trash") }
+                    .toggleStyle(DSSwitchStyle())
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                Rectangle().fill(DS.separator).frame(height: 1).padding(.leading, 12)
+                if confirmTrash {
+                    HStack(spacing: 8) {
+                        Text("Move \(app.eligibleCount) item\(app.eligibleCount == 1 ? "" : "s") to the Trash?")
+                            .font(DS.small).foregroundStyle(DS.secondary70)
+                        Spacer()
+                        Button("Cancel") { confirmTrash = false }.buttonStyle(DSSmallButtonStyle())
+                        Button("Move to Trash") { confirmTrash = false; app.startCleaning(toTrash: true) }
+                            .buttonStyle(DSSmallButtonStyle(kind: .destructive))
+                    }
+                    .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 8))
+                    .frame(minHeight: 36)
+                } else {
+                    Button {
+                        confirmTrash = true
+                    } label: {
+                        HStack {
+                            Text("Move All to Trash…").foregroundStyle(app.isBusy || app.eligibleCount == 0 ? DS.disabledText : DS.destructive)
+                            Spacer()
+                            Text("Asks first").font(DS.caption).foregroundStyle(DS.tertiary)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(app.isBusy || app.eligibleCount == 0)
                 }
-                .disabled(app.undoInProgress)
-                .help("Put the files from the last cleaning back")
             }
-            Button {
-                app.runTestDrive()
-            } label: {
-                Label("Test Drive", systemImage: "scope")
-            }
-            .disabled(app.isBusy)
-            .help("Watch the robot without moving any files")
-            Spacer()
-            SettingsLink {
-                Label("Settings", systemImage: "gearshape")
-            }
-            .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
-            .help("Settings")
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Label("Quit", systemImage: "power")
-            }
-            .help("Quit Desktop Robovac")
+            .dsCard()
         }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .controlSize(.large)
-        .foregroundStyle(.secondary)
+    }
+
+    // MARK: Actions
+
+    private var primaryActions: some View {
+        HStack(spacing: 8) {
+            if app.isRehearsing {
+                Button { app.stopTestDrive() } label: { Label("Stop Test Drive", systemImage: "stop.fill") }
+                    .buttonStyle(DSPrimaryButtonStyle(kind: .primary))
+            } else if app.isCleaning {
+                Button { app.togglePause() } label: {
+                    Label(app.phase == .paused ? "Resume" : "Pause", systemImage: app.phase == .paused ? "play.fill" : "pause.fill")
+                }
+                .buttonStyle(DSPrimaryButtonStyle(kind: .primary))
+                .disabled(app.phase == .finishing)
+                Button { app.stop() } label: { Label("Stop", systemImage: "stop.fill") }
+                    .buttonStyle(DSPrimaryButtonStyle(kind: .destructive))
+                    .frame(width: 128)
+                    .disabled(app.phase == .finishing)
+            } else {
+                let disabled = app.isBusy || app.eligibleCount == 0
+                Button {
+                    if app.needsPreview { showPreview() } else { app.startCleaning() }
+                } label: {
+                    Label("Start Cleaning", systemImage: "play.fill")
+                }
+                .buttonStyle(DSPrimaryButtonStyle(kind: disabled ? .disabled : .primary))
+                .keyboardShortcut(.defaultAction)
+                .disabled(disabled)
+                Button { showPreview() } label: { Text("Preview") }
+                    .buttonStyle(DSPrimaryButtonStyle(kind: app.scanProblem != nil ? .disabled : .secondary))
+                    .frame(width: 128)
+                    .disabled(app.isBusy || app.scanProblem != nil)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private var footer: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(DS.cardRing).frame(height: 1)
+            HStack(spacing: 4) {
+                Button {
+                    if let session = app.lastUndoableSession { Task { await app.undo(session: session) } }
+                } label: {
+                    Label("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(DSFooterButtonStyle())
+                .disabled(app.lastUndoableSession == nil || app.isCleaning || app.undoInProgress)
+                .help("Undo last cleaning")
+                Button { app.runTestDrive() } label: { Label("Test Drive", systemImage: "scope") }
+                    .buttonStyle(DSFooterButtonStyle())
+                    .disabled(app.isBusy)
+                    .help("Drive the robot around without moving files")
+                Spacer()
+                SettingsLink { Label("Settings", systemImage: "gearshape") }
+                    .buttonStyle(DSFooterButtonStyle())
+                    .simultaneousGesture(TapGesture().onEnded { NSApp.activate(ignoringOtherApps: true) })
+                Button { NSApplication.shared.terminate(nil) } label: { Label("Quit", systemImage: "power") }
+                    .buttonStyle(DSFooterButtonStyle())
+                    .help("Quit Desktop Robovac")
+            }
+            .padding(.top, 4)
+        }
+        .padding(.top, 2)
     }
 
     private func showPreview() {
