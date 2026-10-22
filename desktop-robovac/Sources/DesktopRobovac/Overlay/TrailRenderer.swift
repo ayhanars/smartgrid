@@ -35,7 +35,7 @@ final class TrailRenderer {
 
         switch pose.state {
         case .driving, .approaching, .avoiding, .returning, .deploying:
-            if let last = lastSamplePosition, hypot(pose.position.x - last.x, pose.position.y - last.y) < 4 {
+            if let last = lastSamplePosition, hypot(pose.position.x - last.x, pose.position.y - last.y) < 6 {
                 return
             }
             samples.append(Sample(position: pose.position, heading: pose.heading, time: now, kind: .drive))
@@ -74,23 +74,35 @@ final class TrailRenderer {
 
     // MARK: Drawing
 
+    /// One flat slice of the band between two consecutive samples.
+    private struct Slice {
+        var outline: Path
+        var life: Double
+        /// Centre line of the slice, used for the highlight streak and the edges.
+        var from: CGPoint
+        var to: CGPoint
+        var normalFrom: CGPoint
+        var normalTo: CGPoint
+    }
+
     func draw(in context: GraphicsContext, now: TimeInterval) {
         guard style != .none, !samples.isEmpty else { return }
         let fade = max(0.1, fadeDuration)
 
-        // Newest first with destination-over blending: where strokes overlap, the
+        // Newest first with destination-over blending: where shapes overlap, the
         // newest wins instead of alphas stacking. Because later draws land
         // *behind* earlier ones, each layer is drawn top layer first.
         var layer = context
         layer.blendMode = .destinationOver
 
-        for sample in samples.reversed() where sample.kind == .turn {
-            let life = max(0, 1 - (now - sample.time) / fade)
-            drawTurnMark(sample, alpha: opacity * 0.5 * wetness(life: life), in: layer)
+        if style == .tireMarks {
+            for sample in samples.reversed() where sample.kind == .turn {
+                let life = max(0, 1 - (now - sample.time) / fade)
+                drawTurnMark(sample, alpha: opacity * 0.5 * wetness(life: life), in: layer)
+            }
         }
 
-        // Split the drive samples into continuous runs, then into short sections
-        // that each dry on their own schedule.
+        // Continuous runs of drive samples.
         var runs: [[Sample]] = []
         var run: [Sample] = []
         var previous: Sample?
@@ -103,79 +115,120 @@ final class TrailRenderer {
             previous = sample
         }
         if run.count > 1 { runs.append(run) }
+        guard !runs.isEmpty else { return }
 
-        struct Section {
-            var path: Path
-            var life: Double
-        }
-        var sections: [Section] = []
+        let width = robotSize * 0.88
+        let half = width / 2
+
+        // Build the slices as a strip: each sample gets one shared normal, so
+        // neighbouring slices meet on exactly the same edge with no gap, no cap.
+        var slices: [Slice] = []
+        var corners: [(center: CGPoint, life: Double)] = []
         for run in runs.reversed() {
-            let sectionSize = 4
-            var end = run.count - 1
-            while end > 0 {
-                let start = max(0, end - sectionSize)
-                var path = Path()
-                path.move(to: run[start].position)
-                for index in (start + 1)...end {
-                    path.addLine(to: run[index].position)
+            let points = run.map { $0.position }
+            var normals: [CGPoint] = []
+            for i in 0..<points.count {
+                let before = i > 0 ? TrailRenderer.direction(points[i - 1], points[i]) : TrailRenderer.direction(points[i], points[i + 1])
+                let after = i < points.count - 1 ? TrailRenderer.direction(points[i], points[i + 1]) : before
+                var sum = CGPoint(x: before.x + after.x, y: before.y + after.y)
+                let length = hypot(sum.x, sum.y)
+                if length < 0.001 { sum = after } else { sum = CGPoint(x: sum.x / length, y: sum.y / length) }
+                // Perpendicular, scaled so the band keeps its width through the bend (mitre, clamped).
+                let cosHalf = max(0.5, before.x * sum.x + before.y * sum.y)
+                normals.append(CGPoint(x: -sum.y * half / cosHalf, y: sum.x * half / cosHalf))
+                // Real corners (a pivot) get a round joint so the outside is smooth.
+                let turn = before.x * after.x + before.y * after.y
+                if i > 0, i < points.count - 1, turn < 0.94 {
+                    let life = max(0, 1 - (now - run[i].time) / fade)
+                    corners.append((points[i], life))
                 }
-                let life = max(0, 1 - (now - run[end].time) / fade)
-                sections.append(Section(path: path, life: life))
-                end = start
+            }
+            for i in stride(from: points.count - 2, through: 0, by: -1) {
+                let a = points[i], b = points[i + 1]
+                let na = normals[i], nb = normals[i + 1]
+                var outline = Path()
+                outline.move(to: CGPoint(x: a.x + na.x, y: a.y + na.y))
+                outline.addLine(to: CGPoint(x: b.x + nb.x, y: b.y + nb.y))
+                outline.addLine(to: CGPoint(x: b.x - nb.x, y: b.y - nb.y))
+                outline.addLine(to: CGPoint(x: a.x - na.x, y: a.y - na.y))
+                outline.closeSubpath()
+                let life = max(0, 1 - (now - run[i + 1].time) / fade)
+                slices.append(Slice(outline: outline, life: life, from: a, to: b, normalFrom: na, normalTo: nb))
             }
         }
-        guard !sections.isEmpty else { return }
 
-        let baseWidth = robotSize * 0.6
         switch style {
         case .damp:
-            let tint = Color(red: 0.70, green: 0.76, blue: 0.84)
-            let highlight = Color(red: 0.93, green: 0.95, blue: 0.98)
-            // Top: a thin soft gloss that disappears first.
-            for section in sections {
-                let g = gloss(life: section.life)
-                guard g > 0.01 else { continue }
-                layer.stroke(section.path, with: .color(highlight.opacity(opacity * 0.4 * g)),
-                             style: StrokeStyle(lineWidth: baseWidth * 0.22, lineCap: .round, lineJoin: .round))
+            let tint = Color(red: 0.72, green: 0.77, blue: 0.84)
+            let highlight = Color(red: 0.96, green: 0.97, blue: 0.99)
+            // 1. Highlight streak: a soft strip offset to one side, the first thing to dry.
+            for (streakOffset, streakWidth, strength) in [(0.26, 0.10, 0.5), (0.26, 0.22, 0.22)] {
+                for slice in slices {
+                    let g = gloss(life: slice.life)
+                    guard g > 0.01 else { continue }
+                    layer.fill(TrailRenderer.strip(slice, offset: streakOffset, width: streakWidth), with: .color(highlight.opacity(opacity * strength * g)))
+                }
             }
-            // Middle: the damp patch. Constant width so sections join invisibly;
-            // drying shows only as the opacity going down.
-            for section in sections {
-                let w = wetness(life: section.life)
+            // 2. Crisp edges.
+            for slice in slices {
+                let w = wetness(life: slice.life)
                 guard w > 0.01 else { continue }
-                layer.stroke(section.path, with: .color(tint.opacity(opacity * 0.42 * w)),
-                             style: StrokeStyle(lineWidth: baseWidth, lineCap: .round, lineJoin: .round))
+                for edge in [TrailRenderer.strip(slice, offset: 0.98, width: 0.04), TrailRenderer.strip(slice, offset: -0.98, width: 0.04)] {
+                    layer.fill(edge, with: .color(Color(red: 0.55, green: 0.6, blue: 0.68).opacity(opacity * 0.35 * w)))
+                }
             }
-            // Bottom: a faint soft edge.
-            for section in sections {
-                let w = wetness(life: section.life)
+            // 3. The damp band itself.
+            for slice in slices {
+                let w = wetness(life: slice.life)
                 guard w > 0.01 else { continue }
-                layer.stroke(section.path, with: .color(tint.opacity(opacity * 0.14 * w)),
-                             style: StrokeStyle(lineWidth: baseWidth * 1.2, lineCap: .round, lineJoin: .round))
+                layer.fill(slice.outline, with: .color(tint.opacity(opacity * 0.36 * w)))
+            }
+            for corner in corners {
+                let w = wetness(life: corner.life)
+                guard w > 0.01 else { continue }
+                layer.fill(Path(ellipseIn: CGRect(x: corner.center.x - half, y: corner.center.y - half, width: width, height: width)), with: .color(tint.opacity(opacity * 0.36 * w)))
             }
         case .sheen:
-            for section in sections {
-                let g = gloss(life: section.life)
+            for slice in slices {
+                let g = gloss(life: slice.life)
                 guard g > 0.01 else { continue }
-                layer.stroke(section.path, with: .color(Color.white.opacity(opacity * 0.6 * g)),
-                             style: StrokeStyle(lineWidth: baseWidth * 0.3, lineCap: .round, lineJoin: .round))
+                layer.fill(TrailRenderer.strip(slice, offset: 0, width: 0.3), with: .color(Color.white.opacity(opacity * 0.6 * g)))
             }
-            for section in sections {
-                let w = wetness(life: section.life)
+            for slice in slices {
+                let w = wetness(life: slice.life)
                 guard w > 0.01 else { continue }
-                layer.stroke(section.path, with: .color(Color.white.opacity(opacity * 0.25 * w)),
-                             style: StrokeStyle(lineWidth: baseWidth, lineCap: .round, lineJoin: .round))
+                layer.fill(slice.outline, with: .color(Color.white.opacity(opacity * 0.25 * w)))
             }
         case .tireMarks:
-            for section in sections {
-                let w = wetness(life: section.life)
+            for slice in slices {
+                let w = wetness(life: slice.life)
                 guard w > 0.01 else { continue }
-                layer.stroke(section.path, with: .color(Color.black.opacity(opacity * 0.6 * w)),
-                             style: StrokeStyle(lineWidth: baseWidth * 1.2, lineCap: .butt, lineJoin: .round, dash: [3, 6]))
+                for edge in [TrailRenderer.strip(slice, offset: 0.78, width: 0.12), TrailRenderer.strip(slice, offset: -0.78, width: 0.12)] {
+                    layer.fill(edge, with: .color(Color.black.opacity(opacity * 0.6 * w)))
+                }
             }
         case .none:
             break
         }
+    }
+
+    private static func direction(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
+        let dx = b.x - a.x, dy = b.y - a.y
+        let length = max(0.001, hypot(dx, dy))
+        return CGPoint(x: dx / length, y: dy / length)
+    }
+
+    /// A sub-strip of a slice: `offset` and `width` are fractions of the half width
+    /// (offset -1…1 across the band).
+    private static func strip(_ slice: Slice, offset: CGFloat, width: CGFloat) -> Path {
+        let lo = offset - width / 2, hi = offset + width / 2
+        var path = Path()
+        path.move(to: CGPoint(x: slice.from.x + slice.normalFrom.x * hi, y: slice.from.y + slice.normalFrom.y * hi))
+        path.addLine(to: CGPoint(x: slice.to.x + slice.normalTo.x * hi, y: slice.to.y + slice.normalTo.y * hi))
+        path.addLine(to: CGPoint(x: slice.to.x + slice.normalTo.x * lo, y: slice.to.y + slice.normalTo.y * lo))
+        path.addLine(to: CGPoint(x: slice.from.x + slice.normalFrom.x * lo, y: slice.from.y + slice.normalFrom.y * lo))
+        path.closeSubpath()
+        return path
     }
 
     private func drawTurnMark(_ sample: Sample, alpha: Double, in layer: GraphicsContext) {
