@@ -144,7 +144,7 @@ final class RobotSessionDirector: CleaningSessionObserver {
             case .turnStarted: self.sound.play(.turn)
             case .movementBlip: self.sound.play(.movement)
             case .bumped: self.sound.play(.avoid)
-            case .arrived, .vacuumFinished, .wanderEnded: break
+            case .arrived, .vacuumFinished, .wanderEnded, .patrolStopped: break
             }
         }
         let motorEnabled = settings.sound.continuousMotorSound && settings.sound.isEnabled(.movement)

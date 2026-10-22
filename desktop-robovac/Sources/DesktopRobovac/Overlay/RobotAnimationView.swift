@@ -1,4 +1,5 @@
 import SwiftUI
+import RobovacCore
 
 /// Draws trail, particles and the robot in a single Canvas.
 struct RobotAnimationView: View {

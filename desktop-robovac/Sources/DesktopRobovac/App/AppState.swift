@@ -303,11 +303,11 @@ final class AppState: ObservableObject {
         progress = CleaningProgress(total: orderedPlan.targets.count)
         phase = .cleaning
 
-        var result: CleaningSummary?
+        var outcome: CleaningSummary?
         do {
             let summary = try await coordinator.run(plan: orderedPlan)
             lastSummary = summary
-            result = summary
+            outcome = summary
         } catch {
             // Only thrown when a run is already active, which the UI prevents.
         }
@@ -319,7 +319,7 @@ final class AppState: ObservableObject {
         phase = .idle
         reloadHistory()
         await refreshPlan()
-        return result
+        return outcome
     }
 
     /// Shows the robot and lets it drive around without moving any files.
