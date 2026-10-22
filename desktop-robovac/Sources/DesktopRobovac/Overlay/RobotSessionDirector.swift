@@ -83,6 +83,14 @@ final class RobotSessionDirector: CleaningSessionObserver {
             }
         }
 
+        // Excluded folders and files are zones the robot steers around.
+        let obstacles: [CGRect] = plan.excluded.compactMap { decision in
+            switch decision.exclusionReason {
+            case .insideExcludedFolder, .excludedFile: return rects[decision.item.id]
+            default: return nil
+            }
+        }
+
         let driveBounds = region.insetBy(dx: robotSize * 0.55, dy: robotSize * 0.55)
         let planner = NavigationPlanner(
             bounds: driveBounds,
