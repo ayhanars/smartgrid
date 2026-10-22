@@ -1,5 +1,4 @@
 import AppKit
-
 import SwiftUI
 
 /// Brings the hosting window in front of the menu bar popover and makes it
