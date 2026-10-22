@@ -15,6 +15,8 @@ final class RobotSessionDirector: CleaningSessionObserver {
     private let showsRobot: Bool
 
     private var positions: [UUID: CGPoint] = [:]
+    private var scannedItems: [DesktopItem] = []
+    private var screen: NSScreen?
     private var planner: NavigationPlanner?
     private var region: CGRect = .zero
     private var roamArea: RobotMotionController.WanderArea?
@@ -71,32 +73,13 @@ final class RobotSessionDirector: CleaningSessionObserver {
         var rects = layout.rects(for: plan.scannedItems)
         iconPositionSource = "grid approximation"
 
+        scannedItems = plan.scannedItems
+        self.screen = screen
         // Exact positions from Finder when allowed; the grid stays as the fallback.
         if settings.appearance.useFinderIconPositions, !plan.scannedItems.isEmpty {
-            let result = FinderIconPositions.fetch()
-            if let error = result.error {
-                iconPositionSource = "grid approximation (Finder: \(error))"
-                print("Robovac: Finder icon positions unavailable: \(error)")
-            } else {
-                var matched = 0
-                let iconSize = CGFloat(min(settings.appearance.iconGridColumnWidth, settings.appearance.iconGridRowHeight)) * 0.7
-                for item in plan.scannedItems {
-                    guard let finderPoint = result.positions[item.name] ?? result.positions[item.name.precomposedStringWithCanonicalMapping] else { continue }
-                    let point = FinderIconPositions.overlayPoint(finderPoint, on: screen)
-                    positions[item.id] = point
-                    rects[item.id] = CGRect(x: point.x - iconSize / 2, y: point.y - iconSize / 2, width: iconSize, height: iconSize)
-                    matched += 1
-                }
-                iconPositionSource = "Finder (\(matched)/\(plan.scannedItems.count) icons matched)"
-                print("Robovac: icon positions from Finder, \(matched) of \(plan.scannedItems.count) matched")
-            }
-        }
-
-        // Excluded folders and files are zones the robot steers around.
-        let obstacles: [CGRect] = plan.excluded.compactMap { decision in
-            switch decision.exclusionReason {
-            case .insideExcludedFolder, .excludedFile: return rects[decision.item.id]
-            default: return nil
+            let iconSize = CGFloat(min(settings.appearance.iconGridColumnWidth, settings.appearance.iconGridRowHeight)) * 0.7
+            for (id, point) in refreshFinderPositions() {
+                rects[id] = CGRect(x: point.x - iconSize / 2, y: point.y - iconSize / 2, width: iconSize, height: iconSize)
             }
         }
 
@@ -166,6 +149,42 @@ final class RobotSessionDirector: CleaningSessionObserver {
         }
     }
 
+    // MARK: Icon positions
+
+    /// Asks Finder where every desktop icon is right now and updates `positions`.
+    /// Called before each file so icons moved during a run are still found.
+    /// Returns the positions that were matched.
+    @discardableResult
+    private func refreshFinderPositions() -> [UUID: CGPoint] {
+        guard settings.appearance.useFinderIconPositions, let screen, !scannedItems.isEmpty else { return [:] }
+        let result = FinderIconPositions.fetch()
+        if let error = result.error {
+            iconPositionSource = "grid approximation (Finder: \(error))"
+            print("Robovac: Finder icon positions unavailable: \(error)")
+            return [:]
+        }
+        // Finder reports the name as shown, which may omit a hidden extension.
+        var byName: [String: CGPoint] = [:]
+        for (name, point) in result.positions {
+            byName[name.precomposedStringWithCanonicalMapping] = point
+        }
+        var matched: [UUID: CGPoint] = [:]
+        for item in scannedItems {
+            let full = item.name.precomposedStringWithCanonicalMapping
+            let base = item.baseName.precomposedStringWithCanonicalMapping
+            guard let finderPoint = byName[full] ?? byName[base] else { continue }
+            let point = FinderIconPositions.overlayPoint(finderPoint, on: screen)
+            positions[item.id] = point
+            matched[item.id] = point
+        }
+        iconPositionSource = "Finder (\(matched.count)/\(scannedItems.count) icons matched)"
+        if matched.count < scannedItems.count {
+            let missing = scannedItems.filter { matched[$0.id] == nil }.map { $0.name }.prefix(5)
+            print("Robovac: icon positions from Finder, \(matched.count) of \(scannedItems.count) matched; unmatched: \(Array(missing))")
+        }
+        return matched
+    }
+
     // MARK: CleaningSessionObserver
 
     func sessionDidStart(_ plan: CleaningPlan) async {
@@ -176,6 +195,7 @@ final class RobotSessionDirector: CleaningSessionObserver {
 
     func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget? {
         guard isActive, !cancelled, let area = roamArea else { return nil }
+        refreshFinderPositions()
         let candidates: [(CleaningTarget, CGPoint)] = remaining.compactMap { target in
             guard let position = positions[target.id] else { return nil }
             return (target, position)
@@ -212,7 +232,10 @@ final class RobotSessionDirector: CleaningSessionObserver {
 
     func sessionWillCollect(_ target: CleaningTarget, index: Int, total: Int) async {
         appState?.progressDidChange(currentFile: target.item.name)
-        guard isActive, !cancelled, let destination = positions[target.id] else { return }
+        guard isActive, !cancelled else { return }
+        // The user may have dragged the icon since the route was chosen.
+        refreshFinderPositions()
+        guard let destination = positions[target.id] else { return }
         let icon = NSWorkspace.shared.icon(forFile: target.item.url.path)
         await driveAndVacuum(at: destination, icon: icon)
     }

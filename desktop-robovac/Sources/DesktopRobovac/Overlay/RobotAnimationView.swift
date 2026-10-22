@@ -45,7 +45,7 @@ enum RobotPainter {
                 rim: Color(white: 0.45).opacity(0.7),
                 bumper: Color(red: 0.12, green: 0.13, blue: 0.15),
                 seam: Color(white: 0.7).opacity(0.8),
-                highlight: 0.55,
+                highlight: 0.38,
                 metal: [Color(white: 0.95), Color(white: 0.78), Color(white: 0.6), Color(white: 0.82)],
                 bristle: Color(white: 0.78)
             )
@@ -55,7 +55,7 @@ enum RobotPainter {
                 rim: Color(white: 0.75).opacity(0.5),
                 bumper: Color(red: 0.03, green: 0.03, blue: 0.04),
                 seam: Color(white: 0.55).opacity(0.5),
-                highlight: 0.22,
+                highlight: 0.08,
                 metal: [Color(white: 0.6), Color(white: 0.42), Color(white: 0.25), Color(white: 0.5)],
                 bristle: Color(white: 0.55)
             )
@@ -144,7 +144,7 @@ enum RobotPainter {
             towerShadow.fill(Path(ellipseIn: CGRect(x: turretCenter.x - turretRadius + r * 0.03, y: turretCenter.y - turretRadius + r * 0.06, width: turretRadius * 2, height: turretRadius * 2)), with: .color(.black.opacity(0.3)))
             var glow = layer
             glow.addFilter(.blur(radius: r * 0.08))
-            glow.stroke(Path(ellipseIn: CGRect(x: turretCenter.x - turretRadius, y: turretCenter.y - turretRadius, width: turretRadius * 2, height: turretRadius * 2)), with: .color(ringColor.opacity(0.9)), lineWidth: r * 0.09)
+            glow.stroke(Path(ellipseIn: CGRect(x: turretCenter.x - turretRadius, y: turretCenter.y - turretRadius, width: turretRadius * 2, height: turretRadius * 2)), with: .color(ringColor.opacity(0.5)), lineWidth: r * 0.07)
             let turret = Path(ellipseIn: CGRect(x: turretCenter.x - turretRadius, y: turretCenter.y - turretRadius, width: turretRadius * 2, height: turretRadius * 2))
             let metal = Gradient(colors: palette.metal)
             layer.fill(turret, with: .linearGradient(metal, startPoint: CGPoint(x: turretCenter.x - turretRadius, y: turretCenter.y - turretRadius), endPoint: CGPoint(x: turretCenter.x + turretRadius, y: turretCenter.y + turretRadius)))
