@@ -72,7 +72,7 @@ final class SoundManager {
             motorPlayer = player
         }
         guard let player = motorPlayer, !player.isPlaying else { return }
-        let samples = ProceduralSoundSynth(sampleRate: sampleRate).motorLoop(duration: 2.0)
+        let samples = ProceduralSoundSynth(sampleRate: sampleRate).motorLoop(duration: 4.0)
         guard let buffer = makeBuffer(samples) else { return }
         player.volume = 0
         player.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
@@ -266,8 +266,8 @@ struct ProceduralSoundSynth {
         let hissAlpha = Float(1 - exp(-2 * Double.pi * 900 / sampleRate))
         for i in 0..<total {
             let t = Double(i) / sampleRate
-            let wobble = 1 + 0.015 * sin(2 * Double.pi * t / duration)
-            let phase = 2 * Double.pi * base * wobble * t
+            // Steady pitch: an integer number of cycles per loop keeps the join silent.
+            let phase = 2 * Double.pi * base * t
             var value = sin(phase) * 0.22 + sin(phase * 2) * 0.12 + sin(phase * 3) * 0.06 + sin(phase * 5.5) * 0.03
             let white = Float(generator.nextUnit() * 2 - 1)
             rumble += rumbleAlpha * (white - rumble)
