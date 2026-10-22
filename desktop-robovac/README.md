@@ -134,8 +134,8 @@ CPU is nil.
 
 The damp trail is a narrow, slightly glossy footprint that follows the robot's
 exact path (straight runs, rounded corners) in a cool gray-blue tint. It dries
-section by section: the gloss goes first, then the patch loses opacity and
-shrinks a little from the edges, until it is gone after the configured fade
+section by section: the gloss goes first, then the patch loses opacity,
+until it is gone after the configured fade
 time (4.5 s by default). Sections are drawn newest first with destination-over
 blending so overlaps never stack. Sheen and tire marks are alternatives. Reduced motion disables them and shortens the
 animation.

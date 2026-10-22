@@ -138,19 +138,20 @@ final class TrailRenderer {
                 layer.stroke(section.path, with: .color(highlight.opacity(opacity * 0.4 * g)),
                              style: StrokeStyle(lineWidth: baseWidth * 0.22, lineCap: .round, lineJoin: .round))
             }
-            // Middle: the damp patch, shrinking slightly from the edges as it dries.
+            // Middle: the damp patch. Constant width so sections join invisibly;
+            // drying shows only as the opacity going down.
             for section in sections {
                 let w = wetness(life: section.life)
                 guard w > 0.01 else { continue }
                 layer.stroke(section.path, with: .color(tint.opacity(opacity * 0.42 * w)),
-                             style: StrokeStyle(lineWidth: baseWidth * (0.8 + 0.2 * w), lineCap: .round, lineJoin: .round))
+                             style: StrokeStyle(lineWidth: baseWidth, lineCap: .round, lineJoin: .round))
             }
             // Bottom: a faint soft edge.
             for section in sections {
                 let w = wetness(life: section.life)
                 guard w > 0.01 else { continue }
                 layer.stroke(section.path, with: .color(tint.opacity(opacity * 0.14 * w)),
-                             style: StrokeStyle(lineWidth: baseWidth * (1.05 + 0.15 * w), lineCap: .round, lineJoin: .round))
+                             style: StrokeStyle(lineWidth: baseWidth * 1.2, lineCap: .round, lineJoin: .round))
             }
         case .sheen:
             for section in sections {
