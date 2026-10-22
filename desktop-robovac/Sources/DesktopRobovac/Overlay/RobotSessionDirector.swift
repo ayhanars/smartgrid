@@ -24,6 +24,7 @@ final class RobotSessionDirector: CleaningSessionObserver {
     private var hiddenPoint: CGPoint = .zero
     private var finished = false
     private var cancelled = false
+    private(set) var iconPositionSource = "grid approximation"
     private var random = SplitMix64(seed: UInt64(Date().timeIntervalSince1970))
 
     private var scene: RobotSceneModel { overlay.scene }
@@ -61,7 +62,29 @@ final class RobotSessionDirector: CleaningSessionObserver {
             arrangement: settings.appearance.iconArrangement
         )
         positions = layout.positions(for: plan.scannedItems)
-        let rects = layout.rects(for: plan.scannedItems)
+        var rects = layout.rects(for: plan.scannedItems)
+        iconPositionSource = "grid approximation"
+
+        // Exact positions from Finder when allowed; the grid stays as the fallback.
+        if settings.appearance.useFinderIconPositions, !plan.scannedItems.isEmpty {
+            let result = FinderIconPositions.fetch()
+            if let error = result.error {
+                iconPositionSource = "grid approximation (Finder: \(error))"
+                print("Robovac: Finder icon positions unavailable: \(error)")
+            } else {
+                var matched = 0
+                let iconSize = CGFloat(min(settings.appearance.iconGridColumnWidth, settings.appearance.iconGridRowHeight)) * 0.7
+                for item in plan.scannedItems {
+                    guard let finderPoint = result.positions[item.name] ?? result.positions[item.name.precomposedStringWithCanonicalMapping] else { continue }
+                    let point = FinderIconPositions.overlayPoint(finderPoint, on: screen)
+                    positions[item.id] = point
+                    rects[item.id] = CGRect(x: point.x - iconSize / 2, y: point.y - iconSize / 2, width: iconSize, height: iconSize)
+                    matched += 1
+                }
+                iconPositionSource = "Finder (\(matched)/\(plan.scannedItems.count) icons matched)"
+                print("Robovac: icon positions from Finder, \(matched) of \(plan.scannedItems.count) matched")
+            }
+        }
 
         // Excluded folders and files are zones the robot steers around.
         let obstacles: [CGRect] = plan.excluded.compactMap { decision in
@@ -119,12 +142,13 @@ final class RobotSessionDirector: CleaningSessionObserver {
         let maxSpeed = max(1, scene.motion.maxSpeed)
         scene.onTick = { [weak self] pose in
             guard let self, motorEnabled else { return }
+            // A real robot hums from the moment it leaves the dock until it is back:
+            // a steady floor, more with speed, a notch up while vacuuming.
             let level: Double
             switch pose.state {
-            case .vacuuming: level = 0.55
-            case .paused, .idle, .completed, .blocked: level = 0
-            case .turning: level = 0.25
-            default: level = 0.2 + 0.8 * Double(min(1, pose.speed / maxSpeed))
+            case .paused: level = 0
+            case .vacuuming: level = 0.8
+            default: level = pose.isVisible ? 0.35 + 0.65 * Double(min(1, pose.speed / maxSpeed)) : 0
             }
             self.sound.setMotorLevel(level)
         }
@@ -165,7 +189,8 @@ final class RobotSessionDirector: CleaningSessionObserver {
     func sessionWillCollect(_ target: CleaningTarget, index: Int, total: Int) async {
         appState?.progressDidChange(currentFile: target.item.name)
         guard isActive, !cancelled, let destination = positions[target.id] else { return }
-        await driveAndVacuum(at: destination)
+        let icon = NSWorkspace.shared.icon(forFile: target.item.url.path)
+        await driveAndVacuum(at: destination, icon: icon)
     }
 
     func sessionDidCollect(_ target: CleaningTarget, result: Result<URL, MoveFailure>) async {
@@ -257,7 +282,7 @@ final class RobotSessionDirector: CleaningSessionObserver {
                 }
             }
             guard !cancelled else { break }
-            await driveAndVacuum(at: target)
+            await driveAndVacuum(at: target, icon: nil)
             guard !cancelled else { break }
             scene.collected(at: target)
             sound.play(.collect)
@@ -279,7 +304,7 @@ final class RobotSessionDirector: CleaningSessionObserver {
         await scene.motion.hold(duration: settings.appearance.reducedMotion ? 0.1 : 0.35, state: .idle)
     }
 
-    private func driveAndVacuum(at destination: CGPoint) async {
+    private func driveAndVacuum(at destination: CGPoint, icon: NSImage?) async {
         guard let planner else { return }
         let waypoints = planner.route(from: scene.pose.position, to: approachPoint(for: destination))
         if waypoints.count > 2 { sound.play(.avoid) }
@@ -291,9 +316,9 @@ final class RobotSessionDirector: CleaningSessionObserver {
         await scene.motion.travel(along: [scene.pose.position, nudge(scene.pose.position, toward: heading)], purpose: .collect)
         guard !finished, !cancelled else { return }
 
-        scene.beginSuction(at: destination)
-        sound.play(.suction)
         let duration = settings.appearance.reducedMotion ? 0.3 : (settings.cleaning.mode.isGentle ? 1.9 : 1.4)
+        scene.beginSuction(at: destination, icon: icon, duration: duration)
+        sound.play(.suction)
         await scene.motion.vacuum(duration: duration)
     }
 

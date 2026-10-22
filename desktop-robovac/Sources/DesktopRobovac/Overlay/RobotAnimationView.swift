@@ -9,6 +9,9 @@ struct RobotAnimationView: View {
             let now = scene.now
             scene.trail.draw(in: context, now: now)
             scene.particles.draw(in: context)
+            if let sprite = scene.sprite {
+                SuctionSpritePainter.draw(sprite, mouth: scene.mouthPosition, now: now, in: context)
+            }
             if scene.pose.isVisible {
                 RobotPainter.draw(pose: scene.pose, size: scene.robotSize, in: context)
             }
@@ -167,6 +170,69 @@ enum RobotPainter {
         case .avoiding: return .yellow
         default: return Color(red: 0.45, green: 0.95, blue: 0.6)
         }
+    }
+}
+
+/// Draws the file being vacuumed: it lifts, wobbles, gets pulled along a curve
+/// into the intake and crumples (shrinks and spins) as it goes in. Uses the file's
+/// real icon when known, otherwise a sheet of paper.
+enum SuctionSpritePainter {
+    static func draw(_ sprite: RobotSceneModel.SuctionSprite, mouth: CGPoint, now: TimeInterval, in context: GraphicsContext) {
+        let t = min(1, max(0, (now - sprite.startTime) / sprite.duration))
+        // Hesitate first (the icon shivers), then accelerate into the intake.
+        let pull = t < 0.3 ? 0 : pow((t - 0.3) / 0.7, 1.8)
+        let shiver = t < 0.3 ? sin(now * 60) * 2.5 * (t / 0.3) : 0
+        let lift = sin(min(1, t / 0.3) * .pi / 2) * 6
+        let position = CGPoint(
+            x: sprite.origin.x + (mouth.x - sprite.origin.x) * pull + shiver,
+            y: sprite.origin.y + (mouth.y - sprite.origin.y) * pull - lift * (1 - pull)
+        )
+        let scale = 1 - 0.9 * pull
+        let rotation = pull * 2.6 + shiver * 0.02
+        let size = sprite.size * scale
+        guard size > 1.5 else { return }
+
+        context.drawLayer { layer in
+            layer.translateBy(x: position.x, y: position.y)
+            layer.rotate(by: Angle(radians: rotation))
+            // Crumple: squash sideways as it goes in.
+            layer.scaleBy(x: 1 - 0.35 * pull, y: 1)
+            layer.opacity = 1 - 0.3 * pull
+
+            let rect = CGRect(x: -size / 2, y: -size / 2, width: size, height: size)
+            if let icon = sprite.icon {
+                let resolved = layer.resolve(Image(nsImage: icon))
+                var shadow = layer
+                shadow.addFilter(.shadow(color: .black.opacity(0.4), radius: size * 0.08, x: 0, y: size * 0.05))
+                shadow.draw(resolved, in: rect)
+            } else {
+                drawPaper(in: rect, layer: &layer)
+            }
+        }
+    }
+
+    private static func drawPaper(in rect: CGRect, layer: inout GraphicsContext) {
+        let sheet = CGRect(x: rect.minX + rect.width * 0.15, y: rect.minY, width: rect.width * 0.7, height: rect.height)
+        var shadow = layer
+        shadow.addFilter(.shadow(color: .black.opacity(0.35), radius: rect.width * 0.06, x: 0, y: rect.height * 0.04))
+        shadow.fill(Path(roundedRect: sheet, cornerRadius: rect.width * 0.04), with: .color(.white))
+        layer.fill(Path(roundedRect: sheet, cornerRadius: rect.width * 0.04), with: .color(.white))
+        // Folded corner
+        var fold = Path()
+        fold.move(to: CGPoint(x: sheet.maxX - sheet.width * 0.3, y: sheet.minY))
+        fold.addLine(to: CGPoint(x: sheet.maxX, y: sheet.minY + sheet.height * 0.22))
+        fold.addLine(to: CGPoint(x: sheet.maxX - sheet.width * 0.3, y: sheet.minY + sheet.height * 0.22))
+        fold.closeSubpath()
+        layer.fill(fold, with: .color(Color(white: 0.85)))
+        // Text lines
+        for line in 0..<5 {
+            let y = sheet.minY + sheet.height * (0.35 + 0.11 * CGFloat(line))
+            var path = Path()
+            path.move(to: CGPoint(x: sheet.minX + sheet.width * 0.15, y: y))
+            path.addLine(to: CGPoint(x: sheet.maxX - sheet.width * (line == 4 ? 0.45 : 0.15), y: y))
+            layer.stroke(path, with: .color(Color(white: 0.6)), lineWidth: max(1, rect.height * 0.035))
+        }
+        layer.stroke(Path(roundedRect: sheet, cornerRadius: rect.width * 0.04), with: .color(Color(white: 0.55)), lineWidth: 1)
     }
 }
 

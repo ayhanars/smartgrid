@@ -39,6 +39,11 @@ jobs:
       - name: Smoke test the overlay (screenshot + window diagnostics)
         run: |
           mkdir -p smoke
+          echo "hello" > "$HOME/Desktop/Robovac Probe.txt"
+          sleep 2
+          echo "===== finder icon positions ====="
+          osascript -e 'tell application "Finder" to get {name, desktop position} of every item of desktop' || echo "osascript failed"
+          osascript -e 'tell application "Finder" to get bounds of window of desktop' || true
           ROBOVAC_SMOKE_TEST=1 ./build/DesktopRobovac.app/Contents/MacOS/DesktopRobovac > smoke/app.log 2>&1 &
           APP_PID=$!
           sleep 7

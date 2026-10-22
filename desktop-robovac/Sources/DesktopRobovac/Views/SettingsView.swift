@@ -346,7 +346,13 @@ struct AppearanceSettingsTab: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
-            Section("Desktop icon grid") {
+            Section("Finding the icons") {
+                Toggle("Ask Finder for exact icon positions", isOn: $app.settings.appearance.useFinderIconPositions)
+                Text("Recommended. macOS asks once whether Desktop Robovac may control Finder; the app only reads where the icons are. If you decline, the grid below is used instead.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("Desktop icon grid (fallback)") {
                 Picker("Finder sorts the Desktop by", selection: $app.settings.appearance.iconArrangement) {
                     ForEach(IconArrangement.allCases) { arrangement in
                         Text(arrangement.displayName).tag(arrangement)
@@ -354,7 +360,7 @@ struct AppearanceSettingsTab: View {
                 }
                 Slider(value: $app.settings.appearance.iconGridColumnWidth, in: 64...160, step: 4) { Text("Column width") }
                 Slider(value: $app.settings.appearance.iconGridRowHeight, in: 64...160, step: 4) { Text("Row height") }
-                Text("macOS offers no public way to read icon positions, so the robot drives to an approximation of Finder's grid. Match these to your Finder › View Options for the best illusion. The file moves themselves are always exact.")
+                Text("Used when Finder cannot be asked. Match these to Finder › View Options for the best guess. The file moves themselves are always exact.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

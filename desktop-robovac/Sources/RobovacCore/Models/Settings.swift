@@ -281,6 +281,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
     public var iconGridRowHeight: Double
     public var movementPattern: MovementPattern
     public var robotLayer: RobotLayer
+    /// Ask Finder for the exact icon positions (needs the Automation permission once).
+    public var useFinderIconPositions: Bool
 
     public init(
         robotSize: Double = 64,
@@ -295,7 +297,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         iconGridColumnWidth: Double = 96,
         iconGridRowHeight: Double = 104,
         movementPattern: MovementPattern = .bounce,
-        robotLayer: RobotLayer = .aboveWindows
+        robotLayer: RobotLayer = .behindWindows,
+        useFinderIconPositions: Bool = true
     ) {
         self.robotSize = robotSize
         self.movementSpeed = movementSpeed
@@ -310,12 +313,13 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         self.iconGridRowHeight = iconGridRowHeight
         self.movementPattern = movementPattern
         self.robotLayer = robotLayer
+        self.useFinderIconPositions = useFinderIconPositions
     }
 
     enum CodingKeys: String, CodingKey {
         case robotSize, movementSpeed, trailStyle, trailOpacity, trailFadeDuration
         case particleEffects, animationIntensity, reducedMotion, iconArrangement
-        case iconGridColumnWidth, iconGridRowHeight, movementPattern, robotLayer
+        case iconGridColumnWidth, iconGridRowHeight, movementPattern, robotLayer, useFinderIconPositions
     }
 
     public init(from decoder: Decoder) throws {
@@ -334,7 +338,8 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
             iconGridColumnWidth: c.decode(Double.self, forKey: .iconGridColumnWidth, default: d.iconGridColumnWidth),
             iconGridRowHeight: c.decode(Double.self, forKey: .iconGridRowHeight, default: d.iconGridRowHeight),
             movementPattern: c.decode(MovementPattern.self, forKey: .movementPattern, default: d.movementPattern),
-            robotLayer: c.decode(RobotLayer.self, forKey: .robotLayer, default: d.robotLayer)
+            robotLayer: c.decode(RobotLayer.self, forKey: .robotLayer, default: d.robotLayer),
+            useFinderIconPositions: c.decode(Bool.self, forKey: .useFinderIconPositions, default: d.useFinderIconPositions)
         )
     }
 }

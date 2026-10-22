@@ -30,6 +30,8 @@
 	<string>Desktop Robovac looks at the files on your Desktop so the robot can tidy them into the folder you choose. Nothing is deleted and nothing leaves your Mac.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>Desktop Robovac moves cleaned files into a folder inside Documents by default.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Desktop Robovac asks Finder where your desktop icons are, so the robot drives to the right spot before each file is moved.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>Needed only if you choose a destination inside Downloads.</string>
 </dict>

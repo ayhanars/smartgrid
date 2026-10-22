@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import QuartzCore
@@ -9,6 +10,16 @@ import RobovacCore
 final class RobotSceneModel: ObservableObject {
     @Published private(set) var pose = RobotPose()
     @Published private(set) var frame: Int = 0
+
+    /// The file being sucked in: its real icon (or a paper sheet) flying into the intake.
+    struct SuctionSprite {
+        var icon: NSImage?
+        var origin: CGPoint
+        var startTime: TimeInterval
+        var duration: TimeInterval
+        var size: CGFloat
+    }
+    private(set) var sprite: SuctionSprite?
 
     let motion = RobotMotionController()
     let trail = TrailRenderer()
@@ -57,22 +68,25 @@ final class RobotSceneModel: ObservableObject {
         pose.isVisible = visible
     }
 
-    func beginSuction(at target: CGPoint) {
+    func beginSuction(at target: CGPoint, icon: NSImage?, duration: TimeInterval) {
         pose.suctionTarget = target
         particles.attractor = mouthPosition
         particles.spawnDust(at: target, radius: robotSize * 0.6)
         particles.spawnSuction(at: target, radius: robotSize * 0.9)
+        sprite = SuctionSprite(icon: icon, origin: target, startTime: now, duration: max(0.2, duration), size: robotSize * 0.95)
     }
 
     func collected(at target: CGPoint) {
         particles.spawnBurst(at: mouthPosition)
         particles.attractor = nil
+        sprite = nil
     }
 
     func flashError() {
         pose.errorFlash = 1
         pose.state = .blocked
         particles.attractor = nil
+        sprite = nil
     }
 
     func celebrate() {
@@ -83,6 +97,7 @@ final class RobotSceneModel: ObservableObject {
     func resetEffects() {
         trail.reset()
         particles.reset()
+        sprite = nil
     }
 
     /// Point in front of the robot where files get sucked in.

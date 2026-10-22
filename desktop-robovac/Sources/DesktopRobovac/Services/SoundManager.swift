@@ -83,7 +83,7 @@ final class SoundManager {
         } else if motorLevel > motorTargetLevel {
             motorLevel = max(motorTargetLevel, motorLevel - step * 1.5)
         }
-        motorPlayer?.volume = Float(settings.volume) * Float(motorLevel) * 0.55
+        motorPlayer?.volume = Float(settings.volume) * Float(motorLevel) * 0.8
         if motorLevel == 0, motorTargetLevel == 0 {
             stopMotor()
         }
