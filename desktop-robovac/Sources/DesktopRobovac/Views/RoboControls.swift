@@ -126,9 +126,9 @@ struct RouteGlyph: View {
             ctx.scaleBy(x: scale, y: scale)
             let style = StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
             switch pattern {
-            case .quick: ctx.stroke(RouteGlyph.serpentine(passes: 2), with: .color(.primary), style: style)
-            case .standard: ctx.stroke(RouteGlyph.serpentine(passes: 3), with: .color(.primary), style: style)
-            case .deep: ctx.stroke(RouteGlyph.serpentine(passes: 5), with: .color(.primary), style: style)
+            case .quick: ctx.stroke(RouteGlyph.serpentine(passes: 2), with: .foreground, style: style)
+            case .standard: ctx.stroke(RouteGlyph.serpentine(passes: 3), with: .foreground, style: style)
+            case .deep: ctx.stroke(RouteGlyph.serpentine(passes: 5), with: .foreground, style: style)
             case .bounce:
                 var p = Path()
                 p.move(to: CGPoint(x: 2, y: 12))
@@ -137,7 +137,7 @@ struct RouteGlyph: View {
                 p.addLine(to: CGPoint(x: 14, y: 2))
                 p.addLine(to: CGPoint(x: 18, y: 12))
                 p.addLine(to: CGPoint(x: 20, y: 7))
-                ctx.stroke(p, with: .color(.primary), style: style)
+                ctx.stroke(p, with: .foreground, style: style)
             case .direct:
                 var p = Path()
                 p.move(to: CGPoint(x: 2, y: 7))
@@ -145,7 +145,7 @@ struct RouteGlyph: View {
                 p.move(to: CGPoint(x: 14, y: 2))
                 p.addLine(to: CGPoint(x: 19, y: 7))
                 p.addLine(to: CGPoint(x: 14, y: 12))
-                ctx.stroke(p, with: .color(.primary), style: style)
+                ctx.stroke(p, with: .foreground, style: style)
             }
         }
         .frame(width: 22, height: 14)
@@ -163,9 +163,14 @@ struct RouteGlyph: View {
             if i == 0 { p.move(to: CGPoint(x: leftToRight ? 2 : 20, y: y)) }
             p.addLine(to: CGPoint(x: leftToRight ? 20 - r : 2 + r, y: y))
             if i < passes - 1 {
-                // Half circle down to the next pass.
+                // Half circle down to the next pass, sampled so the direction is unambiguous.
                 let centre = CGPoint(x: leftToRight ? 20 - r : 2 + r, y: y + step / 2)
-                p.addArc(center: centre, radius: step / 2, startAngle: .degrees(-90), endAngle: .degrees(90), clockwise: !leftToRight)
+                let radius = step / 2
+                for k in 1...8 {
+                    let t = CGFloat(k) / 8
+                    let angle = leftToRight ? (-CGFloat.pi / 2 + CGFloat.pi * t) : (-CGFloat.pi / 2 - CGFloat.pi * t)
+                    p.addLine(to: CGPoint(x: centre.x + cos(angle) * radius, y: centre.y + sin(angle) * radius))
+                }
             }
             y += step
         }
@@ -187,14 +192,14 @@ struct TrailGlyph: View {
             if level != .off {
                 var fill = ctx
                 fill.clip(to: drop)
-                fill.fill(Path(CGRect(x: 0, y: level.fillY, width: 14, height: 16)), with: .color(.primary))
+                fill.fill(Path(CGRect(x: 0, y: level.fillY, width: 14, height: 16)), with: .foreground)
             }
-            ctx.stroke(drop, with: .color(.primary), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+            ctx.stroke(drop, with: .foreground, style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
             if level == .off {
                 var slash = Path()
                 slash.move(to: CGPoint(x: 2, y: 14))
                 slash.addLine(to: CGPoint(x: 12, y: 2))
-                ctx.stroke(slash, with: .color(.primary), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                ctx.stroke(slash, with: .foreground, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
             }
         }
         .frame(width: 14, height: 16)
@@ -204,7 +209,11 @@ struct TrailGlyph: View {
         var p = Path()
         p.move(to: CGPoint(x: 7, y: 1.5))
         p.addCurve(to: CGPoint(x: 2.2, y: 10.2), control1: CGPoint(x: 7, y: 1.5), control2: CGPoint(x: 2.2, y: 7))
-        p.addArc(center: CGPoint(x: 7, y: 10.2), radius: 4.8, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: true)
+        // Bottom half circle from the left point round the bottom to the right point.
+        for k in 1...12 {
+            let angle = CGFloat.pi - CGFloat.pi * CGFloat(k) / 12
+            p.addLine(to: CGPoint(x: 7 + cos(angle) * 4.8, y: 10.2 + sin(angle) * 4.8))
+        }
         p.addCurve(to: CGPoint(x: 7, y: 1.5), control1: CGPoint(x: 11.8, y: 7), control2: CGPoint(x: 7, y: 1.5))
         p.closeSubpath()
         return p

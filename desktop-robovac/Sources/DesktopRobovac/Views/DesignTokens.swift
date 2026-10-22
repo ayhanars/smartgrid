@@ -56,19 +56,19 @@ enum DS {
 
         var background: Color {
             switch self {
-            case .grey: return dynamic(hex(0xE3E3E7), hex(0x3A3A3E))
-            case .green: return dynamic(hex(0xD6F1DC), hex(0x1B4A2A))
-            case .orange: return dynamic(hex(0xFFE6C6), hex(0x4F3511))
-            case .blue: return dynamic(hex(0xD5E7FF), hex(0x173B68))
+            case .grey: return DS.dynamic(DS.hex(0xE3E3E7), DS.hex(0x3A3A3E))
+            case .green: return DS.dynamic(DS.hex(0xD6F1DC), DS.hex(0x1B4A2A))
+            case .orange: return DS.dynamic(DS.hex(0xFFE6C6), DS.hex(0x4F3511))
+            case .blue: return DS.dynamic(DS.hex(0xD5E7FF), DS.hex(0x173B68))
             }
         }
 
         var foreground: Color {
             switch self {
-            case .grey: return secondary70
-            case .green: return dynamic(hex(0x1F7A37), hex(0x5FDC82))
-            case .orange: return dynamic(hex(0x9A4D00), hex(0xFFB340))
-            case .blue: return dynamic(hex(0x0B57B8), hex(0x79B8FF))
+            case .grey: return DS.secondary70
+            case .green: return DS.dynamic(DS.hex(0x1F7A37), DS.hex(0x5FDC82))
+            case .orange: return DS.dynamic(DS.hex(0x9A4D00), DS.hex(0xFFB340))
+            case .blue: return DS.dynamic(DS.hex(0x0B57B8), DS.hex(0x79B8FF))
             }
         }
     }
@@ -78,25 +78,25 @@ enum DS {
 
         var dot: Color {
             switch self {
-            case .warn: return dynamic(hex(0xFF9500), hex(0xFF9F0A))
-            case .info: return accent
-            case .neutral: return quaternary
+            case .warn: return DS.dynamic(DS.hex(0xFF9500), DS.hex(0xFF9F0A))
+            case .info: return DS.accent
+            case .neutral: return DS.quaternary
             }
         }
 
         var background: Color {
             switch self {
-            case .warn: return dynamic(hex(0xFFF3E0), rgba(255, 159, 10, 0.12))
-            case .info: return dynamic(hex(0xE8F1FF), rgba(10, 132, 255, 0.14))
-            case .neutral: return card
+            case .warn: return DS.dynamic(DS.hex(0xFFF3E0), DS.rgba(255, 159, 10, 0.12))
+            case .info: return DS.dynamic(DS.hex(0xE8F1FF), DS.rgba(10, 132, 255, 0.14))
+            case .neutral: return DS.card
             }
         }
 
         var ring: Color {
             switch self {
-            case .warn: return dynamic(rgba(255, 149, 0, 0.35), rgba(255, 159, 10, 0.3))
-            case .info: return dynamic(rgba(0, 122, 255, 0.3), rgba(10, 132, 255, 0.3))
-            case .neutral: return cardRing
+            case .warn: return DS.dynamic(DS.rgba(255, 149, 0, 0.35), DS.rgba(255, 159, 10, 0.3))
+            case .info: return DS.dynamic(DS.rgba(0, 122, 255, 0.3), DS.rgba(10, 132, 255, 0.3))
+            case .neutral: return DS.cardRing
             }
         }
     }
@@ -251,15 +251,22 @@ struct DSPrimaryButtonStyle: ButtonStyle {
 
 /// Footer icon + label button, 26 pt, hover fill.
 struct DSFooterButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        DSFooterButtonLabel(configuration: configuration)
+    }
+}
+
+private struct DSFooterButtonLabel: View {
+    let configuration: ButtonStyleConfiguration
     @State private var hovering = false
 
-    func makeBody(configuration: Configuration) -> some View {
+    var body: some View {
         configuration.label
             .font(DS.captionMedium)
             .foregroundStyle(DS.secondary75)
             .padding(.horizontal, 8)
             .frame(height: 26)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? DS.hoverFill : .clear))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(hovering ? DS.hoverFill : Color.clear))
             .opacity(configuration.isPressed ? 0.7 : 1)
             .onHover { hovering = $0 }
     }

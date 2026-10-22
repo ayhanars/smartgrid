@@ -84,7 +84,7 @@ struct PopoverView: View {
 
     private var stats: some View {
         HStack(spacing: 8) {
-            statTile(value: app.plan.map { "\($0.targets.count)" } ?? (app.scanProblem == nil ? "–" : "–"), label: "To clean")
+            statTile(value: app.plan.map { "\($0.targets.count)" } ?? "–", label: "To clean")
             statTile(value: app.isCleaning || app.lastSummary != nil ? "\(app.progress.moved)" : "0", label: "Cleaned")
             statTile(value: "\(app.sessions.count)", label: "Sessions")
         }
@@ -130,7 +130,7 @@ struct PopoverView: View {
     @ViewBuilder private var notices: some View {
         if let problem = app.scanProblem {
             notice(.warn, title: "Can’t read the Desktop",
-                   body: problem.isPermissionProblem ? "Robovac needs permission to see the files on your Desktop." : problem.message) {
+                   message: problem.isPermissionProblem ? "Robovac needs permission to see the files on your Desktop." : problem.message) {
                 if problem.isPermissionProblem {
                     Button("Open Privacy Settings") { SystemLinks.openFilesAndFoldersPrivacy() }
                         .buttonStyle(DSSmallButtonStyle(kind: .primary))
@@ -141,7 +141,7 @@ struct PopoverView: View {
         }
         if let session = app.interruptedSession {
             notice(.neutral, title: "The last cleaning was interrupted",
-                   body: "It stopped after moving \(session.moves.count) file\(session.moves.count == 1 ? "" : "s"). You can put them back.") {
+                   message: "It stopped after moving \(session.moves.count) file\(session.moves.count == 1 ? "" : "s"). You can put them back.") {
                 Button("Undo It") { Task { await app.undo(session: session) } }
                     .buttonStyle(DSSmallButtonStyle(kind: .primary))
                     .disabled(app.undoInProgress)
@@ -152,7 +152,7 @@ struct PopoverView: View {
         if let report = app.lastUndoReport, !report.isComplete {
             let occupied = report.conflicts.contains { $0.failure == .originalOccupied }
             notice(.warn, title: "\(report.restored.count) restored, \(report.conflicts.count) could not go back",
-                   body: occupied ? "Files with the same name are already on the Desktop." : (report.conflicts.first?.failure.message ?? ""),
+                   message: occupied ? "Files with the same name are already on the Desktop." : (report.conflicts.first?.failure.message ?? ""),
                    lines: report.conflicts.prefix(3).map { $0.record.fileName }) {
                 if occupied {
                     Button("Restore With New Names") { Task { await app.undoLastCleaning(resolution: .restoreWithUniqueName) } }
@@ -164,7 +164,7 @@ struct PopoverView: View {
             }
         }
         if let countdown = app.autoCleanCountdown {
-            notice(.info, title: "New files spotted", body: "Auto-cleaning in \(countdown) s…") {
+            notice(.info, title: "New files spotted", message: "Auto-cleaning in \(countdown) s…") {
                 Button("Clean Now") { app.cancelAutoClean(); app.startCleaning() }
                     .buttonStyle(DSSmallButtonStyle(kind: .primary))
                 Button("Not Now") { app.cancelAutoClean() }
@@ -173,14 +173,14 @@ struct PopoverView: View {
         }
     }
 
-    private func notice<Actions: View>(_ kind: DS.NoticeKind, title: String, body: String, lines: [String] = [], @ViewBuilder actions: () -> Actions) -> some View {
+    private func notice<Actions: View>(_ kind: DS.NoticeKind, title: String, message: String, lines: [String] = [], @ViewBuilder actions: () -> Actions) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
                 Circle().fill(kind.dot).frame(width: 8, height: 8).padding(.top, 5)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(DS.bodySemibold)
-                    if !body.isEmpty {
-                        Text(body).font(DS.small).foregroundStyle(DS.secondary70).fixedSize(horizontal: false, vertical: true)
+                    if !message.isEmpty {
+                        Text(message).font(DS.small).foregroundStyle(DS.secondary70).fixedSize(horizontal: false, vertical: true)
                     }
                     ForEach(lines, id: \.self) { line in
                         Text(line).font(DS.caption).monospacedDigit().foregroundStyle(DS.secondary70).lineLimit(1).truncationMode(.middle)

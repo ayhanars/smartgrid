@@ -17,6 +17,7 @@ struct SettingsSection<Rows: View>: View {
                 DSSectionHeader(title: title, value: aside, uppercase: true)
             }
             VStack(spacing: 0) { rows() }
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .dsCard(ring: DS.dynamic(DS.rgba(0, 0, 0, 0.1), DS.rgba(255, 255, 255, 0.08)))
             if let footnote {
                 Text(footnote).font(DS.caption).foregroundStyle(DS.secondary60).padding(.horizontal, 2)
