@@ -65,7 +65,7 @@ struct SettingsView: View {
         .font(DS.body)
         .foregroundStyle(DS.text)
         .navigationTitle(tab.title)
-        .onAppear { NSApp.activate(ignoringOtherApps: true) }
+        .background(BringToFront())
     }
 
     private var tabBar: some View {

@@ -62,8 +62,8 @@ struct PopoverView: View {
                 Text(heroStatus)
                     .font(DS.body)
                     .foregroundStyle(heroTint.foreground)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
@@ -207,7 +207,7 @@ struct PopoverView: View {
             if let plan = app.plan, !plan.excluded.isEmpty {
                 HStack(spacing: 8) {
                     Text("Left alone by your rules: \(leftAloneText(plan))")
-                        .font(DS.small).foregroundStyle(DS.secondary70).lineLimit(1).truncationMode(.tail)
+                        .font(DS.small).foregroundStyle(DS.secondary70).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Button("Why?") { showPreview() }
                         .buttonStyle(.plain)
@@ -242,7 +242,7 @@ struct PopoverView: View {
 
     private var modeTabs: some View {
         VStack(alignment: .leading, spacing: 6) {
-            TabStrip(items: CleaningMode.allCases, title: { $0.displayName }, selection: $app.settings.cleaning.mode, disabled: app.isCleaning)
+            TabStrip(items: CleaningMode.allCases, title: { modeTabName($0) }, selection: $app.settings.cleaning.mode, disabled: app.isCleaning)
             Text(modeDescription(app.settings.cleaning.mode))
                 .font(DS.small)
                 .foregroundStyle(DS.secondary60)
@@ -250,6 +250,15 @@ struct PopoverView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 2)
+    }
+
+    /// Short enough that all three fit side by side without scrolling.
+    private func modeTabName(_ mode: CleaningMode) -> String {
+        switch mode {
+        case .smartClean: return "Smart"
+        case .screenshotSweep: return "Screenshots"
+        case .gentleClean: return "Gentle"
+        }
     }
 
     private func modeDescription(_ mode: CleaningMode) -> String {
@@ -376,7 +385,7 @@ struct PopoverView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             Rectangle().fill(DS.cardRing).frame(height: 1)
-            HStack(spacing: 4) {
+            HStack(spacing: 2) {
                 Button {
                     if let session = app.lastUndoableSession { Task { await app.undo(session: session) } }
                 } label: {

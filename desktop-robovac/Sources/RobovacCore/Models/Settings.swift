@@ -362,7 +362,7 @@ public struct AppearanceSettings: Codable, Equatable, Sendable {
         robotSize: Double = 64,
         movementSpeed: Double = 260,
         trailStyle: TrailStyle = .damp,
-        trailOpacity: Double = 0.4,
+        trailOpacity: Double = 0.6,
         trailFadeDuration: Double = 4.5,
         particleEffects: Bool = true,
         animationIntensity: Double = 1.0,

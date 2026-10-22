@@ -324,7 +324,17 @@ final class AppState: ObservableObject {
 
     /// Shows the robot and lets it drive around without moving any files.
     func runTestDrive() {
-        guard !isBusy else { return }
+        guard !isCleaning, !isRehearsing else { return }
+        if phase == .scanning {
+            // A scan is in flight (launch or a Desktop change); start as soon as it lands.
+            Task { @MainActor in
+                for _ in 0..<40 where self.phase == .scanning {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                if self.phase == .idle { self.runTestDrive() }
+            }
+            return
+        }
         phase = .rehearsing
         let director = RobotSessionDirector(appState: self, overlay: overlay, sound: sound, settings: settings)
         self.director = director

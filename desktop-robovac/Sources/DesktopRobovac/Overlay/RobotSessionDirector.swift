@@ -148,22 +148,21 @@ final class RobotSessionDirector: CleaningSessionObserver {
             }
         }
         let motorEnabled = settings.sound.continuousMotorSound && settings.sound.isEnabled(.movement)
-        let maxSpeed = max(1, scene.motion.maxSpeed)
         scene.onTick = { [weak self] pose in
             guard let self, motorEnabled else { return }
             if let override = self.motorOverride {
                 self.sound.setMotorLevel(override.level, ramp: override.ramp)
                 return
             }
-            // A real robot hums from the moment it leaves the dock until it is back:
-            // a steady floor, more with speed, a notch up while vacuuming.
+            // A real robot hums at one steady level from the moment it leaves the
+            // dock until it is back; only vacuuming lifts it slightly.
             let level: Double
             switch pose.state {
             case .paused: level = 0
-            case .vacuuming: level = 0.8
-            default: level = pose.isVisible ? 0.35 + 0.65 * Double(min(1, pose.speed / maxSpeed)) : 0
+            case .vacuuming: level = 0.85
+            default: level = pose.isVisible ? 0.7 : 0
             }
-            self.sound.setMotorLevel(level)
+            self.sound.setMotorLevel(level, ramp: 0.8)
         }
     }
 

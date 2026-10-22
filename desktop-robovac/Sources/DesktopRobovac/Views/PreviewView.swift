@@ -29,6 +29,7 @@ struct PreviewView: View {
                 .padding()
         }
         .frame(minWidth: 520, minHeight: 560)
+        .background(BringToFront())
         .onAppear {
             app.markPreviewSeen()
             Task { await app.refreshPlan() }

@@ -43,8 +43,8 @@ struct ToggleRow: View {
             if !first { RowDivider() }
             Toggle(isOn: $isOn) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(label)
-                    if let sub { Text(sub).font(DS.caption).foregroundStyle(DS.secondary60) }
+                    Text(label).fixedSize(horizontal: false, vertical: true)
+                    if let sub { Text(sub).font(DS.caption).foregroundStyle(DS.secondary60).fixedSize(horizontal: false, vertical: true) }
                 }
             }
             .toggleStyle(DSSwitchStyle())
@@ -72,7 +72,7 @@ struct PathRow: View {
             if !first { RowDivider() }
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label)
+                    Text(label).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 6) {
                         FolderIcon()
                         Text(path).font(DS.caption).foregroundStyle(DS.secondary60).lineLimit(1).truncationMode(.middle)

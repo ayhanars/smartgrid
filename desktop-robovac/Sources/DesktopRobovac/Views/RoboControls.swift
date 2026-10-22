@@ -155,7 +155,7 @@ struct RouteGlyph: View {
     static func serpentine(passes: Int) -> Path {
         let top: CGFloat = 2, bottom: CGFloat = 12
         let step = (bottom - top) / CGFloat(passes - 1)
-        let r = min(step / 2, 2.2)
+        let r = step / 2
         var p = Path()
         var y = top
         for i in 0..<passes {

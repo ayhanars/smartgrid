@@ -39,6 +39,7 @@ struct DockSetupGuideView: View {
         }
         .padding(20)
         .frame(width: 460)
+        .background(BringToFront())
     }
 
     private func step(_ number: Int, _ text: String) -> some View {

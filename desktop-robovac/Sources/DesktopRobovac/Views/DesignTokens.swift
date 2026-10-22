@@ -263,6 +263,8 @@ private struct DSFooterButtonLabel: View {
     var body: some View {
         configuration.label
             .font(DS.captionMedium)
+            .lineLimit(1)
+            .fixedSize()
             .foregroundStyle(DS.secondary75)
             .padding(.horizontal, 8)
             .frame(height: 26)
