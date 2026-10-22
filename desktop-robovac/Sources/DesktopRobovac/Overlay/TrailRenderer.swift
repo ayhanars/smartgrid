@@ -181,12 +181,12 @@ final class TrailRenderer {
             for slice in slices {
                 let w = wetness(life: slice.life)
                 guard w > 0.01 else { continue }
-                layer.fill(slice.outline, with: .color(tint.opacity(opacity * 0.36 * w)))
+                layer.fill(slice.outline, with: .color(tint.opacity(opacity * 0.46 * w)))
             }
             for corner in corners {
                 let w = wetness(life: corner.life)
                 guard w > 0.01 else { continue }
-                layer.fill(Path(ellipseIn: CGRect(x: corner.center.x - half, y: corner.center.y - half, width: width, height: width)), with: .color(tint.opacity(opacity * 0.36 * w)))
+                layer.fill(Path(ellipseIn: CGRect(x: corner.center.x - half, y: corner.center.y - half, width: width, height: width)), with: .color(tint.opacity(opacity * 0.46 * w)))
             }
         case .sheen:
             for slice in slices {

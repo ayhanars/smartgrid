@@ -132,8 +132,10 @@ acceleration, braking, pivot turns, an approach phase and the suction
 animation; it runs on a 60 Hz timer only while the overlay is visible, so idle
 CPU is nil.
 
-The damp trail is a narrow, slightly glossy footprint that follows the robot's
-exact path (straight runs, rounded corners) in a cool gray-blue tint. It dries
+The damp trail is a flat band the robot's width that follows its exact path
+(straight runs, rounded corners), built from slices between samples that share
+edges so there are no caps or seams, with crisp edges and one soft highlight
+streak along one side in a cool gray-blue tint. It dries
 section by section: the gloss goes first, then the patch loses opacity,
 until it is gone after the configured fade
 time (4.5 s by default). Sections are drawn newest first with destination-over
