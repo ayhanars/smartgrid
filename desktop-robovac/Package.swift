@@ -33,6 +33,7 @@ targets.append(
             .linkedFramework("SwiftUI"),
             .linkedFramework("AVFoundation"),
             .linkedFramework("ServiceManagement"),
+            .linkedFramework("QuickLookThumbnailing"),
         ]
     )
 )

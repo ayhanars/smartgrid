@@ -2,12 +2,13 @@ import AppKit
 import Combine
 import Foundation
 import QuartzCore
+import SwiftUI
 import RobovacCore
 
 /// Observable state for the overlay: the robot pose, trail, particles and the
 /// animation clock that advances them. One instance per overlay.
 @MainActor
-final class RobotSceneModel: ObservableObject {
+final class RobotSceneModel: NSObject, ObservableObject {
     @Published private(set) var pose = RobotPose()
     @Published private(set) var frame: Int = 0
 
@@ -29,7 +30,11 @@ final class RobotSceneModel: ObservableObject {
     private(set) var isGentle = false
     var skin: RobotSkin = .light
     private var ticker: Timer?
+    private var displayLink: CADisplayLink?
     private var lastTick: CFTimeInterval = 0
+    /// Static robot artwork (shadow, body, bumper, turret base) rendered once per size and skin.
+    private(set) var bodyImage: Image?
+    private var bodyImageKey: String = ""
     private(set) var now: TimeInterval = 0
     /// Called after every simulation step with the new pose (used for the motor sound).
     var onTick: ((RobotPose) -> Void)?
@@ -39,6 +44,8 @@ final class RobotSceneModel: ObservableObject {
     func configure(appearance: AppearanceSettings, gentle: Bool, movementBlipInterval: TimeInterval?) {
         self.appearance = appearance
         self.isGentle = gentle
+        skin = appearance.robotSkin
+        rebuildBodyImage()
         let speedScale: CGFloat = gentle ? 0.6 : 1
         motion.maxSpeed = CGFloat(appearance.movementSpeed) * speedScale
         motion.acceleration = 420 * speedScale + 60
@@ -73,7 +80,7 @@ final class RobotSceneModel: ObservableObject {
         pose.suctionTarget = target
         particles.attractor = mouthPosition
         particles.spawnDust(at: target, radius: robotSize * 0.5)
-        sprite = SuctionSprite(icon: icon, origin: target, startTime: now, duration: max(0.2, duration), size: robotSize * 0.95)
+        sprite = SuctionSprite(icon: icon, origin: target, startTime: now, duration: max(0.2, duration), size: max(robotSize * 0.95, 72))
     }
 
     func collected(at target: CGPoint) {
@@ -106,21 +113,56 @@ final class RobotSceneModel: ObservableObject {
         return CGPoint(x: pose.position.x + cos(pose.heading) * r * 0.7, y: pose.position.y + sin(pose.heading) * r * 0.7)
     }
 
+    // MARK: Body cache
+
+    /// Renders the static part of the robot once, at the screen's scale, so each
+    /// frame only draws the moving parts on top of a bitmap.
+    func rebuildBodyImage() {
+        let key = "\(skin.rawValue)-\(Int(robotSize))"
+        guard key != bodyImageKey else { return }
+        bodyImageKey = key
+        let size = robotSize
+        let canvasSize = size * RobotPainter.bodyImageScale
+        let renderer = ImageRenderer(content:
+            Canvas { context, _ in
+                RobotPainter.drawStaticBody(size: size, skin: skin, center: CGPoint(x: canvasSize / 2, y: canvasSize / 2), in: context)
+            }
+            .frame(width: canvasSize, height: canvasSize)
+        )
+        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        if let nsImage = renderer.nsImage {
+            bodyImage = Image(nsImage: nsImage)
+        }
+    }
+
     // MARK: Clock
 
-    func startClock() {
-        guard ticker == nil else { return }
+    /// Ticks in step with the display's refresh; falls back to a timer.
+    func startClock(on view: NSView? = nil) {
+        guard ticker == nil, displayLink == nil else { return }
         lastTick = CACurrentMediaTime()
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.tick() }
+        if let view {
+            let link = view.displayLink(target: self, selector: #selector(displayLinkFired))
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        } else {
+            let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.tick() }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            ticker = timer
         }
-        RunLoop.main.add(timer, forMode: .common)
-        ticker = timer
     }
 
     func stopClock() {
         ticker?.invalidate()
         ticker = nil
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    @objc private func displayLinkFired(_ link: CADisplayLink) {
+        tick()
     }
 
     private func tick() {

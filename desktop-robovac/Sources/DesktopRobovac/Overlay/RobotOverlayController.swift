@@ -101,7 +101,7 @@ final class RobotOverlayController {
         window.setFrame(screen.frame, display: true)
         window.orderFrontRegardless()
         self.window = window
-        scene.startClock()
+        scene.startClock(on: host)
         print("Robovac overlay shown: screen=\(screen.frame) level=\(window.level.rawValue) visible=\(window.isVisible) screens=\(NSScreen.screens.count)")
     }
 

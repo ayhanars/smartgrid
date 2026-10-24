@@ -8,8 +8,17 @@ import Foundation
 /// Automation permission ("Desktop Robovac wants to control Finder"). When the
 /// permission is missing or Finder does not answer, the caller falls back to
 /// the grid approximation.
-@MainActor
 enum FinderIconPositions {
+    /// Apple events are sent from this queue so a slow Finder never stalls the animation.
+    private static let queue = DispatchQueue(label: "robovac.finder-positions", qos: .userInitiated)
+
+    /// Async variant that runs the Apple event on a background queue.
+    static func fetchAsync() async -> Result {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: fetch()) }
+        }
+    }
+
     struct Result {
         /// Icon centres keyed by file name, in Finder's coordinates: origin at the
         /// top-left corner of the main display, y growing downwards.
@@ -75,6 +84,7 @@ enum FinderIconPositions {
     }
 
     /// Converts a Finder desktop point to the overlay's coordinate space for `screen`.
+    @MainActor
     static func overlayPoint(_ finderPoint: CGPoint, on screen: NSScreen) -> CGPoint {
         guard let main = NSScreen.screens.first else { return finderPoint }
         let x = finderPoint.x - (screen.frame.minX - main.frame.minX)

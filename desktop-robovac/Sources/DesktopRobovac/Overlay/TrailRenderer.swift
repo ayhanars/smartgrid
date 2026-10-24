@@ -35,7 +35,7 @@ final class TrailRenderer {
 
         switch pose.state {
         case .driving, .approaching, .avoiding, .returning, .deploying:
-            if let last = lastSamplePosition, hypot(pose.position.x - last.x, pose.position.y - last.y) < 6 {
+            if let last = lastSamplePosition, hypot(pose.position.x - last.x, pose.position.y - last.y) < 8 {
                 return
             }
             samples.append(Sample(position: pose.position, heading: pose.heading, time: now, kind: .drive))
@@ -213,78 +213,76 @@ final class TrailRenderer {
             // 1. Highlight streak, offset to one side; its brightness breathes a
             //    little along the length so it does not read as a ruled line.
             for (offset, streakWidth, strength) in [(0.28, 0.10, 0.5), (0.28, 0.24, 0.2)] {
-                for slice in slices {
-                    let g = gloss(life: slice.life)
-                    guard g > 0.01 else { continue }
+                TrailRenderer.fillBatched(slices.map { slice in
                     let breathe = 0.75 + 0.25 * sin(slice.distance * 0.03 + 0.9)
-                    layer.fill(TrailRenderer.strip(slice, offset: offset, width: streakWidth), with: .color(highlight.opacity(opacity * strength * g * breathe)))
-                }
-                for corner in corners where corner.outerSign > 0 {
-                    let g = gloss(life: corner.life)
-                    guard g > 0.01 else { continue }
-                    layer.fill(TrailRenderer.sector(corner, inner: half * (offset - streakWidth / 2), outer: half * (offset + streakWidth / 2)), with: .color(highlight.opacity(opacity * strength * g * 0.85)))
-                }
+                    return (TrailRenderer.strip(slice, offset: offset, width: streakWidth), opacity * strength * gloss(life: slice.life) * breathe)
+                }, color: highlight, in: layer)
+                TrailRenderer.fillBatched(corners.filter { $0.outerSign > 0 }.map { corner in
+                    (TrailRenderer.sector(corner, inner: half * (offset - streakWidth / 2), outer: half * (offset + streakWidth / 2)), opacity * strength * gloss(life: corner.life) * 0.85)
+                }, color: highlight, in: layer)
             }
             // 2. Faint lengthwise mop streaks inside the band.
             for (offset, streakWidth, phase) in [(-0.55, 0.07, 0.0), (-0.12, 0.05, 2.1), (0.62, 0.08, 4.0)] {
-                for slice in slices {
-                    let w = wetness(life: slice.life)
-                    guard w > 0.01 else { continue }
+                TrailRenderer.fillBatched(slices.map { slice in
                     let presence = max(0, sin(slice.distance * 0.02 + phase))
-                    guard presence > 0.05 else { continue }
-                    layer.fill(TrailRenderer.strip(slice, offset: offset, width: streakWidth), with: .color(highlight.opacity(opacity * 0.12 * w * presence)))
-                }
+                    return (TrailRenderer.strip(slice, offset: offset, width: streakWidth), opacity * 0.12 * wetness(life: slice.life) * (presence > 0.05 ? presence : 0))
+                }, color: highlight, in: layer)
             }
             // 3. Crisp edges, following the slightly uneven outline.
-            for slice in slices {
-                let w = wetness(life: slice.life)
-                guard w > 0.01 else { continue }
-                for edge in [TrailRenderer.strip(slice, offset: 0.98, width: 0.04), TrailRenderer.strip(slice, offset: -0.98, width: 0.04)] {
-                    layer.fill(edge, with: .color(edgeColor.opacity(opacity * 0.35 * w)))
-                }
+            for edgeOffset: CGFloat in [0.98, -0.98] {
+                TrailRenderer.fillBatched(slices.map { slice in
+                    (TrailRenderer.strip(slice, offset: edgeOffset, width: 0.04), opacity * 0.35 * wetness(life: slice.life))
+                }, color: edgeColor, in: layer)
             }
-            for corner in corners {
-                let w = wetness(life: corner.life)
-                guard w > 0.01 else { continue }
-                layer.fill(TrailRenderer.sector(corner, inner: half * 0.96, outer: half), with: .color(edgeColor.opacity(opacity * 0.35 * w)))
-            }
+            TrailRenderer.fillBatched(corners.map { corner in
+                (TrailRenderer.sector(corner, inner: half * 0.96, outer: half), opacity * 0.35 * wetness(life: corner.life))
+            }, color: edgeColor, in: layer)
             // 4. The damp band and the wedges that round each pivot.
-            for slice in slices {
-                let w = wetness(life: slice.life)
-                guard w > 0.01 else { continue }
-                layer.fill(TrailRenderer.outline(slice), with: .color(tint.opacity(opacity * 0.46 * w)))
-            }
-            for corner in corners {
-                let w = wetness(life: corner.life)
-                guard w > 0.01 else { continue }
-                layer.fill(TrailRenderer.sector(corner, inner: 0, outer: half), with: .color(tint.opacity(opacity * 0.46 * w)))
-            }
+            TrailRenderer.fillBatched(slices.map { slice in
+                (TrailRenderer.outline(slice), opacity * 0.46 * wetness(life: slice.life))
+            }, color: tint, in: layer)
+            TrailRenderer.fillBatched(corners.map { corner in
+                (TrailRenderer.sector(corner, inner: 0, outer: half), opacity * 0.46 * wetness(life: corner.life))
+            }, color: tint, in: layer)
         case .sheen:
-            for slice in slices {
-                let g = gloss(life: slice.life)
-                guard g > 0.01 else { continue }
-                layer.fill(TrailRenderer.strip(slice, offset: 0, width: 0.3), with: .color(Color.white.opacity(opacity * 0.6 * g)))
-            }
-            for slice in slices {
-                let w = wetness(life: slice.life)
-                guard w > 0.01 else { continue }
-                layer.fill(TrailRenderer.outline(slice), with: .color(Color.white.opacity(opacity * 0.25 * w)))
-            }
-            for corner in corners {
-                let w = wetness(life: corner.life)
-                guard w > 0.01 else { continue }
-                layer.fill(TrailRenderer.sector(corner, inner: 0, outer: half), with: .color(Color.white.opacity(opacity * 0.25 * w)))
-            }
+            TrailRenderer.fillBatched(slices.map { slice in
+                (TrailRenderer.strip(slice, offset: 0, width: 0.3), opacity * 0.6 * gloss(life: slice.life))
+            }, color: .white, in: layer)
+            TrailRenderer.fillBatched(slices.map { slice in
+                (TrailRenderer.outline(slice), opacity * 0.25 * wetness(life: slice.life))
+            }, color: .white, in: layer)
+            TrailRenderer.fillBatched(corners.map { corner in
+                (TrailRenderer.sector(corner, inner: 0, outer: half), opacity * 0.25 * wetness(life: corner.life))
+            }, color: .white, in: layer)
         case .tireMarks:
-            for slice in slices {
-                let w = wetness(life: slice.life)
-                guard w > 0.01 else { continue }
-                for edge in [TrailRenderer.strip(slice, offset: 0.78, width: 0.12), TrailRenderer.strip(slice, offset: -0.78, width: 0.12)] {
-                    layer.fill(edge, with: .color(Color.black.opacity(opacity * 0.6 * w)))
-                }
+            for edgeOffset: CGFloat in [0.78, -0.78] {
+                TrailRenderer.fillBatched(slices.map { slice in
+                    (TrailRenderer.strip(slice, offset: edgeOffset, width: 0.12), opacity * 0.6 * wetness(life: slice.life))
+                }, color: .black, in: layer)
             }
         case .none:
             break
+        }
+    }
+
+    /// Fills many shapes of one colour in a few draws instead of one per shape:
+    /// the shapes are bucketed by alpha, merged into one path per bucket and the
+    /// buckets are drawn strongest (newest) first, which keeps the
+    /// destination-over layering intact. Shapes in a batch must share winding so
+    /// the merged non-zero fill never punches holes where they overlap.
+    private static func fillBatched(_ shapes: [(Path, Double)], color: Color, in layer: GraphicsContext) {
+        let peak = shapes.reduce(0.0) { max($0, $1.1) }
+        guard peak > 0.004 else { return }
+        let levels = 32
+        var buckets = [Path?](repeating: nil, count: levels + 1)
+        for (path, alpha) in shapes where alpha > 0.004 {
+            let index = max(1, min(levels, Int((alpha / peak * Double(levels)).rounded())))
+            if buckets[index] == nil { buckets[index] = Path() }
+            buckets[index]?.addPath(path)
+        }
+        for index in stride(from: levels, through: 1, by: -1) {
+            guard let path = buckets[index] else { continue }
+            layer.fill(path, with: .color(color.opacity(peak * Double(index) / Double(levels))))
         }
     }
 
@@ -327,13 +325,17 @@ final class TrailRenderer {
             let angle = corner.startAngle + corner.sweep * CGFloat(step) / CGFloat(steps)
             return CGPoint(x: corner.center.x + cos(angle) * radius, y: corner.center.y + sin(angle) * radius)
         }
-        path.move(to: point(outer, 0))
-        for step in 1...steps { path.addLine(to: point(outer, step)) }
+        var points: [CGPoint] = [point(outer, 0)]
+        for step in 1...steps { points.append(point(outer, step)) }
         if inner <= 0.5 {
-            path.addLine(to: corner.center)
+            points.append(corner.center)
         } else {
-            for step in stride(from: steps, through: 0, by: -1) { path.addLine(to: point(inner, step)) }
+            for step in stride(from: steps, through: 0, by: -1) { points.append(point(inner, step)) }
         }
+        // Same winding whichever way the robot turned, so merged fills never cancel.
+        if corner.sweep < 0 { points.reverse() }
+        path.move(to: points[0])
+        for p in points.dropFirst() { path.addLine(to: p) }
         path.closeSubpath()
         return path
     }

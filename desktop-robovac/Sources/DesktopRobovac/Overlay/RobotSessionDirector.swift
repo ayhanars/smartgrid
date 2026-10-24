@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import QuickLookThumbnailing
 import RobovacCore
 
 /// Bridges the cleaning engine and the robot animation. Implements the
@@ -164,8 +165,20 @@ final class RobotSessionDirector: CleaningSessionObserver {
     /// Returns the positions that were matched.
     @discardableResult
     private func refreshFinderPositions() -> [UUID: CGPoint] {
-        guard settings.appearance.useFinderIconPositions, let screen, !scannedItems.isEmpty else { return [:] }
-        let result = FinderIconPositions.fetch()
+        guard settings.appearance.useFinderIconPositions, !scannedItems.isEmpty else { return [:] }
+        return apply(FinderIconPositions.fetch())
+    }
+
+    /// Same as `refreshFinderPositions`, with the Apple event off the main thread.
+    @discardableResult
+    private func refreshFinderPositionsAsync() async -> [UUID: CGPoint] {
+        guard settings.appearance.useFinderIconPositions, !scannedItems.isEmpty else { return [:] }
+        let result = await FinderIconPositions.fetchAsync()
+        return apply(result)
+    }
+
+    private func apply(_ result: FinderIconPositions.Result) -> [UUID: CGPoint] {
+        guard let screen else { return [:] }
         if let error = result.error {
             iconPositionSource = "grid approximation (Finder: \(error))"
             print("Robovac: Finder icon positions unavailable: \(error)")
@@ -203,7 +216,8 @@ final class RobotSessionDirector: CleaningSessionObserver {
 
     func sessionChooseNextTarget(from remaining: [CleaningTarget]) async -> CleaningTarget? {
         guard isActive, !cancelled, let area = roamArea else { return nil }
-        refreshFinderPositions()
+        await refreshFinderPositionsAsync()
+        guard isActive, !cancelled else { return nil }
         let candidates: [(CleaningTarget, CGPoint)] = remaining.compactMap { target in
             guard let position = positions[target.id] else { return nil }
             return (target, position)
@@ -240,12 +254,13 @@ final class RobotSessionDirector: CleaningSessionObserver {
 
     func sessionWillCollect(_ target: CleaningTarget, index: Int, total: Int) async {
         appState?.progressDidChange(currentFile: target.item.name)
-        guard isActive, !cancelled else { return }
-        // The user may have dragged the icon since the route was chosen.
-        refreshFinderPositions()
-        guard let destination = positions[target.id] else { return }
-        let icon = NSWorkspace.shared.icon(forFile: target.item.url.path)
-        await driveAndVacuum(at: destination, icon: icon)
+        guard isActive, !cancelled, let destination = positions[target.id] else { return }
+        // Fetch the real preview (what Finder shows) while the robot is on its way.
+        let url = target.item.url
+        let thumbnail = Task { await RobotSessionDirector.thumbnail(for: url) }
+        await driveAndVacuum(at: destination, iconProvider: {
+            await thumbnail.value ?? NSWorkspace.shared.icon(forFile: url.path)
+        })
     }
 
     func sessionDidCollect(_ target: CleaningTarget, result: Result<URL, MoveFailure>) async {
@@ -340,7 +355,7 @@ final class RobotSessionDirector: CleaningSessionObserver {
                 }
             }
             guard !cancelled else { break }
-            await driveAndVacuum(at: target, icon: nil)
+            await driveAndVacuum(at: target, iconProvider: nil)
             guard !cancelled else { break }
             scene.collected(at: target)
             sound.play(.collect)
@@ -366,7 +381,17 @@ final class RobotSessionDirector: CleaningSessionObserver {
         motorOverride = nil
     }
 
-    private func driveAndVacuum(at destination: CGPoint, icon: NSImage?) async {
+    /// The thumbnail Finder would show for the file (image preview, PDF page), or nil.
+    static func thumbnail(for url: URL) async -> NSImage? {
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: 128, height: 128), scale: 2, representationTypes: .thumbnail)
+        return await withCheckedContinuation { continuation in
+            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
+                continuation.resume(returning: representation?.nsImage)
+            }
+        }
+    }
+
+    private func driveAndVacuum(at destination: CGPoint, iconProvider: (() async -> NSImage)?) async {
         guard let planner else { return }
         let waypoints = planner.route(from: scene.pose.position, to: approachPoint(for: destination))
         if waypoints.count > 2 { sound.play(.avoid) }
@@ -379,6 +404,8 @@ final class RobotSessionDirector: CleaningSessionObserver {
         guard !finished, !cancelled else { return }
 
         let duration = settings.appearance.reducedMotion ? 0.3 : (settings.cleaning.mode.isGentle ? 1.9 : 1.4)
+        let icon = await iconProvider?()
+        guard !finished, !cancelled else { return }
         scene.beginSuction(at: destination, icon: icon, duration: duration)
         sound.play(.suction)
         await scene.motion.vacuum(duration: duration)
