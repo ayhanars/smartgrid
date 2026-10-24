@@ -122,6 +122,7 @@ final class RobotSceneModel: NSObject, ObservableObject {
         guard key != bodyImageKey else { return }
         bodyImageKey = key
         let size = robotSize
+        let skin = self.skin
         let canvasSize = size * RobotPainter.bodyImageScale
         let renderer = ImageRenderer(content:
             Canvas { context, _ in
