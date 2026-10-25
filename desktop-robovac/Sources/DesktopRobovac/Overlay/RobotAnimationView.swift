@@ -1,24 +1,44 @@
 import SwiftUI
 import RobovacCore
 
-/// Draws trail, particles and the robot in a single Canvas.
-struct RobotAnimationView: View {
+/// The robot, the file being sucked in and the dust around it, drawn in a small
+/// view that the overlay moves with the robot. Keeping this view small is what
+/// makes the animation cheap: only a few hundred square points are redrawn per
+/// frame instead of the whole screen.
+struct RobotLayerView: View {
     @ObservedObject var scene: RobotSceneModel
 
     var body: some View {
-        Canvas(opaque: false, colorMode: .nonLinear, rendersAsynchronously: true) { context, _ in
+        Canvas(opaque: false, colorMode: .nonLinear, rendersAsynchronously: false) { context, _ in
             let now = scene.now
-            scene.trail.draw(in: context, now: now)
-            scene.particles.draw(in: context)
+            var local = context
+            local.translateBy(x: -scene.robotHostOrigin.x, y: -scene.robotHostOrigin.y)
+            scene.particles.draw(in: local)
             if let sprite = scene.sprite {
-                SuctionSpritePainter.draw(sprite, mouth: scene.mouthPosition, now: now, in: context)
+                SuctionSpritePainter.draw(sprite, mouth: scene.mouthPosition, now: now, in: local)
             }
             if scene.pose.isVisible {
-                RobotPainter.draw(pose: scene.pose, size: scene.robotSize, skin: scene.skin, body: scene.bodyImage, in: context)
+                RobotPainter.draw(pose: scene.pose, size: scene.robotSize, skin: scene.skin, body: scene.bodyImage, in: local)
             }
         }
         .allowsHitTesting(false)
-        .ignoresSafeArea()
+    }
+}
+
+/// The mop trail, drawn in a view sized to the trail's live bounds and
+/// refreshed at half the frame rate.
+struct TrailLayerView: View {
+    let scene: RobotSceneModel
+    @ObservedObject var clock: RobotSceneModel.TrailClock
+
+    var body: some View {
+        Canvas(opaque: false, colorMode: .nonLinear, rendersAsynchronously: true) { context, _ in
+            _ = clock.revision
+            var local = context
+            local.translateBy(x: -clock.origin.x, y: -clock.origin.y)
+            scene.trail.draw(in: local, now: scene.now)
+        }
+        .allowsHitTesting(false)
     }
 }
 

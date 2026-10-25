@@ -51,6 +51,20 @@ final class TrailRenderer {
         }
     }
 
+    /// Smallest rectangle covering everything the trail could draw right now, or
+    /// nil when there is nothing to draw. Used to size the trail's own view.
+    func liveBounds() -> CGRect? {
+        guard enabled, style != .none, !samples.isEmpty else { return nil }
+        var minX = CGFloat.greatestFiniteMagnitude, minY = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude, maxY = -CGFloat.greatestFiniteMagnitude
+        for sample in samples {
+            minX = min(minX, sample.position.x); maxX = max(maxX, sample.position.x)
+            minY = min(minY, sample.position.y); maxY = max(maxY, sample.position.y)
+        }
+        let margin = robotSize * 0.8
+        return CGRect(x: minX - margin, y: minY - margin, width: maxX - minX + margin * 2, height: maxY - minY + margin * 2)
+    }
+
     private func prune(now: TimeInterval) {
         guard !samples.isEmpty else { return }
         let cutoff = now - fadeDuration

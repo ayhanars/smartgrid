@@ -375,6 +375,8 @@ final class AppState: ObservableObject {
         lines.append("phase=\(phase) robotState=\(robotState)")
         let pose = overlay.scene.pose
         lines.append("pose position=\(pose.position) heading=\(pose.heading) state=\(pose.state) visible=\(pose.isVisible)")
+        let scene = overlay.scene
+        lines.append("frames total=\(scene.frameCount) slow=\(scene.slowFrameCount) longest=\(Int(scene.longestFrame * 1000))ms")
         if let screen = overlay.targetScreen {
             lines.append("screen frame=\(screen.frame) visible=\(screen.visibleFrame) region=\(overlay.desktopRegion(on: screen)) anchor=\(overlay.menuBarAnchor(on: screen))")
         }

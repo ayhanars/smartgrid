@@ -38,6 +38,30 @@ final class RobotSceneModel: NSObject, ObservableObject {
     private(set) var now: TimeInterval = 0
     /// Called after every simulation step with the new pose (used for the motor sound).
     var onTick: ((RobotPose) -> Void)?
+    /// Called after every step so the overlay can move its views.
+    var onFrame: (() -> Void)?
+
+    /// Publishes at half the frame rate: the trail only dries slowly, so its
+    /// (larger) view is redrawn every other frame.
+    final class TrailClock: ObservableObject {
+        @Published var revision: Int = 0
+        /// Top-left of the trail view in overlay coordinates.
+        var origin: CGPoint = .zero
+    }
+    let trailClock = TrailClock()
+
+    /// Top-left of the robot's own small view in overlay coordinates.
+    private(set) var robotHostOrigin: CGPoint = .zero
+    /// Side of the robot's view: room for the intake sprite and the dust around it.
+    var robotHostSide: CGFloat { (robotSize * 3.4).rounded(.up) }
+    /// Backing scale used to pixel-align the moving view.
+    var backingScale: CGFloat = 2
+
+    /// Frame pacing, for diagnostics: how many frames were simulated and how many
+    /// took longer than 25 ms since the previous one.
+    private(set) var frameCount = 0
+    private(set) var slowFrameCount = 0
+    private(set) var longestFrame: TimeInterval = 0
 
     var robotSize: CGFloat { CGFloat(appearance.robotSize) }
 
@@ -172,15 +196,38 @@ final class RobotSceneModel: NSObject, ObservableObject {
         lastTick = current
         now = current
 
+        if frameCount > 0 {
+            longestFrame = max(longestFrame, dt)
+            if dt > 0.025 { slowFrameCount += 1 }
+        }
+        frameCount += 1
+
         var next = pose
         motion.update(&next, dt: dt)
-        pose = next
         if next.state == .vacuuming {
-            particles.attractor = mouthPosition
+            particles.attractor = CGPoint(x: next.position.x + cos(next.heading) * robotSize / 2 * 0.7, y: next.position.y + sin(next.heading) * robotSize / 2 * 0.7)
         }
         trail.record(pose: next, now: current)
         particles.update(dt: dt)
+
+        // Keep the robot view pixel-aligned and centred on the robot.
+        let half = robotHostSide / 2
+        let scale = max(1, backingScale)
+        robotHostOrigin = CGPoint(
+            x: (next.position.x * scale).rounded() / scale - half,
+            y: (next.position.y * scale).rounded() / scale - half
+        )
+
+        pose = next
         frame &+= 1
+        if frame % 2 == 0 { trailClock.revision &+= 1 }
         onTick?(next)
+        onFrame?()
+    }
+
+    func resetFrameStats() {
+        frameCount = 0
+        slowFrameCount = 0
+        longestFrame = 0
     }
 }

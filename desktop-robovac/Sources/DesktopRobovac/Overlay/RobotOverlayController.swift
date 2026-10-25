@@ -9,6 +9,13 @@ final class OverlayWindow: NSWindow {
     override var canBecomeMain: Bool { false }
 }
 
+/// Layer-backed container with a top-left origin, matching the overlay's
+/// coordinate space, so subviews can be placed straight from robot coordinates.
+final class OverlayContainerView: NSView {
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+}
+
 /// Creates and tears down the overlay window for the display that shows the
 /// desktop icons (the display with the menu bar).
 @MainActor
@@ -16,6 +23,9 @@ final class RobotOverlayController {
     let scene = RobotSceneModel()
     private var window: OverlayWindow?
     private(set) var screen: NSScreen?
+    private var robotHost: NSHostingView<RobotLayerView>?
+    private var trailHost: NSHostingView<TrailLayerView>?
+    private var trailFrame = CGRect.zero
 
     /// The display the user is working on: the one under the mouse pointer (where
     /// they just clicked the menu bar icon), falling back to the main display.
@@ -94,19 +104,41 @@ final class RobotOverlayController {
         window.level = RobotOverlayController.windowLevel(for: layer)
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
 
-        let host = NSHostingView(rootView: RobotAnimationView(scene: scene))
-        host.frame = NSRect(origin: .zero, size: screen.frame.size)
-        host.autoresizingMask = [.width, .height]
-        window.contentView = host
+        // Two small layer-backed views instead of one full-screen canvas: the
+        // compositor moves the robot's view, and only its contents are redrawn.
+        let container = OverlayContainerView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        container.wantsLayer = true
+        container.autoresizingMask = [.width, .height]
+
+        let trailHost = NSHostingView(rootView: TrailLayerView(scene: scene, clock: scene.trailClock))
+        trailHost.wantsLayer = true
+        trailHost.isHidden = true
+        trailHost.frame = .zero
+        container.addSubview(trailHost)
+
+        let robotHost = NSHostingView(rootView: RobotLayerView(scene: scene))
+        robotHost.wantsLayer = true
+        robotHost.isHidden = true
+        robotHost.frame = NSRect(x: 0, y: 0, width: scene.robotHostSide, height: scene.robotHostSide)
+        container.addSubview(robotHost)
+
+        window.contentView = container
         window.setFrame(screen.frame, display: true)
         window.orderFrontRegardless()
         self.window = window
-        scene.startClock(on: host)
+        self.trailHost = trailHost
+        self.robotHost = robotHost
+        trailFrame = .zero
+        scene.backingScale = window.backingScaleFactor
+        scene.resetFrameStats()
+        scene.onFrame = { [weak self] in self?.layoutHosts() }
+        scene.startClock(on: container)
         print("Robovac overlay shown: screen=\(screen.frame) level=\(window.level.rawValue) visible=\(window.isVisible) screens=\(NSScreen.screens.count)")
     }
 
     func hide() {
         scene.stopClock()
+        scene.onFrame = nil
         scene.setVisible(false)
         scene.resetEffects()
         window?.orderOut(nil)
@@ -114,5 +146,43 @@ final class RobotOverlayController {
         window?.close()
         window = nil
         screen = nil
+        robotHost = nil
+        trailHost = nil
+    }
+
+    /// Moves the robot's view with the robot and fits the trail's view to the
+    /// trail. Frame changes are composited, not redrawn.
+    private func layoutHosts() {
+        if let robotHost {
+            let side = scene.robotHostSide
+            if robotHost.frame.width != side {
+                robotHost.setFrameSize(NSSize(width: side, height: side))
+            }
+            robotHost.setFrameOrigin(NSPoint(x: scene.robotHostOrigin.x, y: scene.robotHostOrigin.y))
+            let visible = scene.pose.isVisible || scene.sprite != nil || !scene.particles.particles.isEmpty
+            if robotHost.isHidden == visible { robotHost.isHidden = !visible }
+        }
+        guard let trailHost, scene.frame % 2 == 0 else { return }
+        guard let bounds = scene.trail.liveBounds() else {
+            if !trailHost.isHidden { trailHost.isHidden = true }
+            return
+        }
+        // Grow in 32 pt steps so the view is not re-laid out every frame.
+        let step: CGFloat = 32
+        let fitted = CGRect(
+            x: (bounds.minX / step).rounded(.down) * step,
+            y: (bounds.minY / step).rounded(.down) * step,
+            width: 0, height: 0
+        ).union(CGRect(
+            x: (bounds.maxX / step).rounded(.up) * step,
+            y: (bounds.maxY / step).rounded(.up) * step,
+            width: 0, height: 0
+        ))
+        if fitted != trailFrame {
+            trailFrame = fitted
+            scene.trailClock.origin = fitted.origin
+            trailHost.frame = fitted
+        }
+        if trailHost.isHidden { trailHost.isHidden = false }
     }
 }

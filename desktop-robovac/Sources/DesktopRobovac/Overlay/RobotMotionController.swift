@@ -392,7 +392,13 @@ final class RobotMotionController {
             let stoppingSpeed = (2 * deceleration * remaining).squareRoot()
             targetSpeed = min(targetSpeed, max(minSpeed, stoppingSpeed))
             if !isLastLeg, distance < 60 {
-                targetSpeed = min(targetSpeed, cornerSpeed)
+                // Slow down for a bend, but drive straight through a waypoint
+                // that merely continues the line.
+                let after = waypoints[index + 1]
+                let nextHeading = atan2(after.y - target.y, after.x - target.x)
+                if abs(RobotPose.shortestAngle(from: desiredHeading, to: nextHeading)) > 0.3 {
+                    targetSpeed = min(targetSpeed, cornerSpeed)
+                }
             }
         }
         if pose.speed < targetSpeed {
